@@ -2380,19 +2380,28 @@ pub struct ServerRegentConfig {
     /// `RegentConfig`, which is serde-derived and has no business holding a
     /// live capability. From here it goes to the inference backends directly.
     pub gate_signer: Option<std::sync::Arc<dyn zp_core::provider::RequestSigner>>,
+    /// The substrate's own proxy base — e.g. `http://127.0.0.1:17010`, no
+    /// path (W5 3c). Computed at the `ServerRegentConfig` construction site
+    /// in `lib.rs` from `ServerConfig::port`, which by then reflects
+    /// whatever the operator's `--port`/env/config actually resolved to —
+    /// not a schema default that could drift from it. Carried the same way
+    /// as `gate_signer`: it goes straight to both `InferenceBackend::new`
+    /// call sites, never onto `RegentConfig`.
+    pub proxy_base: String,
 }
 
 impl Default for ServerRegentConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            inference_endpoint: "http://127.0.0.1:11434".to_string(),
+            inference_endpoint: zp_config::REGENT_INFERENCE_ENDPOINT_SENTINEL.to_string(),
             inference_api_key: None,
             reasoning_model: "qwen3:8b".to_string(),
             routing_model: "qwen3:1.7b".to_string(),
             loop_interval_secs: 60,
             display_name: "Regent".to_string(),
             gate_signer: None,
+            proxy_base: "http://127.0.0.1:17010".to_string(),
         }
     }
 }
@@ -2564,9 +2573,10 @@ pub async fn spawn_regent(
         );
     }
 
-    // Both backends below need it, and `config` is partially moved by the
+    // Both backends below need these, and `config` is partially moved by the
     // `RegentConfig` literal that follows.
     let gate_signer = config.gate_signer.clone();
+    let proxy_base = config.proxy_base.clone();
 
     let regent_config = RegentConfig {
         enabled: true,
@@ -2581,7 +2591,8 @@ pub async fn spawn_regent(
     };
 
     let data_path = std::path::Path::new(data_dir);
-    let mut inference_backend = InferenceBackend::new(&regent_config, gate_signer.clone());
+    let mut inference_backend =
+        InferenceBackend::new(&regent_config, gate_signer.clone(), proxy_base.clone());
 
     // If key is in vault, resolve it now and inject into the backend.
     if let zp_regent::config::ApiKeySource::Vault(ref path) = api_key_source {
@@ -2623,7 +2634,7 @@ pub async fn spawn_regent(
         None => ("unknown".to_string(), "00000000".to_string()),
     };
 
-    let mut regent = Regent::new(regent_config, data_path, sovereign, gate_signer);
+    let mut regent = Regent::new(regent_config, data_path, sovereign, gate_signer, proxy_base);
 
     // Inject the vault-resolved key into the Regent's OWN InferenceBackend.
     // (spawn_regent also creates a separate backend for ServerIntentExecutor —

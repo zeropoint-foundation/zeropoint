@@ -1585,11 +1585,21 @@ enum CfgCmd {
     /// Show all configuration with provenance (where each value came from)
     Show,
     /// Set a configuration value in ~/ZeroPoint/config.toml
+    ///
+    /// Refuses when a higher-precedence layer (env var or project-local
+    /// ./zeropoint.toml) already sets the same key -- the write would
+    /// land on disk but the resolved value would not change (W6,
+    /// HARNESS-SEAM sensor S5). Pass --force to write anyway.
     Set {
         /// Config key (e.g. "port", "posture", "log_level")
         key: String,
         /// New value
         value: String,
+        /// Write even if a higher-precedence layer would shadow the
+        /// result. The value stays shadowed at runtime until that
+        /// layer changes.
+        #[arg(long)]
+        force: bool,
     },
     /// Validate configuration for internal consistency
     Validate {
@@ -4697,16 +4707,55 @@ async fn main() -> anyhow::Result<()> {
                 let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
                 println!("{}", cfg.show());
             }
-            CfgCmd::Set { key, value } => match zp_config::resolve::config_set(key, value) {
-                Ok(()) => {
-                    println!("\x1b[32m✓\x1b[0m {} = {}", key, value);
-                    println!("  Written to ~/ZeroPoint/config.toml");
+            CfgCmd::Set { key, value, force } => {
+                match zp_config::resolve::config_set(key, value, *force) {
+                    Ok(zp_config::resolve::ConfigSetOutcome::Written) => {
+                        println!("\x1b[32m✓\x1b[0m {} = {}", key, value);
+                        println!("  Written to ~/ZeroPoint/config.toml");
+                    }
+                    Ok(zp_config::resolve::ConfigSetOutcome::WrittenButShadowed {
+                        shadow_layer,
+                        shadow_value,
+                    }) => {
+                        println!("\x1b[32m✓\x1b[0m {} = {}", key, value);
+                        println!("  Written to ~/ZeroPoint/config.toml");
+                        println!(
+                        "\x1b[33m⚠\x1b[0m  shadowed by {} (currently sets: {}) — the resolved value stays {} until that layer changes",
+                        shadow_layer, shadow_value, shadow_value
+                    );
+                    }
+                    Err(zp_config::ConfigError::Shadowed {
+                        key,
+                        target_layer,
+                        target_value,
+                        shadow_layer,
+                        shadow_value,
+                    }) => {
+                        eprintln!("error: zp config set: refusing to write shadowed key");
+                        eprintln!("  key:           {}", key);
+                        eprintln!("  target layer:  {}", target_layer);
+                        eprintln!("  target value:  {}", target_value);
+                        eprintln!(
+                            "  shadowed by:   {} (currently sets: {})",
+                            shadow_layer, shadow_value
+                        );
+                        eprintln!();
+                        eprintln!("  This write would succeed but not change the resolved value.");
+                        eprintln!("  You can:");
+                        eprintln!("    - Edit {} to change the resolved value.", shadow_layer);
+                        eprintln!(
+                            "    - Re-run with `--force` to write to {} anyway",
+                            target_layer
+                        );
+                        eprintln!("      (the value will remain shadowed at runtime).");
+                        std::process::exit(1);
+                    }
+                    Err(e) => {
+                        eprintln!("\x1b[31m✗\x1b[0m {}", e);
+                        std::process::exit(1);
+                    }
                 }
-                Err(e) => {
-                    eprintln!("\x1b[31m✗\x1b[0m {}", e);
-                    std::process::exit(1);
-                }
-            },
+            }
             CfgCmd::Validate { json } => {
                 let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
                 let errors = zp_config::validate(&cfg);

@@ -1,17 +1,26 @@
 //! Inference backend — local-first LLM calls, with cloud escalation.
 //!
-//! Supports two protocols:
-//! - **Ollama** (default): /api/chat, no auth header. Used when no API key is set.
-//! - **OpenAI-compatible**: /v1/chat/completions, Bearer token auth. Used when
-//!   `api_key_source` is set. Works with Abacus RouteLLM, OpenAI, and any
-//!   OpenAI-compatible endpoint.
+//! Every call is governed (W5 3c): the backend never speaks to Ollama or a
+//! cloud provider directly. It posts OpenAI-wire-shaped bodies, signed with
+//! ZP-Sig, to the substrate's own proxy at
+//! `{proxy_base}/api/v1/proxy/{provider}/v1/chat/completions` — the provider
+//! segment is `ollama` for local calls (both the local tier and cloud-failure
+//! fallback) and the detected cloud provider's name otherwise. The native
+//! `/api/chat` path this module spoke pre-3c is retired: the proxy's path
+//! allowlist for `ollama` admits only `v1/chat/completions` and `v1/models`,
+//! so anything posting `/api/chat` stopped working the moment the endpoint
+//! moved to the proxy — this was a protocol retirement, not an endpoint swap.
 //!
-//! Protocol is auto-detected from config: API key present → OpenAI, absent → Ollama.
+//! `config.inference_endpoint` still selects the *default* provider exactly
+//! as before 3c — `ProviderProfile::detect` runs against it unchanged, a
+//! cloud-provider URL substring selects that profile, anything else (no API
+//! key) falls through to `ollama()`. What changed is what that selection
+//! *feeds*: not a URL to post to, but the `{provider}` path segment. See
+//! `InferenceBackend::new` and `chat_via_proxy`.
 //!
-//! One endpoint is recognised rather than sniffed: ZeroPoint's own proxy
-//! (`/api/v1/proxy/…`) always resolves to the `zp_proxy` profile. It has to be
-//! checked first, because a proxy URL carries its backend in the path and would
-//! otherwise substring-match the provider rules below. See `detect`.
+//! `docs/design/W5-STEP-3C-SESSION-BRIEF.md` and
+//! `HARNESS-SEAM-2026-08.md` §6.1.1 carry the full decomposition this
+//! module implements.
 
 use std::sync::Arc;
 
@@ -289,32 +298,6 @@ pub struct ChatMessage {
     pub content: String,
 }
 
-// ─── Ollama response types ─────────────────────────────────────────
-
-/// Response from Ollama /api/chat.
-#[derive(Debug, Clone, Deserialize)]
-pub struct OllamaResponse {
-    pub message: Option<OllamaChatMessage>,
-    pub done: bool,
-    pub total_duration: Option<u64>,
-    pub eval_count: Option<u64>,
-    /// The model the backend reports having served. Ollama returns this on
-    /// every `/api/chat` response; the struct simply did not read it until
-    /// 2026-08-18. `#[serde(default)]` because a backend that omits it is a
-    /// backend that cannot answer the question, which is different from one
-    /// that answered "the same model you asked for".
-    #[serde(default)]
-    pub model: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct OllamaChatMessage {
-    pub role: String,
-    pub content: String,
-    #[serde(default)]
-    pub thinking: Option<String>,
-}
-
 /// What a completed inference call reports about which model served it.
 ///
 /// INFERENCE-ROUTING-DISCIPLINE-2026-07 §Layer 1 opens with "the served
@@ -383,12 +366,6 @@ pub struct OpenAIUsage {
     pub total_tokens: Option<u64>,
 }
 
-// ─── Backward-compat aliases ───────────────────────────────────────
-
-/// Kept for backward compatibility with code that uses the old name.
-pub type InferenceResponse = OllamaResponse;
-pub type ChatMessageResponse = OllamaChatMessage;
-
 // ─── Fallback diagnostics ─────────────────────────────────────────
 
 /// Captured when cloud inference fails and the backend falls back to
@@ -399,7 +376,8 @@ pub struct FallbackEvent {
     /// The error message from the cloud endpoint (e.g. "403 Forbidden —
     /// {"success": false, "error": "User not logged in"}").
     pub cloud_error: String,
-    /// Which endpoint was attempted.
+    /// The proxy URL that was called (W5 3c) — computed per call from
+    /// `proxy_base` and the provider that was attempted, not a fixed field.
     pub cloud_endpoint: String,
     /// Provider name (e.g. "abacus", "openai", "anthropic").
     pub cloud_provider: String,
@@ -411,7 +389,11 @@ pub struct FallbackEvent {
 
 // ─── Backend ───────────────────────────────────────────────────────
 
-/// The inference backend — talks to Ollama or OpenAI-compatible endpoints.
+/// The inference backend — routes every call through the substrate's own
+/// governed proxy (W5 3c). Ollama and OpenAI-compatible cloud providers are
+/// both reached at `{proxy_base}/api/v1/proxy/{provider}/v1/chat/completions`;
+/// the provider segment varies per call, which is why it is a parameter to
+/// [`chat_via_proxy`](Self::chat_via_proxy) rather than fixed at construction.
 ///
 /// API key resolution: the backend holds an `ApiKeySource` that indicates
 /// *where* the key lives. For `RawLegacy`, the key is in memory (transition
@@ -419,23 +401,54 @@ pub struct FallbackEvent {
 /// inject it via `set_resolved_key()` before making calls. The resolved key
 /// is held only for the duration of the HTTP call lifecycle — it never enters
 /// the Regent's cognitive context, observation pipeline, or chain receipts.
+///
+/// Pre-3c, `AuthStrategy`/the resolved key were applied on the wire for
+/// direct-to-cloud calls. Post-3c every call goes through the proxy and is
+/// authenticated solely with ZP-Sig (see `sign_for_gate`); the resolved key
+/// is retained for `set_resolved_key`/`set_api_key_source`'s existing
+/// call sites and for `ProviderProfile::detect`'s `has_key` input, but no
+/// longer travels on the wire itself — the proxy is what talks to the real
+/// backend and owns that credential.
 pub struct InferenceBackend {
     client: reqwest::Client,
-    endpoint: String,
+    /// The substrate's own proxy base — e.g. `http://127.0.0.1:17010`, no
+    /// path. Supplied at construction (see `new`), not derived from
+    /// `config.inference_endpoint`: that field only ever fed
+    /// `ProviderProfile::detect`, and under the proxy the actual HTTP target
+    /// is built fresh per call from this base plus the provider's name.
+    proxy_base: String,
+    /// The raw `config.inference_endpoint` string, kept only so
+    /// `set_resolved_key`/`set_api_key_source`/`reconfigure` can re-run
+    /// `ProviderProfile::detect` against it later — the same string used at
+    /// construction, never used to build an HTTP target directly.
+    provider_hint: String,
     /// The key source — Vault path, RawLegacy, or None.
     api_key_source: crate::config::ApiKeySource,
     /// Resolved key for the current session. Set by the server layer after
-    /// vault resolution; cleared if the source changes.
+    /// vault resolution; cleared if the source changes. No longer placed on
+    /// the wire (see the type doc) — retained because `ProviderProfile::detect`
+    /// still keys off `has_key`, and because `resolved_key.is_some()` is part
+    /// of what several call sites use to decide whether a cloud provider is
+    /// configured at all.
     resolved_key: Option<String>,
+    /// Whether the *default* provider is Ollama-shaped (local) or an
+    /// OpenAI-shaped cloud provider. Not "which bytes travel on the wire" —
+    /// every call is OpenAI-wire-shaped through the proxy now — but "which
+    /// provider family `chat()` targets by default", which is exactly what
+    /// existing consumers (tier derivation, the hygiene no-ops below) need.
     protocol: InferenceProtocol,
-    /// Provider profile — auto-detected from endpoint URL or set explicitly.
-    /// Carries auth strategy, URL pattern, and response format.
+    /// Default provider profile — auto-detected from `config.inference_endpoint`
+    /// (a cloud-provider URL, or the local/no-key fallback) exactly as before
+    /// 3c. Supplies the `{provider}` path segment `chat_via_proxy` uses for
+    /// the default (non-fallback) call.
     provider: ProviderProfile,
-    /// Local Ollama endpoint for fallback when cloud inference fails.
-    /// The Regent degrades gracefully to local models rather than going
-    /// completely dark. She can still process operator commands (including
-    /// self_configure to fix the cloud config) on a smaller local model.
-    fallback_endpoint: String,
+    /// Fallback provider — always `ProviderProfile::ollama()`. The local tier
+    /// (`chat_local`) and the cloud-failure fallback branch of `chat()` both
+    /// reach local Ollama through the same `proxy_base`, at `provider=ollama`,
+    /// rather than at a separate direct address. Retired the standalone
+    /// `fallback_endpoint` field this replaces (W5 3c §3.9) — there is only
+    /// one base now, and the provider segment is what varies.
+    fallback_provider: ProviderProfile,
     /// The model to use for fallback inference. Should be a model known
     /// to be available locally (pulled via Ollama).
     fallback_model: String,
@@ -471,30 +484,49 @@ pub struct InferenceBackend {
     /// have to be `#[serde(skip)]`, which is a value that vanishes on a
     /// round-trip without saying so.
     ///
-    /// Held but unused until the endpoint moves to the proxy in W5 3c.
+    /// Signs every call `chat_via_proxy` makes (W5 3c). Fail-closed: `None`
+    /// still sends the request, unauthenticated, and lets the gate reject it.
     gate_signer: Option<Arc<dyn RequestSigner>>,
 }
 
 impl InferenceBackend {
-    /// Create from Regent config. Protocol is auto-detected:
-    /// API key source present → OpenAI, absent → Ollama.
+    /// Create from Regent config plus the two live capabilities that cannot
+    /// live on `RegentConfig` itself (see the field docs): the gate signer,
+    /// and the substrate's own proxy base.
     ///
-    /// `gate_signer` authenticates calls to the substrate's own proxy. Pass
-    /// `None` pre-Genesis, or wherever no sovereign root has been loaded;
-    /// proxy calls made without it are sent unauthenticated and rejected by
-    /// the gate, which is the intended failure — loud, not silent.
-    pub fn new(config: &RegentConfig, gate_signer: Option<Arc<dyn RequestSigner>>) -> Self {
+    /// `default_provider` is still auto-detected from `config.inference_endpoint`
+    /// exactly as before 3c — a cloud-provider URL selects that provider's
+    /// profile, anything else (including the `@proxy/ollama` sentinel default)
+    /// falls through to `ollama()` when no API key is set. What changed in 3c
+    /// is what that detection *feeds*: not a URL to post to directly, but the
+    /// `{provider}` path segment `chat_via_proxy` appends to `proxy_base`.
+    ///
+    /// `gate_signer` authenticates every call. Pass `None` pre-Genesis, or
+    /// wherever no sovereign root has been loaded; proxy calls made without
+    /// it are sent unauthenticated and rejected by the gate, which is the
+    /// intended failure — loud, not silent.
+    ///
+    /// `proxy_base` is the substrate's own address (e.g. `http://127.0.0.1:17010`,
+    /// no path) — supplied by the caller, which knows its own listen port,
+    /// rather than derived here from a config default that could drift from
+    /// it. See `ServerRegentConfig::proxy_base` in `zp-server` for where it is
+    /// computed.
+    pub fn new(
+        config: &RegentConfig,
+        gate_signer: Option<Arc<dyn RequestSigner>>,
+        proxy_base: String,
+    ) -> Self {
         let has_key = config.api_key_source.has_key();
         let provider = ProviderProfile::detect(&config.inference_endpoint, has_key);
         let protocol = provider.response_format.clone();
+        let fallback_provider = ProviderProfile::ollama();
 
         // For RawLegacy, pre-populate the resolved key (transition path).
         let resolved_key = config.api_key_source.raw_key().map(String::from);
 
         info!(
-            endpoint = %config.inference_endpoint,
+            proxy_base = %proxy_base,
             provider = %provider.name,
-            auth = ?provider.auth,
             protocol = ?protocol,
             key_source = ?std::mem::discriminant(&config.api_key_source),
             gate_signer = gate_signer.is_some(),
@@ -512,12 +544,13 @@ impl InferenceBackend {
 
         Self {
             client: reqwest::Client::new(),
-            endpoint: config.inference_endpoint.clone(),
+            proxy_base,
+            provider_hint: config.inference_endpoint.clone(),
             api_key_source: config.api_key_source.clone(),
             resolved_key,
             protocol,
             provider,
-            fallback_endpoint: "http://127.0.0.1:11434".to_string(),
+            fallback_provider,
             fallback_model,
             last_fallback: std::sync::Mutex::new(None),
             classifier: std::sync::Arc::new(crate::inference_classifier::DefaultClassifier::new()),
@@ -536,7 +569,7 @@ impl InferenceBackend {
         self.resolved_key = Some(key);
         // Re-detect provider now that we have a key (may upgrade from Ollama).
         if self.protocol == InferenceProtocol::Ollama {
-            self.provider = ProviderProfile::detect(&self.endpoint, true);
+            self.provider = ProviderProfile::detect(&self.provider_hint, true);
             self.protocol = self.provider.response_format.clone();
         }
     }
@@ -544,19 +577,21 @@ impl InferenceBackend {
     /// Update the API key source (e.g. after self_configure writes to vault).
     pub fn set_api_key_source(&mut self, source: crate::config::ApiKeySource) {
         self.resolved_key = source.raw_key().map(String::from);
-        self.provider = ProviderProfile::detect(&self.endpoint, source.has_key());
+        self.provider = ProviderProfile::detect(&self.provider_hint, source.has_key());
         self.protocol = self.provider.response_format.clone();
         self.api_key_source = source;
     }
 
-    /// The detected provider profile.
+    /// The detected (default) provider profile.
     pub fn provider(&self) -> &ProviderProfile {
         &self.provider
     }
 
-    /// The inference endpoint URL.
+    /// The substrate's own proxy base — every call's actual HTTP target.
+    /// Named `endpoint` for API continuity; post-3c this is `proxy_base`; see
+    /// the field doc for what changed.
     pub fn endpoint(&self) -> &str {
-        &self.endpoint
+        &self.proxy_base
     }
 
     /// Which protocol this backend uses.
@@ -644,14 +679,16 @@ impl InferenceBackend {
     /// API key changes go through the vault — use `set_api_key_source()`
     /// and `set_resolved_key()` instead of passing the key here.
     pub fn reconfigure(&mut self, endpoint: String, model: Option<String>) {
-        // Re-detect provider if endpoint changed.
+        // Re-detect the default provider from the new hint. `proxy_base` is
+        // untouched — it is the substrate's own address, fixed for the
+        // process lifetime, not something self_configure changes.
         let has_key = self.resolved_key.is_some();
         self.provider = ProviderProfile::detect(&endpoint, has_key);
         self.protocol = self.provider.response_format.clone();
 
         info!(
-            old_endpoint = %self.endpoint,
-            new_endpoint = %endpoint,
+            old_hint = %self.provider_hint,
+            new_hint = %endpoint,
             provider = %self.provider.name,
             auth = ?self.provider.auth,
             protocol = ?self.protocol,
@@ -659,19 +696,26 @@ impl InferenceBackend {
             "inference backend reconfigured"
         );
 
-        self.endpoint = endpoint;
+        self.provider_hint = endpoint;
     }
 
     /// Run a chat completion.
+    ///
+    /// Both arms now call `chat_via_proxy` — the difference retained from the
+    /// pre-3c match is *whether cloud-failure fallback wraps the call*, not
+    /// which transport is used. When the default provider is Ollama there is
+    /// nothing to fall back from; when it is a cloud provider, a fallback-
+    /// eligible error degrades to `fallback_provider` (always Ollama) at the
+    /// same `proxy_base`.
     pub async fn chat(&self, request: &InferenceRequest) -> Result<String, RegentError> {
         // Layer 2 classifier hook — records a decision for every inference
         // call. Advisory-only today; substrate-observable via the drain
         // path in loop_runner.rs.
         self.record_classifier_decision(request);
         match self.protocol {
-            InferenceProtocol::Ollama => self.chat_ollama(request).await,
+            InferenceProtocol::Ollama => self.chat_via_proxy(&self.provider, request).await,
             InferenceProtocol::OpenAI => {
-                match self.chat_openai(request).await {
+                match self.chat_via_proxy(&self.provider, request).await {
                     Ok(response) => {
                         // Cloud succeeded — clear any prior fallback state.
                         if let Ok(mut fb) = self.last_fallback.lock() {
@@ -681,19 +725,22 @@ impl InferenceBackend {
                     }
                     Err(ref e) if Self::is_fallback_eligible(e) => {
                         let cloud_error = e.to_string();
+                        let cloud_endpoint = self.proxy_url(&self.provider);
                         warn!(
                             provider = %self.provider.name,
                             error = %cloud_error,
-                            fallback_endpoint = %self.fallback_endpoint,
+                            fallback_provider = %self.fallback_provider.name,
                             fallback_model = %self.fallback_model,
                             "cloud inference failed — degrading to local Ollama fallback"
                         );
 
                         // Record the fallback event for the cognitive loop to drain.
+                        // Per-call now, not read off `self` — the URL that was
+                        // actually attempted, not a fixed field (W5 3c §3.5).
                         if let Ok(mut fb) = self.last_fallback.lock() {
                             *fb = Some(FallbackEvent {
                                 cloud_error: cloud_error.clone(),
-                                cloud_endpoint: self.endpoint.clone(),
+                                cloud_endpoint,
                                 cloud_provider: self.provider.name.clone(),
                                 cloud_model: request.model.clone(),
                                 fallback_model: self.fallback_model.clone(),
@@ -708,7 +755,7 @@ impl InferenceBackend {
                             fallback_request.think = Some(false);
                         }
                         match self
-                            .chat_ollama_at(&self.fallback_endpoint, &fallback_request)
+                            .chat_via_proxy(&self.fallback_provider, &fallback_request)
                             .await
                         {
                             Ok(response) => Ok(response),
@@ -722,7 +769,7 @@ impl InferenceBackend {
                                         e, start_err
                                     )));
                                 }
-                                self.chat_ollama_at(&self.fallback_endpoint, &fallback_request)
+                                self.chat_via_proxy(&self.fallback_provider, &fallback_request)
                                     .await
                             }
                             Err(ollama_err) => Err(ollama_err),
@@ -739,24 +786,45 @@ impl InferenceBackend {
     /// Fallback on: auth failures (401, 403), connection errors, timeouts.
     /// Do NOT fallback on: 400 (bad request — our fault), 429 (rate limit —
     /// transient, worth retrying), 5xx (server error — transient).
+    ///
+    /// Pre-3c, "connection errors" meant this backend's own `reqwest` call
+    /// failing to reach a remote host directly, surfaced as `"HTTP error: ..."`
+    /// with `connect`/`timeout`/`dns` in the underlying error text. Post-3c
+    /// every call reaches the substrate's own loopback proxy — always
+    /// reachable — and an unreachable *upstream* provider is reported by the
+    /// proxy as a `502` with `"Failed to reach provider"` in the body (see
+    /// `zp-server/src/proxy.rs::proxy_handler`), not a `reqwest`-level
+    /// connection failure. Both shapes are checked so the fallback still
+    /// fires for the failure it was written for.
     fn is_fallback_eligible(error: &RegentError) -> bool {
         let msg = error.to_string();
         // Auth failures — the key is wrong, won't fix itself.
         if msg.contains("401") || msg.contains("403") {
             return true;
         }
-        // Connection failures — endpoint is down or unreachable.
+        // Connection failures — endpoint is down or unreachable, either at
+        // this backend's own client (pre-3c shape) or as a 502 relayed by
+        // the proxy after its own upstream call failed (post-3c shape).
         if msg.contains("HTTP error:")
             && (msg.contains("connect") || msg.contains("timeout") || msg.contains("dns"))
         {
             return true;
         }
+        if msg.contains("502") || msg.contains("Failed to reach provider") {
+            return true;
+        }
         false
     }
 
-    /// Whether an error indicates Ollama isn't running (connection refused).
+    /// Whether an error indicates Ollama isn't running.
+    ///
+    /// See `is_fallback_eligible`'s doc for why both a direct connection
+    /// failure and the proxy's 502-relay shape are checked post-3c.
     fn is_ollama_not_running(error: &RegentError) -> bool {
         let msg = error.to_string();
+        if msg.contains("502") || msg.contains("Failed to reach provider") {
+            return true;
+        }
         msg.contains("HTTP error:")
             && (msg.contains("connect") || msg.contains("Connection refused"))
     }
@@ -777,12 +845,33 @@ impl InferenceBackend {
     /// should not be relaxed to accommodate a health check.
     const LIVENESS_PATH: &'static str = "v1/models";
 
+    /// Raw local Ollama address — direct, unproxied, ungoverned.
+    ///
+    /// Used only by process/memory-management operations that manage the
+    /// *local Ollama process itself* rather than make an inference call:
+    /// `ensure_ollama_running`'s own probe (which has its own literal, kept
+    /// separate — see that function's doc), and the hygiene no-ops
+    /// (`unload_all`, `preload`) plus the model-inventory reads in
+    /// `evaluation::discover_local_models` / `awareness::query_loaded_models`.
+    /// None of these are chat calls — they read `/api/ps`/`/api/tags` and
+    /// post `keep_alive`-only bodies to `/api/chat`, none of which are in the
+    /// proxy's `ollama` allowlist (`v1/chat/completions`, `v1/models` only).
+    /// That allowlist is deliberate (`api/pull`/`api/delete` must not be
+    /// reachable through a forwarding proxy) and is not the thing to relax
+    /// to accommodate these — they reach the local process the same way
+    /// `ensure_ollama_running` already does, direct and out of the governed
+    /// path, same carve-out (W5 3c out-of-scope list).
+    pub(crate) const RAW_OLLAMA_BASE_URL: &str = "http://127.0.0.1:11434";
+
     /// Start Ollama if it's not already running. Waits up to 8 seconds
     /// for the server to become responsive.
     async fn ensure_ollama_running() -> Result<(), String> {
         // Check if already running via a quick health check.
         let client = reqwest::Client::new();
-        let probe = format!("http://127.0.0.1:11434/{}", Self::LIVENESS_PATH);
+        // zpd:raw-loopback-opt-in -- process-liveness probe, not inference;
+        // kept as its own literal rather than reusing RAW_OLLAMA_BASE_URL (see
+        // that constant's doc above). W5 3c out-of-scope; W5 step 4 pin opt-in.
+        let probe = format!("http://127.0.0.1:11434/{}", Self::LIVENESS_PATH); // zpd:raw-loopback-opt-in
         if client
             .get(&probe)
             .timeout(std::time::Duration::from_secs(2))
@@ -860,9 +949,16 @@ impl InferenceBackend {
     /// produces no credential, the request still goes — unauthenticated —
     /// and the gate rejects it. Skipping the call would hide the
     /// misconfiguration; sending it surfaces a 401 that names this backend.
+    ///
+    /// `method` is a parameter (W5 3c §3.3) because `health_check` and
+    /// `model_available` sign `GET`s, not just the `POST`s 3b needed. The
+    /// signer normalises case and binds whatever is passed here into the
+    /// envelope, so a wrong method here is a clean 401, not a silent pass —
+    /// see `zp-gate-envelope`'s `method_is_normalised_to_uppercase`.
     fn sign_for_gate(
         &self,
         builder: reqwest::RequestBuilder,
+        method: &str,
         url: &str,
         body: &[u8],
     ) -> reqwest::RequestBuilder {
@@ -877,7 +973,7 @@ impl InferenceBackend {
             }
         };
 
-        match signer.authorization("POST", request_path(url), body) {
+        match signer.authorization(method, request_path(url), body) {
             Some(auth) => builder.header("Authorization", auth),
             None => {
                 warn!(
@@ -889,15 +985,16 @@ impl InferenceBackend {
         }
     }
 
-    // ── Ollama path ────────────────────────────────────────────────
+    // ── Governed proxy path (W5 3c) ─────────────────────────────────
 
-    /// Chat via local Ollama at the fallback endpoint.
-    /// Used by the router when a RouteDecision selects a local model,
-    /// bypassing the cloud provider entirely.
+    /// Chat via the local tier. Used by the router when a RouteDecision
+    /// selects a local model, bypassing the cloud provider entirely.
+    /// Reaches Ollama through the same proxy as every other call, at
+    /// `provider=ollama` — `fallback_provider` is fixed to that, always.
     pub async fn chat_local(&self, request: &InferenceRequest) -> Result<String, RegentError> {
         // Layer 2 classifier hook — mirrors chat(). See classifier note there.
         self.record_classifier_decision(request);
-        match self.chat_ollama_at(&self.fallback_endpoint, request).await {
+        match self.chat_via_proxy(&self.fallback_provider, request).await {
             Ok(response) => Ok(response),
             Err(ref e) if Self::is_ollama_not_running(e) => {
                 info!("Ollama not running — starting it for local inference");
@@ -908,155 +1005,75 @@ impl InferenceBackend {
                         start_err
                     )));
                 }
-                self.chat_ollama_at(&self.fallback_endpoint, request).await
+                self.chat_via_proxy(&self.fallback_provider, request).await
             }
             Err(e) => Err(e),
         }
     }
 
-    async fn chat_ollama(&self, request: &InferenceRequest) -> Result<String, RegentError> {
-        self.chat_ollama_at(&self.endpoint, request).await
+    /// The URL a call to `provider` through this backend's proxy targets.
+    /// Shared by `chat_via_proxy` (which sends it) and `chat()`'s fallback
+    /// branch (which records it on `FallbackEvent` — a diagnostic read, not
+    /// a second call).
+    fn proxy_url(&self, provider: &ProviderProfile) -> String {
+        format!(
+            "{}/api/v1/proxy/{}/v1/chat/completions",
+            self.proxy_base.trim_end_matches('/'),
+            provider.name
+        )
     }
 
-    /// Ollama chat against a specific endpoint (used for fallback).
-    async fn chat_ollama_at(
+    /// Run a chat completion against `provider`, through this backend's own
+    /// proxy. The single call site every public chat method now funnels
+    /// through — `chat()` for the default provider and its cloud-failure
+    /// fallback, `chat_local()` for the local tier — with `provider` as the
+    /// only thing that varies per call (W5 3c §3.5).
+    ///
+    /// Always OpenAI wire shape, regardless of `provider` — the proxy
+    /// normalises every backend onto `/v1/chat/completions` and forwards
+    /// accordingly, so there is exactly one request/response shape to build
+    /// and parse here, not one per provider. `OllamaResponse` retired with
+    /// the native path it parsed (W5 3c §3.7); every response is
+    /// `OpenAIResponse`, including the ones served by Ollama.
+    ///
+    /// Always signed with ZP-Sig, never with `provider.auth` — the proxy is
+    /// the authentication boundary for every call now, not a per-provider
+    /// header. `provider.auth`/`resolved_key` are not applied to this
+    /// request; the proxy is what talks to the real backend and owns that
+    /// credential.
+    async fn chat_via_proxy(
         &self,
-        endpoint: &str,
+        provider: &ProviderProfile,
         request: &InferenceRequest,
     ) -> Result<String, RegentError> {
-        let url = format!("{}/api/chat", endpoint);
+        let url = self.proxy_url(provider);
 
         let input_chars: usize = request.messages.iter().map(|m| m.content.len()).sum();
         debug!(
             model = %request.model,
             messages = request.messages.len(),
             input_chars,
-            protocol = "ollama",
-            "regent inference request"
-        );
-
-        let t0 = std::time::Instant::now();
-
-        // Serialize ONCE and transmit exactly these bytes — see `sign_for_gate`
-        // for why `.json(request)` cannot be used on a signed path.
-        let body_bytes = serde_json::to_vec(request)
-            .map_err(|e| RegentError::Inference(format!("request serialization failed: {}", e)))?;
-
-        let mut req = self
-            .client
-            .post(&url)
-            .header("Content-Type", "application/json");
-
-        // Signing is conditioned on the endpoint actually being called, not on
-        // `self.provider` alone. The fallback path posts to raw Ollama while
-        // the configured provider may well be `zp-proxy`, and an envelope
-        // addressed to a backend that cannot verify it is noise. Today no call
-        // reaches here with the proxy as target — `zp_proxy` resolves to the
-        // OpenAI protocol, so `chat_openai` handles it — but the condition is
-        // written against what is true rather than against what happens to be
-        // unreachable.
-        if self.provider.is_zp_proxy() && endpoint == self.endpoint {
-            req = self.sign_for_gate(req, &url, &body_bytes);
-        }
-
-        let resp = req
-            .body(body_bytes)
-            .send()
-            .await
-            .map_err(|e| RegentError::Inference(format!("HTTP error: {}", e)))?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            return Err(RegentError::Inference(format!(
-                "inference failed: {} — {}",
-                status, body
-            )));
-        }
-
-        let raw_body = resp
-            .text()
-            .await
-            .map_err(|e| RegentError::Inference(format!("body read error: {}", e)))?;
-
-        info!(
-            raw_len = raw_body.len(),
-            raw_preview = %crate::text::preview(&raw_body, 500),
-            "regent raw ollama response"
-        );
-
-        let inference_resp: OllamaResponse = serde_json::from_str(&raw_body)
-            .map_err(|e| RegentError::Inference(format!("parse error: {}", e)))?;
-
-        self.record_served_model(&request.model, inference_resp.model.clone());
-
-        let content = inference_resp
-            .message
-            .map(|m| {
-                if m.content.is_empty() {
-                    if let Some(ref thinking) = m.thinking {
-                        if !thinking.is_empty() {
-                            debug!(
-                                thinking_len = thinking.len(),
-                                "content empty, using thinking field as fallback"
-                            );
-                            return thinking.clone();
-                        }
-                    }
-                }
-                if m.content.contains("</think>") || m.content.contains("<think>") {
-                    warn!(
-                        model = %request.model,
-                        think_setting = ?request.think,
-                        content_len = m.content.len(),
-                        "think tags leaked into content — model not suppressing CoT"
-                    );
-                }
-                m.content
-            })
-            .unwrap_or_default();
-
-        let elapsed_ms = t0.elapsed().as_millis() as u64;
-        let eval_count = inference_resp.eval_count.unwrap_or(0);
-        let total_duration_ms = inference_resp
-            .total_duration
-            .map(|d| d / 1_000_000)
-            .unwrap_or(0);
-
-        let is_fallback = endpoint != self.endpoint;
-        info!(
-            elapsed_ms,
-            eval_count,
-            total_duration_ms,
-            output_len = content.len(),
-            endpoint = %endpoint,
-            model = %request.model,
-            fallback = is_fallback,
-            "regent inference completed (ollama)"
-        );
-
-        Ok(content)
-    }
-
-    // ── OpenAI-compatible path ─────────────────────────────────────
-
-    async fn chat_openai(&self, request: &InferenceRequest) -> Result<String, RegentError> {
-        // Build URL from provider profile — handles path construction
-        // per-provider instead of guessing from URL shape.
-        let url = self.provider.chat_url(&self.endpoint);
-
-        let input_chars: usize = request.messages.iter().map(|m| m.content.len()).sum();
-        debug!(
-            model = %request.model,
-            messages = request.messages.len(),
-            input_chars,
-            provider = %self.provider.name,
-            auth = ?self.provider.auth,
+            provider = %provider.name,
             url = %url,
             "regent inference request"
         );
 
-        // Build OpenAI-format request body.
+        // Build the OpenAI-wire body. This is the shape `chat_openai` used to
+        // build pre-3c, now the only shape — extended to carry the three
+        // Ollama-native fields (`options`, `keep_alive`, `think`) through as
+        // plain JSON when present. The proxy round-trips the body through
+        // `serde_json::Value`, so these survive to a provider that honours
+        // them (Ollama's OpenAI-compatible surface) and are harmlessly
+        // ignored by one that doesn't.
+        //
+        // W5 3c §3.6 called for an empirical live check — fire a request
+        // with `think: false` against a qwen3 model and confirm no
+        // chain-of-thought leaks into `content` — before trusting this
+        // pass-through. That check was NOT run in this session: the sandbox
+        // this code was written in had no path to the Rust toolchain, so
+        // nothing could be built or run. This is the recommended default,
+        // implemented; it is not yet confirmed live. Run the probe before
+        // relying on `think: false` suppression through the proxy.
         let mut body = serde_json::json!({
             "model": request.model,
             "messages": request.messages.iter().map(|m| {
@@ -1075,6 +1092,15 @@ impl InferenceBackend {
             // which is universally supported and sufficient for intent parsing.
             let _ = fmt; // acknowledge but don't use the full schema yet
         }
+        if let Some(ref options) = request.options {
+            body["options"] = options.clone();
+        }
+        if let Some(ref keep_alive) = request.keep_alive {
+            body["keep_alive"] = keep_alive.clone();
+        }
+        if let Some(think) = request.think {
+            body["think"] = serde_json::Value::Bool(think);
+        }
 
         let t0 = std::time::Instant::now();
 
@@ -1082,22 +1108,13 @@ impl InferenceBackend {
         let body_bytes = serde_json::to_vec(&body)
             .map_err(|e| RegentError::Inference(format!("request serialization failed: {}", e)))?;
 
-        // Apply provider-specific auth strategy.
-        let api_key = self.resolved_key.as_deref().unwrap_or("");
-        let builder = self
+        let req = self
             .client
             .post(&url)
             .header("Content-Type", "application/json");
-        let mut builder = self.provider.auth.apply(builder, api_key);
+        let req = self.sign_for_gate(req, "POST", &url, &body_bytes);
 
-        // The proxy's `AuthStrategy::None` is a placeholder, not a statement:
-        // ZP-Sig is per-request and body-bound, so it cannot be expressed as a
-        // static strategy. This is the mechanism that placeholder stands in for.
-        if self.provider.is_zp_proxy() {
-            builder = self.sign_for_gate(builder, &url, &body_bytes);
-        }
-
-        let resp = builder
+        let resp = req
             .body(body_bytes)
             .send()
             .await
@@ -1120,7 +1137,7 @@ impl InferenceBackend {
         info!(
             raw_len = raw_body.len(),
             raw_preview = %crate::text::preview(&raw_body, 500),
-            "regent raw openai response"
+            "regent raw proxy response"
         );
 
         let openai_resp: OpenAIResponse = serde_json::from_str(&raw_body).map_err(|e| {
@@ -1138,6 +1155,19 @@ impl InferenceBackend {
             .first()
             .and_then(|c| c.message.content.clone())
             .unwrap_or_default();
+
+        // Same leak check `chat_ollama_at` used to run — still meaningful:
+        // `think: false` suppressing chain-of-thought is a content-shape
+        // guarantee, not a transport one, and this is the one place left
+        // that would notice it silently stop holding.
+        if content.contains("<think>") || content.contains("</think>") {
+            warn!(
+                model = %request.model,
+                think_setting = ?request.think,
+                content_len = content.len(),
+                "think tags leaked into content — model not suppressing CoT"
+            );
+        }
 
         let elapsed_ms = t0.elapsed().as_millis() as u64;
         let prompt_tokens = openai_resp
@@ -1157,8 +1187,9 @@ impl InferenceBackend {
             prompt_tokens,
             completion_tokens,
             model = model_used,
+            provider = %provider.name,
             output_len = content.len(),
-            "regent inference completed (openai)"
+            "regent inference completed (proxy)"
         );
 
         Ok(content)
@@ -1168,13 +1199,20 @@ impl InferenceBackend {
 
     /// Unload all currently loaded models from Ollama.
     /// No-op for OpenAI protocol (cloud models don't have memory management).
+    ///
+    /// Reaches the raw local Ollama process directly (`RAW_OLLAMA_BASE_URL`),
+    /// not through the proxy — this manages the process's own memory, not an
+    /// inference call, and `/api/ps` plus a `keep_alive`-only `/api/chat`
+    /// post are both outside the proxy's `ollama` allowlist. See that
+    /// constant's doc for the full reasoning; same carve-out as
+    /// `ensure_ollama_running`.
     pub async fn unload_all(&self) {
         if self.protocol != InferenceProtocol::Ollama {
             debug!("inference hygiene: skipping unload (not Ollama)");
             return;
         }
 
-        let ps_url = format!("{}/api/ps", self.endpoint);
+        let ps_url = format!("{}/api/ps", Self::RAW_OLLAMA_BASE_URL);
         let loaded: Vec<String> = match self.client.get(&ps_url).send().await {
             Ok(resp) if resp.status().is_success() => {
                 let body: serde_json::Value = resp.json().await.unwrap_or_default();
@@ -1198,7 +1236,7 @@ impl InferenceBackend {
             return;
         }
 
-        let chat_url = format!("{}/api/chat", self.endpoint);
+        let chat_url = format!("{}/api/chat", Self::RAW_OLLAMA_BASE_URL);
         for model in &loaded {
             let body = serde_json::json!({
                 "model": model,
@@ -1232,13 +1270,17 @@ impl InferenceBackend {
 
     /// Preload models into memory (Ollama only).
     /// No-op for OpenAI protocol.
+    ///
+    /// Direct to `RAW_OLLAMA_BASE_URL`, same reasoning as `unload_all`: a
+    /// `keep_alive`-only post to `/api/chat` isn't in the proxy's allowlist,
+    /// and this is process memory management, not a governed inference call.
     pub async fn preload(&self, models: &[&str]) {
         if self.protocol != InferenceProtocol::Ollama {
             debug!("preload: skipping (not Ollama — cloud models are always ready)");
             return;
         }
 
-        let url = format!("{}/api/chat", self.endpoint);
+        let url = format!("{}/api/chat", Self::RAW_OLLAMA_BASE_URL);
         for model in models {
             info!(model, "preloading model into memory");
             let t0 = std::time::Instant::now();
@@ -1270,60 +1312,60 @@ impl InferenceBackend {
         }
     }
 
+    /// The URL a liveness probe (`LIVENESS_PATH`) against `provider` targets,
+    /// through this backend's proxy. Shared by `health_check` and
+    /// `model_available` — both ask the same surface the same question.
+    fn liveness_url(&self, provider: &ProviderProfile) -> String {
+        format!(
+            "{}/api/v1/proxy/{}/{}",
+            self.proxy_base.trim_end_matches('/'),
+            provider.name,
+            Self::LIVENESS_PATH
+        )
+    }
+
     /// Check if the inference backend is reachable.
+    ///
+    /// Unified across providers (W5 3c §3.2) — the guard this used to branch
+    /// on (`self.protocol`) was keying "which response shape to expect" to
+    /// "which wire path to probe", and those diverged the moment the default
+    /// provider's calls started going through the same proxy surface as
+    /// everyone else's. `detect()` no longer decides which branch runs here;
+    /// there is one branch, and it asks whichever provider is configured.
+    ///
+    /// Pre-3c this had a stale comment claiming a proxy URL still resolved
+    /// to the Ollama arm below — false since 3a, when `detect()` started
+    /// checking the `/api/v1/proxy/` prefix first and returning `zp_proxy()`
+    /// (OpenAI-shaped). That divergence is what this unification removes.
     pub async fn health_check(&self) -> Result<bool, RegentError> {
-        match self.protocol {
-            InferenceProtocol::Ollama => {
-                // v1/models rather than api/tags — see LIVENESS_PATH. Ollama
-                // serves both; only this one survives the proxy allowlist, and
-                // `detect()` matches on URL substrings, so a proxy path
-                // containing "/proxy/ollama/" still resolves to this branch.
-                let base = self.endpoint.trim_end_matches('/');
-                let url = format!("{}/{}", base, Self::LIVENESS_PATH);
-                match self.client.get(&url).send().await {
-                    Ok(resp) => Ok(resp.status().is_success()),
-                    Err(_) => Ok(false),
-                }
-            }
-            InferenceProtocol::OpenAI => {
-                // For OpenAI-compatible endpoints, try listing models.
-                let base = self.endpoint.trim_end_matches('/');
-                let url = if base.ends_with("/v1") {
-                    format!("{}/models", base)
-                } else {
-                    format!("{}/v1/models", base)
-                };
-                let api_key = self.resolved_key.as_deref().unwrap_or("");
-                match self
-                    .client
-                    .get(&url)
-                    .header("Authorization", format!("Bearer {}", api_key))
-                    .send()
-                    .await
-                {
-                    Ok(resp) => Ok(resp.status().is_success()),
-                    Err(_) => Ok(false),
-                }
-            }
+        let url = self.liveness_url(&self.provider);
+        let req = self.client.get(&url);
+        let req = self.sign_for_gate(req, "GET", &url, b"");
+        match req.send().await {
+            Ok(resp) => Ok(resp.status().is_success()),
+            Err(_) => Ok(false),
         }
     }
 
-    /// Check if a specific model is available (Ollama only).
-    /// For OpenAI protocol, assumes the model is available.
+    /// Check if a specific model is available.
+    ///
+    /// Pre-3c this returned `Ok(true)` unconditionally whenever
+    /// `self.protocol != InferenceProtocol::Ollama` — under a proxy endpoint,
+    /// `detect()` already returns the OpenAI-shaped `zp_proxy()` profile, so
+    /// that guard fired for every model regardless of whether it was
+    /// actually available, silently defeating the `v1/models` migration this
+    /// probe took specifically so it would keep answering honestly once the
+    /// endpoint moved (W5 3c §3.1). The guard keyed on wire protocol; what
+    /// matters is whether the target can answer the question, and the
+    /// `ollama` provider through the proxy can, same as it always could
+    /// directly. There is no protocol-based early return any more — every
+    /// provider gets asked, and the two-shape parser below (already present)
+    /// handles whichever one answers.
     pub async fn model_available(&self, model: &str) -> Result<bool, RegentError> {
-        if self.protocol != InferenceProtocol::Ollama {
-            return Ok(true); // cloud models are always "available"
-        }
-
-        // v1/models rather than api/tags — see LIVENESS_PATH. The response
-        // shape differs: api/tags returns {models:[{name}]}, the OpenAI
-        // surface returns {data:[{id}]}. Both are parsed below so this keeps
-        // working whether the endpoint is a direct backend or the proxy.
-        let base = self.endpoint.trim_end_matches('/');
-        let url = format!("{}/{}", base, Self::LIVENESS_PATH);
-        let resp = self
-            .client
-            .get(&url)
+        let url = self.liveness_url(&self.provider);
+        let req = self.client.get(&url);
+        let req = self.sign_for_gate(req, "GET", &url, b"");
+        let resp = req
             .send()
             .await
             .map_err(|e| RegentError::Inference(format!("HTTP error: {}", e)))?;
@@ -1426,7 +1468,9 @@ mod detect_tests {
     /// A directly-configured backend is unaffected.
     #[test]
     fn direct_ollama_still_detects_as_ollama() {
-        let p = ProviderProfile::detect("http://127.0.0.1:11434", false);
+        // zpd:raw-loopback-opt-in -- test fixture, not a call site: asserts
+        // detect() recognizes a raw-Ollama-shaped URL.
+        let p = ProviderProfile::detect("http://127.0.0.1:11434", false); // zpd:raw-loopback-opt-in
         assert_eq!(p.name, "ollama");
         assert_eq!(p.response_format, InferenceProtocol::Ollama);
     }
@@ -1463,7 +1507,8 @@ mod detect_tests {
     fn is_zp_proxy_matches_detection() {
         assert!(ProviderProfile::zp_proxy().is_zp_proxy());
         assert!(ProviderProfile::detect(PROXY, false).is_zp_proxy());
-        assert!(!ProviderProfile::detect("http://127.0.0.1:11434", false).is_zp_proxy());
+        // zpd:raw-loopback-opt-in -- test fixture, not a call site.
+        assert!(!ProviderProfile::detect("http://127.0.0.1:11434", false).is_zp_proxy()); // zpd:raw-loopback-opt-in
         assert!(!ProviderProfile::detect("https://api.openai.com", true).is_zp_proxy());
     }
 
@@ -1477,7 +1522,8 @@ mod detect_tests {
             request_path(PROXY),
             "/api/v1/proxy/ollama/v1/chat/completions"
         );
-        assert_eq!(request_path("http://127.0.0.1:11434/api/chat"), "/api/chat");
+        // zpd:raw-loopback-opt-in -- test fixture, not a call site.
+        assert_eq!(request_path("http://127.0.0.1:11434/api/chat"), "/api/chat"); // zpd:raw-loopback-opt-in
         assert_eq!(request_path("https://host/v1/models?a=1"), "/v1/models?a=1");
     }
 

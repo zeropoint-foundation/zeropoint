@@ -133,7 +133,6 @@ fn build_standing_corrections_section(context: &CognitiveContext) -> String {
     out
 }
 
-
 /// Render the active trajectory — what thread of work this cycle is inside.
 ///
 /// Returns an empty string when there is no trajectory, and the caller pushes
@@ -419,13 +418,21 @@ impl Regent {
     /// and from the same sovereign-root load, so signer and verifier cannot
     /// drift. `None` pre-Genesis. It goes to the inference backend rather
     /// than onto `RegentConfig` — it is a live capability, not configuration.
+    ///
+    /// `proxy_base` (W5 3c) is the substrate's own address — e.g.
+    /// `http://127.0.0.1:17010`, no path — threaded the same way as
+    /// `gate_signer` and for the same reason: it goes straight to the
+    /// inference backend, which is the only thing that needs it, rather than
+    /// onto `RegentConfig`. See `ServerRegentConfig::proxy_base` in
+    /// `zp-server` for where it is computed.
     pub fn new(
         config: RegentConfig,
         data_dir: &std::path::Path,
         sovereign: Option<SovereignIdentity>,
         gate_signer: Option<std::sync::Arc<dyn zp_core::provider::RequestSigner>>,
+        proxy_base: String,
     ) -> Self {
-        let inference = InferenceBackend::new(&config, gate_signer);
+        let inference = InferenceBackend::new(&config, gate_signer, proxy_base);
         let memory = MemoryStore::new(data_dir);
         let persona = Persona {
             name: config.display_name.clone(),
@@ -3245,7 +3252,15 @@ mod tests {
                 .unwrap_or(0)
         ));
         std::fs::create_dir_all(&dir).expect("temp dir");
-        Regent::new(RegentConfig::default(), &dir, None, None)
+        Regent::new(
+            RegentConfig::default(),
+            &dir,
+            None,
+            None,
+            // Routed through zp_net rather than a raw literal --
+            // no_raw_peer_url_outside_zp_net applies to test fixtures too.
+            zp_net::peer_url("127.0.0.1", 17010),
+        )
     }
 
     fn traj(title: &str, idle_secs: i64, receipts: usize) -> crate::context::TrajectorySummary {
@@ -3296,11 +3311,17 @@ mod tests {
         let s = build_trajectory_section(&ctx_with(Some(traj("chain compaction", 7200, 12))));
         assert!(s.contains("chain compaction"), "title must survive: {s}");
         assert!(s.contains("2 hours ago"), "idle time must be stated: {s}");
-        assert!(s.contains("12 receipts"), "evidence count must be stated: {s}");
+        assert!(
+            s.contains("12 receipts"),
+            "evidence count must be stated: {s}"
+        );
         // Orientation, not instruction. The operator's request outranks it and
         // the text has to say so, because position alone has not been enough
         // in this file's history.
-        assert!(s.contains("answer the request"), "must yield to the operator: {s}");
+        assert!(
+            s.contains("answer the request"),
+            "must yield to the operator: {s}"
+        );
     }
 
     #[test]
@@ -3311,10 +3332,18 @@ mod tests {
 
     #[test]
     fn idle_time_reads_as_a_human_would_say_it() {
-        for (secs, want) in [(0i64, "just now"), (89, "just now"), (600, "10 minutes ago"),
-                             (7200, "2 hours ago"), (259_200, "3 days ago")] {
+        for (secs, want) in [
+            (0i64, "just now"),
+            (89, "just now"),
+            (600, "10 minutes ago"),
+            (7200, "2 hours ago"),
+            (259_200, "3 days ago"),
+        ] {
             let s = build_trajectory_section(&ctx_with(Some(traj("t", secs, 1))));
-            assert!(s.contains(want), "idle {secs}s should read {want:?}, got: {s}");
+            assert!(
+                s.contains(want),
+                "idle {secs}s should read {want:?}, got: {s}"
+            );
         }
     }
 
@@ -3332,9 +3361,16 @@ mod tests {
         });
         let regent = test_regent();
         let prompt = regent.build_user_prompt(&ctx);
-        let thread = prompt.find("CURRENT WORK THREAD").expect("thread section present");
-        let request = prompt.find("OPERATOR REQUEST").expect("operator request present");
-        assert!(request < thread, "operator request must precede the work thread");
+        let thread = prompt
+            .find("CURRENT WORK THREAD")
+            .expect("thread section present");
+        let request = prompt
+            .find("OPERATOR REQUEST")
+            .expect("operator request present");
+        assert!(
+            request < thread,
+            "operator request must precede the work thread"
+        );
     }
 
     #[test]

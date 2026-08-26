@@ -24,7 +24,7 @@
 
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, HeaderValue, StatusCode},
+    http::{HeaderMap, HeaderValue, Method, StatusCode},
     response::IntoResponse,
     Json,
 };
@@ -551,7 +551,13 @@ pub struct ProxyMeta {
 
 /// Main proxy handler.
 ///
-/// Route: `POST /api/v1/proxy/*proxy_path`
+/// Route: `GET|POST /api/v1/proxy/*proxy_path`
+///
+/// GET is accepted so signed liveness probes (`InferenceBackend::health_check`
+/// / `model_available` in `zp-regent`) can reach a provider's `v1/models`
+/// endpoint through this same governed, ZP-Sig-verified path instead of an
+/// unsigned direct call (W5 3c follow-up). The incoming method is preserved
+/// end-to-end when forwarding upstream -- never silently coerced to POST.
 ///
 /// The catch-all `proxy_path` is split into `{provider}/{remaining_path}`.
 /// Forwards the request to the real provider, extracts usage, generates receipt.
@@ -560,6 +566,7 @@ pub struct ProxyMeta {
 pub async fn proxy_handler(
     State(state): State<AppState>,
     Path(proxy_path): Path<String>,
+    method: Method,
     headers: HeaderMap,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
@@ -722,9 +729,30 @@ pub async fn proxy_handler(
         b
     };
 
+    // Preserve the incoming method rather than hardcoding POST. GET is used
+    // by the signed liveness probes (InferenceBackend::health_check /
+    // model_available in zp-regent) hitting v1/models through this same
+    // governed, ZP-Sig-verified path (W5 3c follow-up). Only GET and POST
+    // ever reach this handler today (the route above registers no other
+    // methods), but the match covers the full zp_host::HttpMethod surface --
+    // mirroring the conversion already established in tool_proxy.rs -- rather
+    // than assuming that invariant here as well. Matched by guard, not by
+    // arm, because `http::Method`'s associated consts aren't structural-match
+    // patterns (same reason tool_proxy.rs's conversion does it this way).
+    let forwarded_method = match &method {
+        m if m == Method::GET => zp_host::HttpMethod::Get,
+        m if m == Method::POST => zp_host::HttpMethod::Post,
+        m if m == Method::PUT => zp_host::HttpMethod::Put,
+        m if m == Method::DELETE => zp_host::HttpMethod::Delete,
+        m if m == Method::PATCH => zp_host::HttpMethod::Patch,
+        m if m == Method::HEAD => zp_host::HttpMethod::Head,
+        m if m == Method::OPTIONS => zp_host::HttpMethod::Options,
+        _ => zp_host::HttpMethod::Post,
+    };
+
     let http_req = zp_host::HttpRequest::new(
         &target_url,
-        zp_host::HttpMethod::Post,
+        forwarded_method,
         forward_headers,
         forwarded_body,
         "proxy",

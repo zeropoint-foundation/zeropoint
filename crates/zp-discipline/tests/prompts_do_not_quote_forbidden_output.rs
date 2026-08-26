@@ -143,7 +143,11 @@ fn quoted_then_forbidden(text: &str) -> Vec<(String, String)> {
 #[test]
 fn no_prompt_quotes_the_output_it_forbids() {
     let dir = workspace_root().join("crates/zp-regent/prompts");
-    assert!(dir.is_dir(), "prompt directory missing at {}", dir.display());
+    assert!(
+        dir.is_dir(),
+        "prompt directory missing at {}",
+        dir.display()
+    );
 
     let mut scanned = 0usize;
     let mut violations = Vec::new();
@@ -164,7 +168,10 @@ fn no_prompt_quotes_the_output_it_forbids() {
         }
     }
 
-    assert!(scanned > 0, "no prompt templates found — scan is not reading anything");
+    assert!(
+        scanned > 0,
+        "no prompt templates found — scan is not reading anything"
+    );
     assert!(
         violations.is_empty(),
         "prompt quotes the output it forbids — the prohibition supplies the phrase, \

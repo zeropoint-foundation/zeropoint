@@ -167,7 +167,7 @@ impl Default for ServerConfig {
             cartographer_enabled: false,
             acknowledged_listeners: Vec::new(),
             regent_enabled: false,
-            regent_inference_endpoint: "http://127.0.0.1:11434".to_string(),
+            regent_inference_endpoint: zp_config::REGENT_INFERENCE_ENDPOINT_SENTINEL.to_string(),
             regent_inference_api_key: None,
             regent_reasoning_model: "qwen3:8b".to_string(),
             regent_routing_model: "qwen3:1.7b".to_string(),
@@ -1841,7 +1841,10 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
             get(attestations::list_attestations_handler),
         )
         // API Proxy — governance-aware LLM provider proxy
-        .route("/api/v1/proxy/*proxy_path", post(proxy::proxy_handler))
+        .route(
+            "/api/v1/proxy/*proxy_path",
+            get(proxy::proxy_handler).post(proxy::proxy_handler),
+        )
         // Pricing freshness — live refresh of provider pricing data
         .route(
             "/api/v1/pricing/refresh",
@@ -2177,6 +2180,14 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     // ── Regent cognitive loop ───────────────────────────────────────────
     // Spawned after officers so the Regent can receive officer findings.
     // Disabled by default; opt-in via `[regent] enabled = true` in config.
+    //
+    // W5 3c: the substrate's own proxy base, computed here from `config.port`
+    // — which by this point reflects whatever the operator's `--port`/env/
+    // config.toml actually resolved to, not a schema default that could
+    // drift from it. This is the one place that value is known alongside
+    // `ServerRegentConfig` being assembled, so it is resolved here rather
+    // than inside `InferenceBackend::new`, which has no way to learn it.
+    let proxy_base = format!("http://127.0.0.1:{}", config.port);
     let regent_config = regent::ServerRegentConfig {
         enabled: config.regent_enabled,
         inference_endpoint: config.regent_inference_endpoint.clone(),
@@ -2185,9 +2196,10 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
         routing_model: config.regent_routing_model.clone(),
         loop_interval_secs: config.regent_loop_interval_secs,
         display_name: config.regent_display_name.clone(),
-        // W5 3b: the Regent can now authenticate to the proxy. The endpoint
-        // does not move here — 3c does that — so this is held and unused.
+        // W5 3b: the Regent can now authenticate to the proxy.
         gate_signer: state.0.gate_signer.clone(),
+        // W5 3c: the endpoint moves to the proxy — this is what it moves to.
+        proxy_base,
     };
     // Share the vault key reference with the Regent — she resolves lazily at
     // self_configure time, avoiding the startup race where spawn happens before

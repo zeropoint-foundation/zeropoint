@@ -385,7 +385,102 @@ fn expand_tilde(path: &str) -> PathBuf {
 /// Path resolution mirrors [`zp_core::paths::home`] (Seam 19); see the
 /// comment on `zp_home` in `schema.rs` for why `zp-config` keeps a
 /// local copy instead of depending on `zp-core`.
-pub fn config_set(key: &str, value: &str) -> Result<(), ConfigError> {
+/// Outcome of a successful [`config_set`] call. Distinguishes a clean
+/// write from a `--force` write that remains shadowed at runtime, so the
+/// CLI can print the right follow-up (W6 -- HARNESS-SEAM sensor S5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfigSetOutcome {
+    /// The write took effect: the target layer now holds the value that
+    /// also resolves.
+    Written,
+    /// The write happened (only possible via `force: true`) but a higher
+    /// layer still shadows the key -- the file changed, the resolved
+    /// value did not.
+    WrittenButShadowed {
+        shadow_layer: String,
+        shadow_value: String,
+    },
+}
+
+/// For a `config_set` key, the field's currently-resolved value (as
+/// display text) and the layer it resolved from. Mirrors `config_set`'s
+/// own key list field-for-field -- every key `config_set` can write, this
+/// can look up. `None` means the key isn't one `config_set` recognizes;
+/// the caller falls through to the existing "unknown key" error.
+fn resolved_field(cfg: &ZpConfig, key: &str) -> Option<(String, Source)> {
+    Some(match key {
+        "port" | "server.port" => (cfg.port.value.to_string(), cfg.port.source.clone()),
+        "bind" | "server.bind" => (cfg.bind.value.clone(), cfg.bind.source.clone()),
+        "data.dir" | "data_dir" => (
+            cfg.data_dir.value.display().to_string(),
+            cfg.data_dir.source.clone(),
+        ),
+        "operator" | "identity.operator" => (
+            cfg.operator_name.value.clone(),
+            cfg.operator_name.source.clone(),
+        ),
+        "llm.enabled" => (
+            cfg.llm_enabled.value.to_string(),
+            cfg.llm_enabled.source.clone(),
+        ),
+        "llm.provider" => (
+            cfg.llm_provider.value.clone(),
+            cfg.llm_provider.source.clone(),
+        ),
+        "llm.model" => (cfg.llm_model.value.clone(), cfg.llm_model.source.clone()),
+        "llm.escalation_model" => (
+            cfg.llm_escalation_model.value.clone(),
+            cfg.llm_escalation_model.source.clone(),
+        ),
+        "llm.supports_tools" => (
+            cfg.llm_supports_tools.value.to_string(),
+            cfg.llm_supports_tools.source.clone(),
+        ),
+        "node.role" => (cfg.node_role.value.clone(), cfg.node_role.source.clone()),
+        "node.upstream" => (
+            cfg.node_upstream
+                .value
+                .clone()
+                .unwrap_or_else(|| "(not set)".to_string()),
+            cfg.node_upstream.source.clone(),
+        ),
+        "officers.enabled" => (
+            cfg.officers_enabled.value.to_string(),
+            cfg.officers_enabled.source.clone(),
+        ),
+        "officers.sweep_interval_secs" => (
+            cfg.officers_sweep_interval_secs.value.to_string(),
+            cfg.officers_sweep_interval_secs.source.clone(),
+        ),
+        "officers.steward_enabled" => (
+            cfg.officers_steward_enabled.value.to_string(),
+            cfg.officers_steward_enabled.source.clone(),
+        ),
+        "officers.cleo_enabled" => (
+            cfg.officers_cleo_enabled.value.to_string(),
+            cfg.officers_cleo_enabled.source.clone(),
+        ),
+        "officers.aegis_enabled" => (
+            cfg.officers_aegis_enabled.value.to_string(),
+            cfg.officers_aegis_enabled.source.clone(),
+        ),
+        _ => return None,
+    })
+}
+
+/// Set a single key-value pair in ~/ZeroPoint/config.toml.
+/// Reads the existing file, updates the value, and writes it back.
+///
+/// W6 (HARNESS-SEAM S5): before writing, resolves `key` across every
+/// layer (defaults -> system -> project -> env) via the same path
+/// `zp config show` uses, and refuses when the resolved value already
+/// comes from a layer strictly higher-precedence than the system-config
+/// layer this function writes -- the write would succeed on disk and be
+/// silently shadowed at read time, which was the motivating defect
+/// ("`zp config set` was observed reporting success while changing
+/// nothing"). `force: true` writes anyway and reports the outcome as
+/// [`ConfigSetOutcome::WrittenButShadowed`] instead of refusing.
+pub fn config_set(key: &str, value: &str, force: bool) -> Result<ConfigSetOutcome, ConfigError> {
     let zp_home = if let Ok(h) = std::env::var("ZP_HOME") {
         PathBuf::from(h)
     } else {
@@ -395,6 +490,29 @@ pub fn config_set(key: &str, value: &str) -> Result<(), ConfigError> {
         PathBuf::from(home).join("ZeroPoint")
     };
     let config_path = zp_home.join("config.toml");
+
+    // Shadow check: resolve every layer, then compare the winning layer's
+    // priority against the layer we are about to write (SystemConfig).
+    // Strictly-higher means shadowed; equal (SystemConfig itself, i.e.
+    // self-supersede) and lower (Default, i.e. nothing else has set it)
+    // are both fine to write.
+    let mut shadow: Option<(String, String)> = None; // (shadow_layer, shadow_value)
+    let resolved = ConfigResolver::resolve_standard()?;
+    if let Some((current_value, current_source)) = resolved_field(&resolved, key) {
+        if current_source.priority() > Source::SystemConfig.priority() {
+            if force {
+                shadow = Some((current_source.to_string(), current_value));
+            } else {
+                return Err(ConfigError::Shadowed {
+                    key: key.into(),
+                    target_layer: Source::SystemConfig.to_string(),
+                    target_value: value.into(),
+                    shadow_layer: current_source.to_string(),
+                    shadow_value: current_value,
+                });
+            }
+        }
+    }
 
     // Load existing or create empty
     let mut file: ConfigFile = if config_path.exists() {
@@ -541,7 +659,13 @@ pub fn config_set(key: &str, value: &str) -> Result<(), ConfigError> {
     }
     std::fs::write(&config_path, toml_str)?;
 
-    Ok(())
+    Ok(match shadow {
+        Some((shadow_layer, shadow_value)) => ConfigSetOutcome::WrittenButShadowed {
+            shadow_layer,
+            shadow_value,
+        },
+        None => ConfigSetOutcome::Written,
+    })
 }
 
 fn parse_bool(s: &str) -> Option<bool> {

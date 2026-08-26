@@ -84,7 +84,7 @@ impl Default for RegentConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            inference_endpoint: "http://127.0.0.1:11434".to_string(),
+            inference_endpoint: zp_config::REGENT_INFERENCE_ENDPOINT_SENTINEL.to_string(),
             api_key_source: ApiKeySource::None,
             reasoning_model: "qwen3:8b".to_string(),
             routing_model: "qwen3:1.7b".to_string(),

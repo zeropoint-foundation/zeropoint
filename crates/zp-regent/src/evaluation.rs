@@ -1489,9 +1489,18 @@ fn generate_few_shot_examples(count: usize) -> String {
 // ── Model discovery ───────────────────────────────────────────────────
 
 /// Query Ollama for all locally available models.
-pub async fn discover_local_models(backend: &InferenceBackend) -> Result<Vec<String>, RegentError> {
+///
+/// Direct to the raw local Ollama process (`InferenceBackend::RAW_OLLAMA_BASE_URL`),
+/// not `backend.endpoint()` — since W5 3c that returns the substrate's own
+/// proxy base, and `/api/tags` is outside the proxy's `ollama` allowlist
+/// (`v1/chat/completions`, `v1/models` only). This is model-inventory
+/// introspection of the local process, not a governed inference call — same
+/// carve-out as `ensure_ollama_running`.
+pub async fn discover_local_models(
+    _backend: &InferenceBackend,
+) -> Result<Vec<String>, RegentError> {
     let client = reqwest::Client::new();
-    let url = format!("{}/api/tags", backend.endpoint());
+    let url = format!("{}/api/tags", InferenceBackend::RAW_OLLAMA_BASE_URL);
 
     let resp = client
         .get(&url)

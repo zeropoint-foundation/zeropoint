@@ -189,7 +189,6 @@ pub struct CognitiveContext {
     pub composition_summary: Option<CompositionSummary>,
 }
 
-
 /// A trajectory, reduced to what a reasoning turn can act on.
 ///
 /// The stored `Trajectory` carries boundary-detection state — per-prefix

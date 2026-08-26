@@ -529,8 +529,13 @@ impl Router {
             .map(|(dossier, suitability)| {
                 let variant = dossier.variant_for(category);
                 let is_local = !dossier.cloud_only;
+                // zpd:raw-loopback-opt-in -- display/rationale metadata only.
+                // RouteDecision.endpoint is never read by the actual dispatch
+                // path (Regent::infer matches on `tier`, not `endpoint`); the
+                // real call goes through InferenceBackend::chat_via_proxy,
+                // which computes its own URL from proxy_base. Not a call site.
                 let endpoint = if is_local {
-                    "http://127.0.0.1:11434".to_string()
+                    "http://127.0.0.1:11434".to_string() // zpd:raw-loopback-opt-in
                 } else {
                     config.inference_endpoint.clone()
                 };

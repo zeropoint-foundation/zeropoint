@@ -7,6 +7,29 @@ use crate::provenance::Sourced;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+// ─── Regent inference endpoint — symbolic default (W5 3c) ────────────
+
+/// Default value for `regent_inference_endpoint` when the operator has not
+/// set one.
+///
+/// Not a URL — a proxy base is `http://127.0.0.1:{port}/api/v1/proxy/ollama`,
+/// and the port is itself config, so a literal here would either hardcode a
+/// port that drifts from whatever the operator actually runs on, or hardcode
+/// the pre-W5-3c native Ollama address (`http://127.0.0.1:11434`), which is
+/// exactly the address the governed path retires. This sentinel names
+/// *intent* — route through this substrate's own proxy to local Ollama —
+/// deliberately spelled so it cannot be mistaken for a resolvable address.
+///
+/// `zp_regent::inference::ProviderProfile::detect` never needs to special-
+/// case it: with no API key present it already falls through to the
+/// `ollama()` profile for any endpoint string that doesn't match a known
+/// cloud provider or the `/api/v1/proxy/` prefix, and this sentinel matches
+/// neither. The actual HTTP target is built separately at call time from
+/// `InferenceBackend`'s `proxy_base` (the substrate's own address, supplied
+/// by the server at construction) plus the detected provider's name — never
+/// by resolving this string into a URL.
+pub const REGENT_INFERENCE_ENDPOINT_SENTINEL: &str = "@proxy/ollama";
+
 // ─── Node Role (derived from chain state) ────────────────────
 
 /// The node's role in the trust topology, derived from chain state.
@@ -163,7 +186,9 @@ impl Default for ZpConfig {
             acknowledged_listeners: Sourced::default_value(Vec::new()),
 
             regent_enabled: Sourced::default_value(false),
-            regent_inference_endpoint: Sourced::default_value("http://127.0.0.1:11434".into()),
+            regent_inference_endpoint: Sourced::default_value(
+                REGENT_INFERENCE_ENDPOINT_SENTINEL.into(),
+            ),
             regent_inference_api_key: Sourced::default_value(None),
             regent_reasoning_model: Sourced::default_value("qwen3:8b".into()),
             regent_routing_model: Sourced::default_value("qwen3:1.7b".into()),

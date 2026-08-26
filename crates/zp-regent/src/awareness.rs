@@ -390,9 +390,15 @@ fn parse_meminfo_value(line: &str) -> u64 {
 // ── Ollama model inventory ────────────────────────────────────────────
 
 /// Query Ollama /api/ps for currently loaded models.
-async fn query_loaded_models(backend: &InferenceBackend) -> Vec<LoadedModel> {
+///
+/// Direct to the raw local Ollama process, not `backend.endpoint()` — since
+/// W5 3c that is the substrate's own proxy base, and `/api/ps` is outside
+/// the proxy's `ollama` allowlist. Same carve-out as `ensure_ollama_running`
+/// and `evaluation::discover_local_models`: process introspection, not a
+/// governed inference call.
+async fn query_loaded_models(_backend: &InferenceBackend) -> Vec<LoadedModel> {
     let client = reqwest::Client::new();
-    let url = format!("{}/api/ps", backend.endpoint());
+    let url = format!("{}/api/ps", InferenceBackend::RAW_OLLAMA_BASE_URL);
 
     let resp = match client.get(&url).send().await {
         Ok(r) => r,
