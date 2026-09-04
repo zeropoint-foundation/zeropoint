@@ -273,6 +273,21 @@ settled; the sensors in §4 now follow mechanically.
 | 2 | Fate of `officer-inference.toml`? | **Survives, operating parameters only.** Retains per-task format / think / timeout and the bench annotations that justify them. Model election moves to `zp-config`. Its header must be amended to state it no longer elects models. |
 | 3 | Sensor severity? | **Build-failing in CI, boot-failing in production. No warn-only tier.** |
 
+**Finding on Q2, recorded 2026-08-26.** `officer-inference.toml`'s header was
+amended and its `[models]` table removed per the ruling above. But "officers
+read model election from `zp-config`" (the second half of Q2's premise) has
+no wiring to redirect: `zp-officers` has no dependency on `zp-llm`,
+`zp-pipeline`, or `zp-config`, and does no LLM dispatch of any kind — it is a
+rule-based monitor cadre. There was never a read of `officer-inference.toml`
+from `zp-officers` to begin with; the file's only real consumer has always
+been `scripts/bench-local-models.py` (see C5's "Partial" note above). The
+truthful state: the one Rust pipeline that *does* elect a model
+(`zp-server`'s provider-pool construction, feeding `zp-pipeline`) already
+reads `llm.provider` / `llm.model` / `llm.escalation_model` from `zp-config`
+correctly — that part of C1 holds. Wiring officers themselves to `zp-config`
+is blocked on a prerequisite that doesn't exist yet: an officer-cycle
+LLM-dispatch path. See W4's status for the resulting split.
+
 ### 6.1 Derived work
 
 In dependency order. Items marked ⊘ are half-states introduced on 2026-08-09
@@ -285,10 +300,10 @@ by the provider-pool wiring and are corrections, not new work.
 | W1 ⊘ | `init_providers` failure becomes boot-fatal; pool state joins the health surface | S3 | **done** 2026-08-09 |
 | W2 ⊘ | Wire `zp-cli` so both entry points populate the pool identically | S3 | **done** 2026-08-09 |
 | W3 | Delete the compiled `local` tier from `get_routing_config()` | C1, S4 | open |
-| W4 | Amend `officer-inference.toml` header; officers read election from `zp-config` | C1, C5 | open |
+| W4 | Amend `officer-inference.toml` header; officers read election from `zp-config` | C1, C5 | **partial**: file cleaned up 2026-08-26; officer→LLM wiring deferred pending officer-dispatch design |
 | W5 | Route the Regent through the proxy — see §6.1.1 | C1, S6 | **in progress** |
 | W6 | `config set` refuses or warns when writing to a shadowed layer | C7, S5 | open |
-| W7 | Implement S1–S6 in `zp-discipline` | all | open, last |
+| W7 | Implement S1–S6 in `zp-discipline` | all | **partial** 2026-08-26: S1, S3, S6 fully asserted (S3 pre-existed as W1; S6 satisfied by the pre-existing loopback pin, untouched); S2 boot-fatal but scoped to the local (ollama) provider only; S4 landed but does not yet cover RegentConfig's independent reasoning_model/routing_model election, nor officer-inference.toml (outside the discipline scanner's `crates/`-only reach); S5 implemented as a boot-time warning rather than boot-fatal, by deliberate judgement call. See the W7 report for detail. |
 
 W7 last: the sensors assert the invariants W1–W6 establish, and landing them
 first would only produce a red build with nothing to point at.
