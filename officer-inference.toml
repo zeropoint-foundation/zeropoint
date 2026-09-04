@@ -1,25 +1,27 @@
 # ZeroPoint Officer Inference Configuration
 #
+# ROLE CHANGE (2026-08-26): This file no longer elects models. Per
+# docs/design/HARNESS-SEAM-2026-08.md §6.1 (Q2 ruling: "Fate of
+# officer-inference.toml?"), zp-config is now the sole model-election
+# authority (`llm.provider` / `llm.model` / `llm.escalation_model`). This
+# file retains only per-task operating parameters — prompt mode, format,
+# think, timeout — and the bench annotations that justify them. A
+# `[models]` table is no longer recognized here; model selection lives in
+# zp-config, not in this file.
+#
 # Consumed by: bench-local-models.py (now), Cartographer (future).
 # Validated by: full bench matrix — A/B prompts, format/think modes,
 #   5 candidate models (2026-07-01).
 #
 # Resolution: script-local override → ~/ZeroPoint/officer-inference.toml → repo default.
 #
-# Two-model config: gemma4 (fast path) + qwen3.6 (reasoning path).
+# Historical model context (selection now lives in zp-config, not here):
+#   gemma4 (fast path) + qwen3.6 (reasoning path) — see zp-config's
+#   `llm.model` / `llm.escalation_model` defaults for the current values.
 # Candidates tested and eliminated: nemotron-3-nano (no advantage at 24GB),
 #   granite4.1:8b (HTTP 400 on think), qwen3:4b (timeout-inflated scores),
 #   qwen3:8b (strong on severity/pattern but added complexity not justified),
 #   mistral-small3.2:24b (HTTP 400 on think, 17 tok/s, no task wins).
-
-[models]
-# Tier 2 default — handles classify, severity, summarize, pattern.
-# gemma4:26b-mlx — 70 tok/s, 0.93-1.00 on fast-path tasks with native format.
-default = "gemma4:26b-mlx"
-
-# Tier 3 escalation — handles boundary detection (only task requiring it).
-# qwen3.6:35b-a3b — 55 tok/s, 1.00 on boundary with think mode.
-escalation = "qwen3.6:35b-a3b"
 
 [prompts]
 # "strict" constrains output to JSON-only; reasoning stays in thinking field.
@@ -52,8 +54,11 @@ default_s = 30
 trajectory_boundary = 120
 pattern_detect = 120
 
-# Timeout action: "escalation" retries with escalation model.
-fallback = "escalation"
+# Timeout action on retry: which zp-config-elected model tier to fall
+# back to. Was the bare tag "escalation" (resolved via this file's own
+# [models] table); rewritten to the zp-config key name directly since
+# [models] no longer exists here (HARNESS-SEAM-2026-08 §6.1 Q2).
+fallback = "llm.escalation_model"
 
 [routing]
 # Only boundary detection routes to escalation (qwen3.6).
@@ -65,4 +70,9 @@ fallback = "escalation"
 #   receipt_summarize:    gemma4  F·  1.00 @ 1.9s
 #   pattern_detect:       gemma4  PT  0.80 @ 18.8s
 #   trajectory_boundary:  qwen3.6 PT  1.00 @ 22.3s
-trajectory_boundary = "escalation"
+#
+# Value is a zp-config key name, not a local tier tag — this file no
+# longer carries a [models] table to resolve a bare "escalation" against
+# (HARNESS-SEAM-2026-08 §6.1 Q2). Consumers resolve this key through
+# zp-config, the same way the rest of the substrate does.
+trajectory_boundary = "llm.escalation_model"

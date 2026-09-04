@@ -106,12 +106,10 @@ def resolve_config() -> dict:
     format_sec = raw.get("format", {})
     think_sec = raw.get("think", {})
 
-    return {
-        "default_model": models_sec.get("default", "gemma4:26b-mlx"),
-        "escalation_model": models_sec.get("escalation", "qwen3.6:35b-a3b"),
+    out = {
         "prompt_mode": prompts_sec.get("mode", "strict"),
         "timeout_s": timeout_sec.get("default_s", 30),
-        "timeout_fallback": timeout_sec.get("fallback", "escalation"),
+        "timeout_fallback": timeout_sec.get("fallback", "llm.escalation_model"),
         "timeout_overrides": {k: v for k, v in timeout_sec.items()
                               if k not in ("default_s", "fallback")},
         "routing": routing_sec,
@@ -122,14 +120,35 @@ def resolve_config() -> dict:
         "_source": raw.get("_source", "hardcoded defaults"),
     }
 
+    # HARNESS-SEAM-2026-08 §6.1 Q2: officer-inference.toml no longer elects
+    # models — that authority moved to zp-config (`llm.model` /
+    # `llm.escalation_model`). A [models] table showing up here is a stale
+    # override file predating the migration; honor it (with a warning) so
+    # an operator's old local copy doesn't hard-fail. The canonical repo
+    # file no longer has this section, and that is deliberate — see
+    # resolve_config_or_die() for the "no [models]" path.
+    if models_sec:
+        print("  ⚠ [models] found in officer-inference.toml — this section "
+              "is deprecated (HARNESS-SEAM-2026-08 §6.1 Q2). Model election "
+              "now lives in zp-config. Remove [models] and use --models or "
+              "zp-config values instead.", file=sys.stderr)
+        out["default_model"] = models_sec.get("default", "gemma4:26b-mlx")
+        out["escalation_model"] = models_sec.get("escalation", "qwen3.6:35b-a3b")
+
+    return out
+
 
 def resolve_model_for_task(config: dict, task_key: str) -> str:
-    """Return the model to use for a given task, per routing config."""
+    """Return the model to use for a given task, per routing config.
+
+    Route values are zp-config key names ("llm.model" / "llm.escalation_model"),
+    not local tier tags — see HARNESS-SEAM-2026-08 §6.1 Q2.
+    """
     routing = config.get("routing", {})
-    route = routing.get(task_key, "default")
-    if route == "default":
+    route = routing.get(task_key, "llm.model")
+    if route == "llm.model":
         return config["default_model"]
-    elif route == "escalation":
+    elif route == "llm.escalation_model":
         return config["escalation_model"]
     else:
         return route  # Explicit model tag
@@ -1030,7 +1049,7 @@ def run_bench(models: list[str], tasks: list[str], verbose: bool = False,
                                          think=think_param)
 
                 # Timeout fallback
-                if result.get("timed_out") and timeout_fallback == "escalation":
+                if result.get("timed_out") and timeout_fallback == "llm.escalation_model":
                     fallback_model = config.get("escalation_model", model)
                     if fallback_model != model:
                         print(f"    Case {i+1}: ⏱ timeout ({task_timeout}s), falling back to {fallback_model}")
@@ -1220,6 +1239,28 @@ if __name__ == "__main__":
 
     # Load config
     config = resolve_config()
+
+    # HARNESS-SEAM-2026-08 §6.1 Q2: officer-inference.toml no longer elects
+    # models. Any code path below that needs a default/escalation model
+    # (i.e. --models was not passed explicitly) requires it, so fail loudly
+    # and explicitly here rather than silently falling back to stale
+    # hardcoded values or crashing later with a bare KeyError.
+    if not args.models and "default_model" not in config:
+        print(
+            "\n  ✗ No model configured.\n"
+            "    officer-inference.toml no longer elects models "
+            "(HARNESS-SEAM-2026-08 §6.1 Q2) — model election now lives in "
+            "zp-config.\n"
+            "    Pass models explicitly:\n"
+            "        python3 scripts/bench-local-models.py "
+            "--models gemma4:26b-mlx,qwen3.6:35b-a3b\n"
+            "    Or look up the substrate's current values:\n"
+            "        zp config get llm.model\n"
+            "        zp config get llm.escalation_model\n",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     strict = not args.no_strict  # strict is now the default
 
     # If prompt mode is set in config, use it (unless --no-strict overrides)
