@@ -83,6 +83,18 @@ fn catalog_lookup(proxy_provider: &str) -> Option<ProviderProfile> {
     catalog_snapshot().into_iter().find(|p| p.id == catalog_id)
 }
 
+/// HARNESS-SEAM-2026-08 §4 S1 ("provider resolves"): is `proxy_provider` a
+/// name the proxy actually knows how to route? `"ollama"` is the local
+/// sentinel handled outside the pricing catalog entirely (see
+/// `zp-pipeline::Pipeline::init_providers`, which special-cases it before
+/// ever reaching this catalog) — everything else must be a real catalog
+/// entry. Exposed as a plain predicate rather than the profile itself so
+/// callers outside this module (the boot-time sensor in `zp-server::lib`)
+/// don't need `ProviderProfile` in scope for a yes/no question.
+pub(crate) fn provider_known(proxy_provider: &str) -> bool {
+    proxy_provider == "ollama" || catalog_lookup(proxy_provider).is_some()
+}
+
 /// Rates for a provider: (input_per_million_usd, output_per_million_usd).
 fn provider_rates(proxy_provider: &str) -> (f64, f64) {
     catalog_lookup(proxy_provider)
@@ -1012,6 +1024,29 @@ mod tests {
             Some("https://routellm.abacus.ai/v1")
         );
         assert_eq!(provider_base_url("unknown"), None);
+    }
+
+    /// HARNESS-SEAM-2026-08 S1 ("provider resolves"), W7. Prove the sensor
+    /// is not lying: a synthetic bad provider id must be caught, a real one
+    /// (and the local sentinel) must pass clean, in the same test.
+    #[test]
+    fn s1_provider_known_catches_synthetic_violation_and_clears_on_fix() {
+        // Synthetic violation: a provider id that exists nowhere.
+        assert!(
+            !provider_known("definitely-not-a-real-provider-xyz"),
+            "S1 must flag an unknown provider id"
+        );
+
+        // The local sentinel is always valid — it is handled outside the
+        // catalog entirely (see `init_providers`'s "ollama" special case).
+        assert!(provider_known("ollama"), "S1 must accept the local sentinel");
+
+        // A real catalog entry — "fix" the synthetic violation by using an
+        // actual configured id — must pass clean.
+        assert!(
+            provider_known("openai"),
+            "S1 must accept a real catalog provider"
+        );
     }
 
     #[test]
