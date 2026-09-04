@@ -536,6 +536,17 @@ impl InferenceBackend {
         // Fallback model: use the routing model (smallest available) for
         // degraded-mode inference. If routing == reasoning, fall back to
         // a known-small model that's likely pulled.
+        //
+        // The "qwen3:1.7b" literal below is intentional, not a discipline
+        // violation: this branch exists precisely because
+        // config.routing_model has nothing distinct to offer (the operator
+        // set routing == reasoning, or left both on the shared default), so
+        // deriving from `config.routing_model` here would just hand back
+        // the same (potentially large) reasoning model this fallback is
+        // meant to avoid, defeating the "degraded-mode, likely-installed,
+        // small" intent. This must NOT be swapped for a config-derived
+        // value — do not thread ZpConfig.regent_routing_model into this
+        // arm.
         let fallback_model = if config.routing_model != config.reasoning_model {
             config.routing_model.clone()
         } else {
