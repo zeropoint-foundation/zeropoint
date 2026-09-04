@@ -288,6 +288,15 @@ pub struct Regent {
     /// Configuration.
     config: RegentConfig,
 
+    /// The ZpConfig-derived authority for `reasoning_model` / `routing_model`
+    /// (HARNESS-SEAM S4 unification, 2026-09-01), captured once at
+    /// construction. `clear_operator_pin()` and `reconfigure_inference()`'s
+    /// `"auto"` branches reset `config` back to these values rather than
+    /// calling a bare `RegentConfig::default()` (which no longer exists) --
+    /// this is what lets those `&mut self` methods reach the authority
+    /// without needing a `ZpConfig` in scope.
+    default_config: RegentConfig,
+
     /// The persona — shapes how the Regent communicates.
     persona: Persona,
 
@@ -427,6 +436,7 @@ impl Regent {
     /// `zp-server` for where it is computed.
     pub fn new(
         config: RegentConfig,
+        default_config: RegentConfig,
         data_dir: &std::path::Path,
         sovereign: Option<SovereignIdentity>,
         gate_signer: Option<std::sync::Arc<dyn zp_core::provider::RequestSigner>>,
@@ -439,11 +449,10 @@ impl Regent {
             ..Persona::default()
         };
 
-        // If config models differ from compiled defaults, the operator
-        // set them in config.toml — treat as a startup pin.
-        let defaults = RegentConfig::default();
-        let has_reasoning_pin = config.reasoning_model != defaults.reasoning_model;
-        let has_routing_pin = config.routing_model != defaults.routing_model;
+        // If config models differ from the ZpConfig-derived authority, the
+        // operator set them explicitly — treat as a startup pin.
+        let has_reasoning_pin = config.reasoning_model != default_config.reasoning_model;
+        let has_routing_pin = config.routing_model != default_config.routing_model;
         let operator_pin = if has_reasoning_pin || has_routing_pin {
             Some(OperatorModelPin {
                 reasoning_model: if has_reasoning_pin {
@@ -465,6 +474,7 @@ impl Regent {
 
         Self {
             config,
+            default_config,
             persona,
             memory,
             inference,
@@ -505,9 +515,8 @@ impl Regent {
     /// doesn't accidentally use a stale pinned model name.
     pub fn clear_operator_pin(&mut self) {
         self.operator_pin = None;
-        let defaults = RegentConfig::default();
-        self.config.reasoning_model = defaults.reasoning_model;
-        self.config.routing_model = defaults.routing_model;
+        self.config.reasoning_model = self.default_config.reasoning_model.clone();
+        self.config.routing_model = self.default_config.routing_model.clone();
     }
 
     /// Promote a shadow candidate to active — the validation battery passed.
@@ -2645,24 +2654,23 @@ impl Regent {
         let auto_routing = routing_model.as_deref() == Some("auto");
 
         if auto_reasoning && auto_routing {
-            // Full auto — clear pin entirely, reset to defaults.
+            // Full auto — clear pin entirely, reset to the authority.
             self.operator_pin = None;
-            let defaults = RegentConfig::default();
-            self.config.reasoning_model = defaults.reasoning_model;
-            self.config.routing_model = defaults.routing_model;
+            self.config.reasoning_model = self.default_config.reasoning_model.clone();
+            self.config.routing_model = self.default_config.routing_model.clone();
             info!("operator pin cleared — router will score from dossier corpus");
         } else if auto_reasoning {
             // Clear just the reasoning pin.
             if let Some(ref mut pin) = self.operator_pin {
                 pin.reasoning_model = None;
             }
-            self.config.reasoning_model = RegentConfig::default().reasoning_model;
+            self.config.reasoning_model = self.default_config.reasoning_model.clone();
         } else if auto_routing {
             // Clear just the routing pin.
             if let Some(ref mut pin) = self.operator_pin {
                 pin.routing_model = None;
             }
-            self.config.routing_model = RegentConfig::default().routing_model;
+            self.config.routing_model = self.default_config.routing_model.clone();
         }
 
         if let Some(ref ep) = endpoint {
@@ -3253,7 +3261,8 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).expect("temp dir");
         Regent::new(
-            RegentConfig::default(),
+            RegentConfig::for_tests("qwen3:8b", "qwen3:1.7b"),
+            RegentConfig::for_tests("qwen3:8b", "qwen3:1.7b"),
             &dir,
             None,
             None,

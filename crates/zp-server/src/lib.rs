@@ -27,6 +27,7 @@ pub mod lease_heartbeat;
 pub mod officers;
 pub mod onboard;
 pub mod proxy;
+pub mod sensors;
 pub mod regent;
 pub mod regent_tools;
 pub mod security;
@@ -169,8 +170,10 @@ impl Default for ServerConfig {
             regent_enabled: false,
             regent_inference_endpoint: zp_config::REGENT_INFERENCE_ENDPOINT_SENTINEL.to_string(),
             regent_inference_api_key: None,
-            regent_reasoning_model: "qwen3:8b".to_string(),
-            regent_routing_model: "qwen3:1.7b".to_string(),
+            regent_reasoning_model: std::env::var("ZP_REGENT_REASONING_MODEL")
+                .unwrap_or_else(|_| "qwen3:8b".to_string()),
+            regent_routing_model: std::env::var("ZP_REGENT_ROUTING_MODEL")
+                .unwrap_or_else(|_| "qwen3:1.7b".to_string()),
             regent_loop_interval_secs: 60,
             regent_display_name: "Regent".to_string(),
         }
@@ -939,6 +942,147 @@ impl AppState {
 
             match (p.as_ref(), signer) {
                 (Some(pipe), Some(signer)) => {
+                    // ── S1 / S2 — model-election sensors ────────────────
+                    //
+                    // HARNESS-SEAM-2026-08 §4, landed under W7. `init_providers`
+                    // below trusts `config.llm_provider` / `config.llm_model`
+                    // verbatim and will happily build a provider for an id or
+                    // model name that does not exist anywhere — these two
+                    // checks catch that before construction, at the same
+                    // boundary S3 (just below) already guards. Boot-failing
+                    // per the §6 ratification ("no warn-only tier"), same as S3.
+
+                    // S1 — provider resolves: `llm.provider` must be the local
+                    // sentinel ("ollama", handled outside the pricing catalog —
+                    // see `proxy::provider_known`) or a known entry in the
+                    // proxy's provider catalog.
+                    if !crate::proxy::provider_known(&config.llm_provider) {
+                        tool_chain::emit_tool_receipt(
+                            &audit_store,
+                            "invariant:s1_provider_resolves:violated",
+                            Some(&format!("llm.provider={}", config.llm_provider)),
+                        );
+                        eprintln!(
+                            "\nZeroPoint refused to start.\n"
+                        );
+                        eprintln!(
+                            "llm.provider = \"{}\" is not a recognized provider (HARNESS-SEAM-2026-08 S4 S1 -- provider resolves).\n",
+                            config.llm_provider
+                        );
+                        eprintln!(
+                            "It is neither the local sentinel \"ollama\" nor an entry in the proxy's provider catalog (crates/zp-server/assets/providers-default.toml, or ~/ZeroPoint/config/providers.toml).\n"
+                        );
+                        eprintln!(
+                            "Fix it (`zp config set llm.provider <id>`), or set llm.enabled = false to run without inference."
+                        );
+                        std::process::exit(1);
+                    }
+                    tool_chain::emit_tool_receipt(
+                        &audit_store,
+                        "invariant:s1_provider_resolves:verified",
+                        Some(&format!("llm.provider={}", config.llm_provider)),
+                    );
+
+                    // S2 — model installed: `llm.model` / `llm.escalation_model`
+                    // must appear in the backend's own model list. Verified
+                    // here only for the local ("ollama") provider, where an
+                    // unauthenticated listing is possible before any cloud key
+                    // is relevant — reusing `InferenceBackend::model_available`
+                    // (the W5-3c-extended probe) constructed with the local
+                    // sentinel endpoint and no API key, which falls through to
+                    // the ollama arm the same way `zp-server::regent`'s real
+                    // construction does.
+                    //
+                    // Scoped gap, disclosed rather than silently skipped: a
+                    // cloud `llm.provider` (openai, anthropic, ...) is not
+                    // verified by this check. Reusing this probe for arbitrary
+                    // cloud providers would mean synthesizing a provider-specific
+                    // inference_endpoint and trusting `ProviderProfile::detect`'s
+                    // heuristics to land on the right one outside the shape this
+                    // probe was built and tested for — a real design task, not a
+                    // boot-time sensor extension. See W7 report.
+                    if config.llm_provider == "ollama" {
+                        // reasoning_model/routing_model are unused by this probe
+                        // (InferenceBackend::new reads only inference_endpoint and
+                        // api_key_source) -- left empty rather than reusing a real
+                        // model name, so this throwaway config is never mistaken
+                        // for a model-election declarant.
+                        let probe_config = zp_regent::config::RegentConfig {
+                            enabled: false,
+                            inference_endpoint: zp_config::REGENT_INFERENCE_ENDPOINT_SENTINEL
+                                .to_string(),
+                            api_key_source: zp_regent::config::ApiKeySource::None,
+                            reasoning_model: String::new(),
+                            routing_model: String::new(),
+                            max_context_tokens: 0,
+                            loop_interval_secs: 0,
+                            cloud_mandate: None,
+                            display_name: String::new(),
+                        };
+                        let probe = zp_regent::inference::InferenceBackend::new(
+                            &probe_config,
+                            Some(signer.clone()),
+                            format!("http://127.0.0.1:{}", config.port),
+                        );
+                        for (label, model) in [
+                            ("llm.model", config.llm_model.as_str()),
+                            ("llm.escalation_model", config.llm_escalation_model.as_str()),
+                        ] {
+                            if model.trim().is_empty() {
+                                continue;
+                            }
+                            let probe_result =
+                                probe.model_available(model).await.map_err(|e| e.to_string());
+                            match sensors::classify_model_probe(&probe_result) {
+                                sensors::S2Outcome::Verified => {
+                                    tool_chain::emit_tool_receipt(
+                                        &audit_store,
+                                        "invariant:s2_model_installed:verified",
+                                        Some(&format!("{}={}", label, model)),
+                                    );
+                                }
+                                sensors::S2Outcome::Violated => {
+                                    tool_chain::emit_tool_receipt(
+                                        &audit_store,
+                                        "invariant:s2_model_installed:violated",
+                                        Some(&format!("{}={}", label, model)),
+                                    );
+                                    eprintln!(
+                                        "\nZeroPoint refused to start.\n"
+                                    );
+                                    eprintln!(
+                                        "{} = \"{}\" is not installed on the configured backend (HARNESS-SEAM-2026-08 S4 S2 -- model installed).\n",
+                                        label, model
+                                    );
+                                    eprintln!(
+                                        "Pull it (`ollama pull {}`), or point {} at a model that is actually available.",
+                                        model, label
+                                    );
+                                    std::process::exit(1);
+                                }
+                                sensors::S2Outcome::Skipped => {
+                                    let e = probe_result.err().unwrap_or_default();
+                                    // Could not even ask — a reachability problem,
+                                    // not a "model does not exist" finding. Distinct
+                                    // failure mode; not boot-fatal on its own, and
+                                    // not reported as if the model were confirmed
+                                    // absent.
+                                    tracing::warn!(
+                                        error = %e,
+                                        model,
+                                        label,
+                                        "S2 model-installed check could not reach the backend to verify this model -- not boot-blocking on a network probe failure"
+                                    );
+                                    tool_chain::emit_tool_receipt(
+                                        &audit_store,
+                                        "invariant:s2_model_installed:skipped",
+                                        Some(&format!("{}={} reason=probe_unreachable: {}", label, model, e)),
+                                    );
+                                }
+                            }
+                        }
+                    }
+
                     match pipe
                         .init_providers(
                             config.port,
@@ -1425,7 +1569,7 @@ impl AppState {
                 .map(|e| e.len() > bedrock::YOUNG_SUBSTRATE_ENTRIES)
                 .unwrap_or(false);
 
-            let findings = bedrock::check(&bedrock::BedrockInputs {
+            let mut findings = bedrock::check(&bedrock::BedrockInputs {
                 genesis_present: zp_core::paths::genesis_record_path()
                     .map(|p| p.exists())
                     .unwrap_or(false),
@@ -1435,6 +1579,44 @@ impl AppState {
                 vault_keys,
                 substrate_is_mature,
             });
+
+            // ── S5 -- no shadowed writes at load time ───────────────────
+            //
+            // HARNESS-SEAM-2026-08 §4 S5, W7. Boot-time complement to W6's
+            // write-time refusal in `config_set`. Deliberately a Warning,
+            // not Critical: an env var legitimately shadowing a file value
+            // is common and often intentional (see
+            // `ConfigResolver::boot_shadow_findings`'s own doc comment for
+            // the full reasoning) -- this is the one bedrock finding in this
+            // block that is disclosure, not an existential alarm, and it
+            // joins the same loud-at-the-boundary, chain-anchored reporting
+            // pipeline as every other bedrock check rather than a separate
+            // one.
+            match zp_config::ConfigResolver::boot_shadow_findings() {
+                Ok(shadowed) => {
+                    for s in shadowed {
+                        findings.push(bedrock::Finding {
+                            invariant: "s5_no_shadowed_writes",
+                            severity: bedrock::Severity::Warning,
+                            detail: format!(
+                                "{} = {} (from {}) is shadowed by {} (from {})",
+                                s.key,
+                                s.file_value,
+                                s.file_source,
+                                s.effective_value,
+                                s.effective_source
+                            ),
+                            remedy: Some(format!(
+                                "Either intentional (leave it) or not -- check `zp config get {}` and the higher-priority source named above.",
+                                s.key
+                            )),
+                        });
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "S5 shadow check could not resolve config -- skipped");
+                }
+            }
 
             bedrock::report(&findings);
             bedrock::anchor(&state.0.audit_store, &findings);

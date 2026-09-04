@@ -8298,6 +8298,7 @@ dependencies = [
  "zp-config",
  "zp-core",
  "zp-emission-coherence",
+ "zp-net",
  "zp-officers",
  "zp-ontology",
  "zp-receipt",

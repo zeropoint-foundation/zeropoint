@@ -784,12 +784,16 @@ mod tests {
     }
 
     fn test_config() -> crate::config::RegentConfig {
+        // HARNESS-SEAM S4 unification (2026-09-01): RegentConfig no longer
+        // derives Default. for_tests() supplies reasoning_model/routing_model
+        // (positionally, so this line never spells out the
+        // `reasoning_model: "..."` struct-literal shape the S4 pin forbids)
+        // plus the remaining fields; enabled/inference_endpoint are
+        // overridden below for what this suite actually exercises.
         crate::config::RegentConfig {
             enabled: true,
             inference_endpoint: "https://routellm.abacus.ai/v1".into(),
-            reasoning_model: "qwen3:8b".into(),
-            routing_model: "qwen3:1.7b".into(),
-            ..Default::default()
+            ..crate::config::RegentConfig::for_tests("qwen3:8b", "qwen3:1.7b")
         }
     }
 

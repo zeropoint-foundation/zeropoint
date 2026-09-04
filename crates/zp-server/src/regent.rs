@@ -2390,21 +2390,13 @@ pub struct ServerRegentConfig {
     pub proxy_base: String,
 }
 
-impl Default for ServerRegentConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            inference_endpoint: zp_config::REGENT_INFERENCE_ENDPOINT_SENTINEL.to_string(),
-            inference_api_key: None,
-            reasoning_model: "qwen3:8b".to_string(),
-            routing_model: "qwen3:1.7b".to_string(),
-            loop_interval_secs: 60,
-            display_name: "Regent".to_string(),
-            gate_signer: None,
-            proxy_base: "http://127.0.0.1:17010".to_string(),
-        }
-    }
-}
+// `impl Default for ServerRegentConfig` removed 2026-09-01 (HARNESS-SEAM S4
+// unification): it was dead code (zero callers -- the struct is always
+// populated via the one real construction site in `zp-server/src/lib.rs`,
+// which derives `reasoning_model`/`routing_model` from `ServerConfig`,
+// itself derived from `ZpConfig`'s sole `Sourced::default_value`
+// declaration) and its removal eliminates a fourth, independently
+// hardcoded copy of the same two model-name literals.
 
 /// Spawn the Regent cognitive loop if enabled. Returns the handle.
 // Eight: `ServerRegentConfig` already absorbs the configuration; what remains
@@ -2552,6 +2544,26 @@ pub async fn spawn_regent(
     // puts the larger model in charge of intent selection with no code
     // change. That makes the hypothesis testable in one restart and
     // reversible in another, which is worth more than an argument about it.
+    // The ZpConfig-derived authority, cloned before the env-var override
+    // below is applied. Passed to `Regent::new` as `default_config` --
+    // HARNESS-SEAM S4 unification (2026-09-01): the sole declarant for
+    // these two models is zp_config::ZpConfig's Sourced::default_value in
+    // schema.rs; everything from here down, including the
+    // ZP_REGENT_REASONING_MODEL/ZP_REGENT_ROUTING_MODEL env override, is a
+    // deviation from that authority that `Regent::new`'s pin-detection
+    // logic should be able to see.
+    let default_config = RegentConfig {
+        enabled: true,
+        inference_endpoint: config.inference_endpoint.clone(),
+        api_key_source: api_key_source.clone(),
+        reasoning_model: config.reasoning_model.clone(),
+        routing_model: config.routing_model.clone(),
+        max_context_tokens: 8192,
+        loop_interval_secs: config.loop_interval_secs,
+        cloud_mandate: None,
+        display_name: config.display_name.clone(),
+    };
+
     let reasoning_model = std::env::var("ZP_REGENT_REASONING_MODEL")
         .ok()
         .filter(|v| !v.trim().is_empty())
@@ -2634,7 +2646,7 @@ pub async fn spawn_regent(
         None => ("unknown".to_string(), "00000000".to_string()),
     };
 
-    let mut regent = Regent::new(regent_config, data_path, sovereign, gate_signer, proxy_base);
+    let mut regent = Regent::new(regent_config, default_config, data_path, sovereign, gate_signer, proxy_base);
 
     // Inject the vault-resolved key into the Regent's OWN InferenceBackend.
     // (spawn_regent also creates a separate backend for ServerIntentExecutor —

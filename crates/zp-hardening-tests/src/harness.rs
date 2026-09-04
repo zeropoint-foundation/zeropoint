@@ -87,8 +87,14 @@ impl TestApp {
             cartographer_enabled: false,
             regent_enabled: false,
             regent_inference_endpoint: zp_config::REGENT_INFERENCE_ENDPOINT_SENTINEL.to_string(),
-            regent_reasoning_model: "qwen3:8b".to_string(),
-            regent_routing_model: "qwen3:1.7b".to_string(),
+            // HARNESS-SEAM S4 unification (2026-09-01): these are inert
+            // (regent_enabled: false, above) and deliberately distinct from
+            // both the real ZpConfig default and any operator-set value, for
+            // the same reason llm_model uses "test-model" rather than a real
+            // model name above -- this fixture is explicitly, permanently
+            // exempted from the S4 discipline pin (see its doc comment).
+            regent_reasoning_model: "test-reasoning-model".to_string(),
+            regent_routing_model: "test-routing-model".to_string(),
             regent_loop_interval_secs: 60,
             regent_display_name: "Regent".to_string(),
             acknowledged_listeners: Vec::new(),
@@ -277,8 +283,14 @@ impl TestServer {
             cartographer_enabled: false,
             regent_enabled: false,
             regent_inference_endpoint: zp_config::REGENT_INFERENCE_ENDPOINT_SENTINEL.to_string(),
-            regent_reasoning_model: "qwen3:8b".to_string(),
-            regent_routing_model: "qwen3:1.7b".to_string(),
+            // HARNESS-SEAM S4 unification (2026-09-01): these are inert
+            // (regent_enabled: false, above) and deliberately distinct from
+            // both the real ZpConfig default and any operator-set value, for
+            // the same reason llm_model uses "test-model" rather than a real
+            // model name above -- this fixture is explicitly, permanently
+            // exempted from the S4 discipline pin (see its doc comment).
+            regent_reasoning_model: "test-reasoning-model".to_string(),
+            regent_routing_model: "test-routing-model".to_string(),
             regent_loop_interval_secs: 60,
             regent_display_name: "Regent".to_string(),
             acknowledged_listeners: Vec::new(),

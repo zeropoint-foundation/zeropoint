@@ -80,14 +80,55 @@ pub struct RegentConfig {
     pub display_name: String,
 }
 
-impl Default for RegentConfig {
-    fn default() -> Self {
+impl RegentConfig {
+    /// Construct from the single authority for `reasoning_model` /
+    /// `routing_model` (HARNESS-SEAM-2026-08 §4 S4, unification closed
+    /// 2026-09-01): `zp_config::ZpConfig`'s `regent_reasoning_model` /
+    /// `regent_routing_model` fields, themselves declared exactly once via
+    /// `Sourced::default_value` in `crates/zp-config/src/schema.rs`. Every
+    /// other construction path in the workspace derives from this (directly,
+    /// or transitively through `ServerConfig::from_zp_config` /
+    /// `ServerRegentConfig`) or from `RegentConfig::for_tests` below.
+    ///
+    /// `max_context_tokens` and `cloud_mandate` have no `ZpConfig`
+    /// equivalent (not part of the model-election crossing this
+    /// unification closes) and are set to fixed operational defaults here,
+    /// same as they always were.
+    pub fn from_zp_config(cfg: &zp_config::ZpConfig) -> Self {
+        Self {
+            enabled: cfg.regent_enabled.value,
+            inference_endpoint: cfg.regent_inference_endpoint.value.clone(),
+            api_key_source: match &cfg.regent_inference_api_key.value {
+                Some(key) => ApiKeySource::RawLegacy(key.clone()),
+                None => ApiKeySource::None,
+            },
+            reasoning_model: cfg.regent_reasoning_model.value.clone(),
+            routing_model: cfg.regent_routing_model.value.clone(),
+            max_context_tokens: 8192,
+            loop_interval_secs: cfg.regent_loop_interval_secs.value,
+            cloud_mandate: None,
+            display_name: cfg.regent_display_name.value.clone(),
+        }
+    }
+
+    /// Test-only constructor for fixtures that need a valid `RegentConfig`
+    /// without resolving a `ZpConfig`. Deliberately named `for_tests` —
+    /// that name is meant to be grepped for: it is how a discipline pin
+    /// (or a future reader) tells "a test fixture that needs an explicit,
+    /// stable model name" apart from "a second declarant competing with
+    /// `ZpConfig`'s authority." Not for production call sites.
+    ///
+    /// Takes the two model names positionally rather than as named fields
+    /// so a caller like `RegentConfig::for_tests("qwen3:8b", "qwen3:1.7b")`
+    /// never spells out `reasoning_model: "..."` as a struct-literal
+    /// shape — the exact shape the S4 discipline pin forbids.
+    pub fn for_tests(reasoning_model: impl Into<String>, routing_model: impl Into<String>) -> Self {
         Self {
             enabled: false,
             inference_endpoint: zp_config::REGENT_INFERENCE_ENDPOINT_SENTINEL.to_string(),
             api_key_source: ApiKeySource::None,
-            reasoning_model: "qwen3:8b".to_string(),
-            routing_model: "qwen3:1.7b".to_string(),
+            reasoning_model: reasoning_model.into(),
+            routing_model: routing_model.into(),
             max_context_tokens: 8192,
             loop_interval_secs: 60,
             cloud_mandate: None,
