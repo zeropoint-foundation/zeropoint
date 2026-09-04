@@ -205,6 +205,43 @@ impl ConfigResolver {
         }
     }
 
+    /// HARNESS-SEAM-2026-08 §4 S5 ("no shadowed writes"), boot-time
+    /// complement to W6's write-time refusal in `config_set`. `config_set`
+    /// refuses (or warns) when a *write* would land in a layer already
+    /// shadowed by something higher-priority; this asks the same question
+    /// about the state the substrate is already running with, every boot
+    /// -- not just at the moment of a `zp config set`.
+    ///
+    /// Deliberately non-fatal. Unlike S1-S3, a shadow found here does not
+    /// refuse to boot -- see the W7 report for why: an env var legitimately
+    /// shadowing a file value is common and often intentional (a CI job
+    /// pinning `ZP_LLM_MODEL` for one run without touching the operator's
+    /// `config.toml`, say), and refusing to start over it would be the
+    /// wrong failure mode for a condition that is frequently correct.
+    ///
+    /// Reuses `ConfigResolver` twice rather than inventing a second
+    /// resolution path: once for the real, full resolution (defaults ->
+    /// system -> project -> env), once restricted to the file layers alone.
+    /// The difference between the two, per key, is exactly "what a file
+    /// declared" vs. "what actually won" -- the same comparison
+    /// `config_set`'s shadow pre-check makes at write time, made here at
+    /// load time instead.
+    pub fn boot_shadow_findings() -> Result<Vec<ShadowedAtBoot>, ConfigError> {
+        let mut file_only = Self::new();
+        let system_path = file_only.config.home_dir.value.join("config.toml");
+        if system_path.exists() {
+            let file = load_toml(&system_path)?;
+            file_only.apply_file(file, Source::SystemConfig);
+        }
+        if let Some(project_path) = find_project_config() {
+            let file = load_toml(&project_path)?;
+            file_only.apply_file(file, Source::ProjectConfig);
+        }
+        let file_only_cfg = file_only.resolve();
+        let effective_cfg = Self::resolve_standard()?;
+        Ok(shadow_findings_from(&file_only_cfg, &effective_cfg))
+    }
+
     // ── Internal ─────────────────────────────────────────────
 
     fn apply_file(&mut self, file: ConfigFile, source: Source) {
@@ -402,6 +439,42 @@ pub enum ConfigSetOutcome {
     },
 }
 
+/// One S5 finding: a config key whose file-declared value is currently
+/// shadowed by a higher-priority layer at boot. See
+/// `ConfigResolver::boot_shadow_findings`.
+#[derive(Debug, Clone)]
+pub struct ShadowedAtBoot {
+    pub key: &'static str,
+    /// The value a file layer (system or project config) declares.
+    pub file_value: String,
+    pub file_source: Source,
+    /// The value that actually won -- from a higher-priority layer.
+    pub effective_value: String,
+    pub effective_source: Source,
+}
+
+/// Keys `boot_shadow_findings` checks. Deliberately the same set
+/// `resolved_field` understands, not a second list to drift from it --
+/// walked through `resolved_field` itself below.
+const SHADOW_CHECK_KEYS: &[&str] = &[
+    "server.port",
+    "server.bind",
+    "data.dir",
+    "identity.operator",
+    "llm.enabled",
+    "llm.provider",
+    "llm.model",
+    "llm.escalation_model",
+    "llm.supports_tools",
+    "node.role",
+    "node.upstream",
+    "officers.enabled",
+    "officers.sweep_interval_secs",
+    "officers.steward_enabled",
+    "officers.cleo_enabled",
+    "officers.aegis_enabled",
+];
+
 /// For a `config_set` key, the field's currently-resolved value (as
 /// display text) and the layer it resolved from. Mirrors `config_set`'s
 /// own key list field-for-field -- every key `config_set` can write, this
@@ -466,6 +539,48 @@ fn resolved_field(cfg: &ZpConfig, key: &str) -> Option<(String, Source)> {
         ),
         _ => return None,
     })
+}
+
+/// The comparison at the heart of S5, pulled out of
+/// `ConfigResolver::boot_shadow_findings` so it is directly unit-testable
+/// against synthetic `ZpConfig` values -- no environment variables, no
+/// files, no process-global state to leak between tests. Given "what the
+/// file layers alone resolved to" and "what actually won", returns every
+/// key where a file's value is currently shadowed by something
+/// higher-priority with a different value.
+fn shadow_findings_from(file_only_cfg: &ZpConfig, effective_cfg: &ZpConfig) -> Vec<ShadowedAtBoot> {
+    let mut findings = Vec::new();
+    for key in SHADOW_CHECK_KEYS.iter().copied() {
+        let (file_value, file_source) = match resolved_field(file_only_cfg, key) {
+            Some(v) => v,
+            None => continue,
+        };
+        // A file only "declared" this key if a file layer actually won it
+        // here -- Default means neither file set it, so there is nothing
+        // to shadow.
+        if !matches!(file_source, Source::SystemConfig | Source::ProjectConfig) {
+            continue;
+        }
+        let (effective_value, effective_source) = match resolved_field(effective_cfg, key) {
+            Some(v) => v,
+            None => continue,
+        };
+        // Shadowed only if something with higher priority than the file
+        // layer actually won, AND it won with a different value. The same
+        // file layer winning (nothing higher present), or an identical
+        // value from a higher layer, is not a finding -- an operator would
+        // notice neither.
+        if effective_source.priority() > file_source.priority() && effective_value != file_value {
+            findings.push(ShadowedAtBoot {
+                key,
+                file_value,
+                file_source,
+                effective_value,
+                effective_source,
+            });
+        }
+    }
+    findings
 }
 
 /// Set a single key-value pair in ~/ZeroPoint/config.toml.
@@ -678,6 +793,7 @@ fn parse_bool(s: &str) -> Option<bool> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
     #[test]
     fn unknown_section_rejected() {
@@ -712,6 +828,79 @@ operator = "testuser"
             result.is_ok(),
             "valid config must parse: {:?}",
             result.err()
+        );
+    }
+
+    /// HARNESS-SEAM-2026-08 S5 ("no shadowed writes"), W7. Prove the sensor
+    /// is not lying, entirely in memory -- no env vars, no files, no
+    /// process-global state, so this cannot leak into or be leaked into by
+    /// any other test running concurrently in this binary.
+    ///
+    /// Synthetic violation: a "file-only" config where a system-config
+    /// layer declares `llm.model`, alongside an "effective" config where a
+    /// higher-priority layer (env var) declares a *different* value for the
+    /// same key. Fix: the effective config's value is changed back to match
+    /// the file's -- same layer priority relationship, no operator-visible
+    /// surprise left -- and the finding must disappear.
+    #[test]
+    fn s5_shadow_findings_catches_synthetic_violation_and_clears_on_fix() {
+        let mut file_only_cfg = ZpConfig::default();
+        file_only_cfg
+            .llm_model
+            .override_with("file-declared-model".to_string(), Source::SystemConfig);
+
+        let mut effective_cfg = file_only_cfg.clone();
+        effective_cfg.llm_model.override_with(
+            "env-declared-model".to_string(),
+            Source::EnvVar("ZP_LLM_MODEL".to_string()),
+        );
+
+        // 1-3: shadowed -- must be caught.
+        let findings = shadow_findings_from(&file_only_cfg, &effective_cfg);
+        let found = findings.iter().find(|f| f.key == "llm.model");
+        assert!(
+            found.is_some(),
+            "S5 must catch a file-declared llm.model shadowed by a higher layer"
+        );
+        let found = found.unwrap();
+        assert_eq!(found.file_value, "file-declared-model");
+        assert_eq!(found.effective_value, "env-declared-model");
+
+        // 4: fix -- the higher layer now agrees with the file. No surprise
+        // left for an operator to trip over.
+        effective_cfg
+            .llm_model
+            .override_with(
+                "file-declared-model".to_string(),
+                Source::EnvVar("ZP_LLM_MODEL".to_string()),
+            );
+
+        // 5: clean -- must not report llm.model any more.
+        let findings = shadow_findings_from(&file_only_cfg, &effective_cfg);
+        assert!(
+            findings.iter().all(|f| f.key != "llm.model"),
+            "S5 must not flag agreement between layers as a shadow"
+        );
+    }
+
+    /// A file layer that was never actually the winner for a key (nothing
+    /// ever wrote to it -- still at `Source::Default`) has nothing to
+    /// shadow. Distinguishing "no one set this" from "a file set this and
+    /// something else overrode it" is the whole point of gating on
+    /// `file_source` rather than just comparing values.
+    #[test]
+    fn s5_does_not_flag_keys_no_file_ever_declared() {
+        let file_only_cfg = ZpConfig::default();
+        let mut effective_cfg = file_only_cfg.clone();
+        effective_cfg.llm_model.override_with(
+            "env-only-model".to_string(),
+            Source::EnvVar("ZP_LLM_MODEL".to_string()),
+        );
+
+        let findings = shadow_findings_from(&file_only_cfg, &effective_cfg);
+        assert!(
+            findings.iter().all(|f| f.key != "llm.model"),
+            "an env-only value with no file declaration is not a shadow -- there is nothing underneath it to be surprised about"
         );
     }
 }
