@@ -307,3 +307,51 @@ Doc header explicitly declares 'Proposed. Not adopted.' status and states \
 Indexing it would contradict the doc's own authored status; reserving \
 respects the deliberate hold-out.
 """
+
+# ── Four more pre-existing defects surfaced by the pre-push fresh-HEAD run ──
+
+[[reservation]]
+kind = "path"
+check = "doc-path"
+subject = "security/pentest-2026-04-06/INVARIANT-CATALOG-v0.md"
+disposition = "open"
+declared = "2026-09-05"
+reopen_condition = "Either the pentest-2026-04-06 INVARIANT-CATALOG-v0 companion file is authored under security/, OR the ZEROPOINT-DESIGN-DISCIPLINES.md:613 citation is updated to point at the actual archived location."
+reopen_watch = "watched: presence of security/pentest-2026-04-06/INVARIANT-CATALOG-v0.md, or a change to the citing line in ZEROPOINT-DESIGN-DISCIPLINES.md"
+rationale = """
+ZEROPOINT-DESIGN-DISCIPLINES.md line 613 cites a pentest-2026-04-06 companion \
+that is not under security/. Pre-existing corpus drift; the correct resolution \
+(author the missing companion, or redirect the citation to where the artifact \
+actually lives) is undecided. Reserved rather than fixed because that choice \
+belongs to whoever knows the pentest-2026-04-06 archive layout.
+"""
+
+[[reservation]]
+kind = "path"
+check = "spec-citation"
+subject = "docs/handoffs/substrate-sequencing-2026-08.md"
+disposition = "limited"
+declared = "2026-09-05"
+rationale = """
+crates/zp-regent/src/regent.rs:346 and crates/zp-regent/src/context.rs:173 \
+cite a docs/handoffs/ file. `docs/handoffs/` is gitignored by convention (see \
+DISCIPLINE-PINS-MAP.md "Rationale in an untracked file" attention note): \
+handoffs are the corpus's local-only reasoning trail, deliberately excluded \
+from the tracked corpus. A cited handoff cannot exist in a fresh clone in \
+principle. `limited` is correct because the situation cannot resolve as a \
+tracked file without changing the convention — the citation is meaningful to \
+whoever authored the code and the handoff is still readable locally.
+"""
+
+[[reservation]]
+kind = "path"
+check = "spec-citation"
+subject = "docs/handoffs/SESSION-HANDOFF-2026-08-13-rev2.md"
+disposition = "limited"
+declared = "2026-09-05"
+rationale = """
+crates/zp-discipline/tests/delegation_writes_must_validate_issuance.rs:72 \
+cites a docs/handoffs/ file. Same class as substrate-sequencing-2026-08.md \
+above — docs/handoffs/ is gitignored by convention and a handoff citation \
+cannot resolve in a fresh clone in principle.
+"""
