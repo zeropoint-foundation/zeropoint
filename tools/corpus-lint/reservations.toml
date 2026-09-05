@@ -82,3 +82,228 @@ guess would trade one visible false positive for an invisible class of missed \
 real ones. A reservation costs one entry and states the reason; a weakened \
 rule costs coverage and states nothing.
 """
+
+# ────────────────────────────────────────────────────────────────────────────
+# Reservations landed 2026-09-05 by the HARNESS-SEAM W1-W7 hardening session's
+# corpus-hygiene push. Each is either (a) a linter false-positive against a
+# quoted-external-token or historical-doc where fixing the source would
+# distort the record, or (b) a pre-existing draft/proposed doc that has been
+# deliberately held out of the corpus index by its own header.
+
+# ── MCP JSON-RPC method names, cited verbatim from the MCP 2026-07-28 spec ──
+
+[[reservation]]
+kind = "path"
+check = "doc-path"
+subject = "prompts/get"
+disposition = "limited"
+declared = "2026-09-05"
+rationale = """
+Not a filesystem path. It is an MCP JSON-RPC method name from the MCP \
+2026-07-28 spec (see basic/patterns/mrtr §"Supported requests"). The MCP \
+protocol uses slash-delimited method names by convention (prompts/get, \
+tools/call, resources/read, resources/list). Same shape as \
+tools/ember/OPENAI_API_KEY above: cannot resolve as a file in principle \
+because it never named one; the notation is meaningful and citing it any \
+other way would distort a verbatim quotation of an external specification.
+"""
+
+[[reservation]]
+kind = "path"
+check = "doc-path"
+subject = "tools/call"
+disposition = "limited"
+declared = "2026-09-05"
+rationale = """
+Not a filesystem path. It is an MCP JSON-RPC method name from the MCP \
+2026-07-28 spec (see basic/patterns/mrtr §"Supported requests"). Same class \
+as prompts/get above.
+"""
+
+# ── AGNTCY spec quotation false-positive on tie-off regex ──
+
+[[reservation]]
+kind = "prose"
+check = "tie-off"
+subject = "MCP-COMPOSITION-2026-08.md"
+disposition = "limited"
+declared = "2026-09-05"
+rationale = """
+Not a substrate tie-off. Line 1197 quotes the AGNTCY Identity spec verbatim: \
+its three identity requirement properties (Open, Collision-free, Verifiable), \
+where "Open" is a term of art for "no centralized authority is required for \
+assigning identities" — a *property name* in bold, not a Stage-1t disposition \
+marker. The tie-off regex `\\*(declined|deferred|open|limited)\\.?\\*` matches \
+`**Open**` inside the quoted spec text as if it were a substrate disposition. \
+Rewriting the quotation to avoid the regex would distort the AGNTCY spec's own \
+formatting; adding a reservation preserves the verbatim quote while marking \
+the finding as a linter false-positive.
+"""
+
+# ── Historical Tier 3 doc referencing a file this session retired ──
+
+[[reservation]]
+kind = "path"
+check = "doc-path"
+subject = "crates/zp-llm/src/providers/ollama.rs"
+disposition = "declined"
+declared = "2026-09-05"
+rationale = """
+File was tombstoned 2026-08-25 and physically deleted 2026-09-04 (commit \
+1323ca0) as part of the W5 proxy migration completing. The citing document \
+(docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md §"Migration plan \
+for bypass code") is Tier 3 historical — frozen at authoring frame per the \
+CANONICAL-CORPUS-INDEX-2026-07 convention, so its row claim ("Direct HTTP to \
+local Ollama … Allowlisted; unchanged") is intentionally preserved as the \
+record of what the plan was in 2026-05. The file's actual disposition (retired \
+via proxy migration) is captured in HARNESS-SEAM-2026-08 §6.1.1 W5-4 and in \
+the pin extension no_raw_provider_http_outside_canonical_layer_loopback. \
+Recorded here rather than editing the historical row because Tier 3 does not \
+get amended for downstream code moves.
+"""
+
+# ── Pre-existing dangling paths in prospective design docs ──
+
+[[reservation]]
+kind = "path"
+check = "doc-path"
+subject = "docs/FOUNDATION-ONBOARDING-2026-05.md"
+disposition = "open"
+declared = "2026-09-05"
+reopen_condition = "The FOUNDATION-ONBOARDING doc is authored under docs/, OR the SAGE-WIZARD-SCRIPT-2026-05.md:516 citation is updated to point at the actual replacement companion doc."
+reopen_watch = "watched: presence of docs/FOUNDATION-ONBOARDING-2026-05.md, or a change to the citing line in SAGE-WIZARD-SCRIPT-2026-05.md"
+rationale = """
+SAGE-WIZARD-SCRIPT-2026-05.md line 516 cites this companion doc that was \
+never authored. Pre-existing corpus drift, present before the HARNESS-SEAM \
+W1-W7 session. Reserved as `open` (not `deferred`) because the correct \
+resolution is undecided: either the companion is a real gap to be written, or \
+the citation should be redirected to a doc that supersedes the intended \
+content — neither has been chosen. Reserved here rather than fixed because \
+the choice is Ken's, not this hygiene pass's.
+"""
+
+[[reservation]]
+kind = "path"
+check = "doc-path"
+subject = "migrations/schema-v1-to-v2.sql"
+disposition = "deferred"
+declared = "2026-09-05"
+reopen_condition = "The Cartographer schema-v1-to-v2 migration is implemented under migrations/."
+reopen_watch = "watched: presence of migrations/schema-v1-to-v2.sql or an equivalent-role file named in CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md"
+rationale = """
+CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md line 282 cites the planned \
+schema migration file. Deferred rather than declined because the citing \
+document is a design record for work that will be done; the file will exist \
+when the migration is written.
+"""
+
+[[reservation]]
+kind = "path"
+check = "doc-path"
+subject = "scripts/calibrate-hardware.py"
+disposition = "deferred"
+declared = "2026-09-05"
+reopen_condition = "The hardware-dossier calibration script is implemented under scripts/."
+reopen_watch = "watched: presence of scripts/calibrate-hardware.py"
+rationale = """
+HARDWARE-DOSSIER-2026-08.md lines 259 and 287 cite the planned calibration \
+script. Design-record citation for future work; the file will exist when the \
+calibration workflow is built out.
+"""
+
+[[reservation]]
+kind = "path"
+check = "doc-path"
+subject = "zp-server/src/receipt_index.rs"
+disposition = "deferred"
+declared = "2026-09-05"
+reopen_condition = "The receipt_index module is added to zp-server."
+reopen_watch = "watched: presence of crates/zp-server/src/receipt_index.rs"
+rationale = """
+HARDWARE-DOSSIER-2026-08.md line 265 cites a not-yet-created module in \
+zp-server. Design-record citation for future work.
+"""
+
+[[reservation]]
+kind = "path"
+check = "doc-path"
+subject = "hardware/catalog/apple-m4-pro-mac-mini.toml"
+disposition = "deferred"
+declared = "2026-09-05"
+reopen_condition = "The hardware catalog directory and first per-machine dossier are landed."
+reopen_watch = "watched: presence of hardware/catalog/"
+rationale = """
+HARDWARE-DOSSIER-2026-08.md line 276 cites a planned per-machine catalog \
+entry. Design-record citation for future work.
+"""
+
+[[reservation]]
+kind = "path"
+check = "doc-path"
+subject = "hardware/apollo/hardware_dossier.toml"
+disposition = "deferred"
+declared = "2026-09-05"
+reopen_condition = "The APOLLO hardware dossier is authored."
+reopen_watch = "watched: presence of hardware/apollo/hardware_dossier.toml"
+rationale = """
+HARDWARE-DOSSIER-2026-08.md line 277 cites a planned per-machine dossier for \
+the APOLLO reference hardware. Design-record citation for future work.
+"""
+
+# ── Draft / proposed docs deliberately held out of the corpus index ──
+
+[[reservation]]
+kind = "doc"
+check = "index-missing"
+subject = "docs/design/GOOSE-INTEGRATION-2026-08.md"
+disposition = "open"
+declared = "2026-09-05"
+reopen_condition = "The doc is promoted from 'Draft for discussion' status to a design record and added to CANONICAL-CORPUS-INDEX-2026-07.md."
+reopen_watch = "watched: doc header no longer reads 'Draft for discussion', or entry appears in CANONICAL-CORPUS-INDEX-2026-07.md"
+rationale = """
+Doc header explicitly declares 'Draft for discussion' status (line 3). Held \
+out of the index deliberately by its own header until it graduates to a \
+design record or canonical elaboration. Indexing a draft would misrepresent \
+its authority level.
+"""
+
+[[reservation]]
+kind = "doc"
+check = "index-missing"
+subject = "docs/design/HARNESS-SURVEY-2026-08.md"
+disposition = "open"
+declared = "2026-09-05"
+reopen_condition = "The doc is promoted from 'Draft for discussion' status to a design record and added to CANONICAL-CORPUS-INDEX-2026-07.md."
+reopen_watch = "watched: doc header no longer reads 'Draft for discussion', or entry appears in CANONICAL-CORPUS-INDEX-2026-07.md"
+rationale = """
+Doc header explicitly declares 'Draft for discussion' status (line 3). Same \
+class as GOOSE-INTEGRATION above.
+"""
+
+[[reservation]]
+kind = "doc"
+check = "index-missing"
+subject = "docs/design/REGENT-MODES-2026-08.md"
+disposition = "open"
+declared = "2026-09-05"
+reopen_condition = "The doc is promoted from 'Draft for discussion' status to a design record and added to CANONICAL-CORPUS-INDEX-2026-07.md."
+reopen_watch = "watched: doc header no longer reads 'Draft for discussion', or entry appears in CANONICAL-CORPUS-INDEX-2026-07.md"
+rationale = """
+Doc header explicitly declares 'Draft for discussion' status (line 3). Same \
+class as GOOSE-INTEGRATION above.
+"""
+
+[[reservation]]
+kind = "doc"
+check = "index-missing"
+subject = "docs/design/NON-DELEGABLE-AUTHORITY-2026-08.md"
+disposition = "open"
+declared = "2026-09-05"
+reopen_condition = "The proposal is adopted (moves from 'Proposed. Not adopted.' to adopted status) and added to CANONICAL-CORPUS-INDEX-2026-07.md."
+reopen_watch = "watched: doc header no longer reads 'Proposed. Not adopted.', or entry appears in CANONICAL-CORPUS-INDEX-2026-07.md"
+rationale = """
+Doc header explicitly declares 'Proposed. Not adopted.' status and states \
+'Not in CANONICAL-CORPUS-INDEX-2026-07.md' as the intended state (lines 4-5). \
+Indexing it would contradict the doc's own authored status; reserving \
+respects the deliberate hold-out.
+"""

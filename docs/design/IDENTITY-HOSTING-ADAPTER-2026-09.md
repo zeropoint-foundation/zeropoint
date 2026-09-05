@@ -146,7 +146,7 @@ This document does not build the hosting adapter. Once Ken signs off on §1–§
 - A new inbound route mirroring the existing outbound edge-relay pattern: accept a Genesis-signed CIMD document from an opted-in operator, serve it at `/{fingerprint}/client.json`, and forward `/oauth/callback` hits into the existing relay-to-operator path.
 
 **Deferred (§3's recommendation):**
-- `client_auth_key` derivation (`crates/zp-keys/src/cimd_signer.rs`, fourth sibling of the three existing derivation modules) and JWKS-block population — not built until a concrete AS requires `private_key_jwt`.
+- `client_auth_key` derivation (`crates/zp-keys/src/cimd_signer.rs` (not yet written), fourth sibling of the three existing derivation modules) and JWKS-block population — not built until a concrete AS requires `private_key_jwt`.
 
 ---
 
@@ -169,12 +169,12 @@ Recorded here deliberately, per the handoff's own discipline of naming what a se
 
 A minimal, unregistered scaffold lives at `crates/zp-identity-hosting/` (new crate, **not** added to the workspace `Cargo.toml` members list in this pass — deliberately, to avoid editing a file shared with the two other design sessions running in parallel this session; wiring it in is the implementation session's first step). It contains:
 
-- `src/document.rs` — `CimdDocument`, `Jwk`/`Jwks` types, and `build_cimd_document(...)` with a `todo!()` body — the function signature captures exactly what §4 settled (name, redirect derivation) and takes the URL-scheme choice as a parameter rather than hard-coding it, so it does not have to be rewritten once §1/§2 are picked.
-- `src/client_id.rs` — `ClientIdScheme` enum with exactly the two surviving options from §1 (`FoundationMirror`, `SelfHosted`) plus `PreRegistered` as the no-hosting fallback from §2; deliberately has no `DnsUnderControlledTld` variant.
-- `src/adapter.rs` — the `IdentityHostingAdapter` port trait, mirroring `zp-cloudflare`'s stated ports/adapters/substitutable-adapters philosophy, with `todo!()` stub structs for `FoundationMirrorAdapter`, `SelfHostedAdapter`, `PreRegistrationAdapter`.
-- `src/client_name.rs` — **not stubbed**; §4's `client_name` logic is fully settled, so this file has a real, non-`todo!()` implementation plus tests, ready to move into `zp-server` verbatim.
-- `src/redirect.rs` — `redirect_uris(hosting_base)` fully implemented per §4 (always exactly one URL, hosting-location-relative); the callback-capture handler itself is `todo!()` since its wiring is Form/adapter-dependent.
-- `src/client_auth_key.rs` — the §3 `client_auth_key` derivation, written to the exact pattern of `gate_signer.rs` / `audit_signer.rs` / `foundation_edge_signer.rs`, reserving the context tag `"zp.cimd.client_auth.v1"`. Marked in its own doc comment as **not to be built into v1** per §3's recommendation, and as belonging in `crates/zp-keys/src/cimd_signer.rs` once it is — not created there in this pass for the same shared-file reason the crate itself isn't registered yet.
+- `crates/zp-identity-hosting/src/document.rs` — `CimdDocument`, `Jwk`/`Jwks` types, and `build_cimd_document(...)` with a `todo!()` body — the function signature captures exactly what §4 settled (name, redirect derivation) and takes the URL-scheme choice as a parameter rather than hard-coding it, so it does not have to be rewritten once §1/§2 are picked.
+- `crates/zp-identity-hosting/src/client_id.rs` — `ClientIdScheme` enum with exactly the two surviving options from §1 (`FoundationMirror`, `SelfHosted`) plus `PreRegistered` as the no-hosting fallback from §2; deliberately has no `DnsUnderControlledTld` variant.
+- `crates/zp-identity-hosting/src/adapter.rs` — the `IdentityHostingAdapter` port trait, mirroring `zp-cloudflare`'s stated ports/adapters/substitutable-adapters philosophy, with `todo!()` stub structs for `FoundationMirrorAdapter`, `SelfHostedAdapter`, `PreRegistrationAdapter`.
+- `crates/zp-identity-hosting/src/client_name.rs` — **not stubbed**; §4's `client_name` logic is fully settled, so this file has a real, non-`todo!()` implementation plus tests, ready to move into `zp-server` verbatim.
+- `crates/zp-identity-hosting/src/redirect.rs` — `redirect_uris(hosting_base)` fully implemented per §4 (always exactly one URL, hosting-location-relative); the callback-capture handler itself is `todo!()` since its wiring is Form/adapter-dependent.
+- `crates/zp-identity-hosting/src/client_auth_key.rs` — the §3 `client_auth_key` derivation, written to the exact pattern of `gate_signer.rs` / `audit_signer.rs` / `foundation_edge_signer.rs`, reserving the context tag `"zp.cimd.client_auth.v1"`. Marked in its own doc comment as **not to be built into v1** per §3's recommendation, and as belonging in `crates/zp-keys/src/cimd_signer.rs` (not yet written) once it is — not created there in this pass for the same shared-file reason the crate itself isn't registered yet.
 
 None of this has been run through `cargo check` — it is not a workspace member, deliberately, so nothing in this session's parallel edits to `zp-config`, `zp-regent`, or `zp-server` can conflict with it. The implementation session's first two steps are: add the crate to workspace members, and run `cargo check -p zp-identity-hosting` before writing a single non-`todo!()` line beyond what's already here.
 

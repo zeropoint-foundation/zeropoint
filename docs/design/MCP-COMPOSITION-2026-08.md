@@ -7,9 +7,9 @@ in `KEEL-2026-07.md`. Elaborates KEEL §II.15 (substrate boundary planes),
 §II.13 P9 (the system acts; the operator signs), §II.19 (canonical composition
 primitive), §III.9 (human control at Genesis), Part V (Composition Contract),
 and Part VII (Peer-Verification Contract). Composes with
-`design/EXTENSION-SURFACE-2026-07.md`, `design/QUARANTINE-PLANE-2026-07.md`,
+`EXTENSION-SURFACE-2026-07.md`, `QUARANTINE-PLANE-2026-07.md`,
 `AGENT-TOOL-CONTRACT-2026-06.md`, `EXECUTION-AUTHORITY-MODEL-2026-07.md`, and
-`design/HARNESS-SEAM-2026-08.md`.
+`HARNESS-SEAM-2026-08.md`.
 
 **Date:** 2026-08-22
 **Origin:** Cowork `zp-ai-landscape-sweep` scheduled task surfaced MCP 2026-07-28
@@ -235,8 +235,8 @@ from the primary spec (`specification/draft/basic/authorization` and
 The substrate's authority-and-identity primitives, as they stand in
 `KEEL-2026-07.md` §II.5 (Genesis-as-single-root), §IV.2 (key material),
 §IV.5 (delegation / mandate / capability class), and elaborated in
-`design/EXTENSION-SURFACE-2026-07.md` §"Delegation semantics" and
-`design/QUARANTINE-PLANE-2026-07.md` §"The admission ceremony":
+`EXTENSION-SURFACE-2026-07.md` §"Delegation semantics" and
+`QUARANTINE-PLANE-2026-07.md` §"The admission ceremony":
 
 | MCP-side surface | Chain-anchored ZP source of truth | Gap |
 |---|---|---|
