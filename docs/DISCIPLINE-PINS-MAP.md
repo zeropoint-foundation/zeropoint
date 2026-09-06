@@ -2,9 +2,9 @@
 
 **Document type:** Derived registry — generated, not authored. **Status:** current as of the commit below.
 
-**Generated** by `tools/discipline-pins/discipline_pins.py` from commit `09b235e`. Derived, not authored — regenerate rather than edit.
+**Generated** by `tools/discipline-pins/discipline_pins.py` from commit `a097fbd`. Derived, not authored — regenerate rather than edit.
 
-29 pin files · 33 assertions · 60 forbidden patterns · 4,950 lines
+31 pin files · 39 assertions · 68 forbidden patterns · 5,377 lines
 
 
 These run under `cargo test --workspace`, which `.github/workflows/ci.yml` invokes on every push. A violation fails the build.
@@ -19,6 +19,8 @@ These run under `cargo test --workspace`, which `.github/workflows/ci.yml` invok
 | `delegation_writes_must_validate_issuance` | every path that writes a delegation to the chain validates issuance first. | **hand-rolled** | 0 | — |
 | `finding_producers_must_reach_the_regent` | a task that produces officer findings must forward them to the Regent. | **hand-rolled** | 0 | — |
 | `granted_tools_must_be_reachable` | the Regent's tool surface has exactly one source, and every capability in it is dispatchable. | **hand-rolled** | 0 | — |
+| `invariant_floor_is_singly_declared` | the Regent's invariant floor is declared exactly once. | Regent invariant floor -- declared exactly once per \
+             REGENT-ONBOARDING-CEREMONY-2026-09 §3 | 2 | — |
 | `no_audit_db_in_workspace` | no file named `audit.db` may exist inside the workspace. | **hand-rolled** | 0 | — |
 | `no_build_time_paths_at_runtime` | runtime file resolution MUST NOT depend on build-time paths. | P2 (identity is a key, not a location) — C7 loaded-not-versioned | 3 | `docs/design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md` |
 | `no_cloudflare_imports_in_zp_crates` | Cloudflare-specific Rust types must stop at the `zp-cloudflare` adapter crate. | Stack-Cloudflare reference integration: port/adapter boundary | 1 | `docs/STACK-CLOUDFLARE-2026-05.md` |
@@ -41,6 +43,7 @@ These run under `cargo test --workspace`, which `.github/workflows/ci.yml` invok
 | `prompts_do_not_quote_forbidden_output` | a prompt never quotes the output it is forbidding. | **hand-rolled** | 0 | — |
 | `read_state_files_must_have_a_writer` | a repo-managed state file that is *read* must be *written* somewhere in the tree. | **hand-rolled** | 0 | — |
 | `severity_thresholds_have_one_source` | urgency is decided by `Severity`'s two named floors, never by comparing a severity string. | **hand-rolled** | 0 | — |
+| `single_declarant_model_election` | exactly one authority declares model election (HARNESS-SEAM §3 C1 — "zp-config `llm.*`"). HARNESS-SEAM-2026-08 §4 S4 … | C1 (model election) / S4 (single declarant) | 0 | — |
 | `singular_sovereign_root` | exactly one sovereign root per process, reached by one loader. | P2 (identity is a key, not a location) / singular sovereign root, singular sovereign root (one ceremony per process), singular sovereign root (one credential-store owner), singular sovereign root (one provider per gate) | 7 | `docs/DISCIPLINE-PINS.md`, `docs/SINGULAR-SOVEREIGN-ROOT-2026-05.md` |
 | `verbs_must_match_schema` | every public function whose return type references a `zp_verbs` type must produce one of the verb-set's response cate… | **hand-rolled** | 0 | — |
 
@@ -52,9 +55,9 @@ These run under `cargo test --workspace`, which `.github/workflows/ci.yml` invok
 
 - **Hand-rolled, no `Discipline` builder** (12): `adapters_must_be_documented`, `delegation_writes_must_validate_issuance`, `finding_producers_must_reach_the_regent`, `granted_tools_must_be_reachable`, `no_audit_db_in_workspace`, `no_external_script_without_integrity`, `no_raw_artifact_creation_outside_zp_artifacts`, `prompt_placeholders_are_substituted`, `prompts_do_not_quote_forbidden_output`, `read_state_files_must_have_a_writer`, `severity_thresholds_have_one_source`, `verbs_must_match_schema` — these assert directly, so a failure prints a bare assertion rather than the cited invariant and rationale the builder emits. The pin still holds; the message does not explain itself.
 - **No `cite_invariant`** (0): none — uses the builder but names no invariant, so the rule is enforced without a stated source.
-- **No rationale document** (18): `chain_events_carry_a_prefix`, `delegation_writes_must_validate_issuance`, `finding_producers_must_reach_the_regent`, `granted_tools_must_be_reachable`, `no_audit_db_in_workspace`, `no_direct_verify_strict_outside_helper`, `no_non_strict_ed25519_verify`, `no_raw_artifact_creation_outside_zp_artifacts`, `no_raw_home_lookup`, `no_raw_keychain_service_strings`, `no_serde_preserve_order`, `no_sh_c_in_tool_launch`, `no_std_fs_write_in_keyring`, `prompt_placeholders_are_substituted`, `prompts_do_not_quote_forbidden_output`, `read_state_files_must_have_a_writer`, `severity_thresholds_have_one_source`, `verbs_must_match_schema` — the `# Why` lives only in the pin's own header. Fine for a narrow rule; a gap for a broad one.
+- **No rationale document** (20): `chain_events_carry_a_prefix`, `delegation_writes_must_validate_issuance`, `finding_producers_must_reach_the_regent`, `granted_tools_must_be_reachable`, `invariant_floor_is_singly_declared`, `no_audit_db_in_workspace`, `no_direct_verify_strict_outside_helper`, `no_non_strict_ed25519_verify`, `no_raw_artifact_creation_outside_zp_artifacts`, `no_raw_home_lookup`, `no_raw_keychain_service_strings`, `no_serde_preserve_order`, `no_sh_c_in_tool_launch`, `no_std_fs_write_in_keyring`, `prompt_placeholders_are_substituted`, `prompts_do_not_quote_forbidden_output`, `read_state_files_must_have_a_writer`, `severity_thresholds_have_one_source`, `single_declarant_model_election`, `verbs_must_match_schema` — the `# Why` lives only in the pin's own header. Fine for a narrow rule; a gap for a broad one.
 - **Rationale in an untracked file** (0): none — cites `docs/handoffs/`, which `.gitignore` excludes and the corpus convention classifies as local notes rather than corpus. The pin ships; its justification does not.
 - **Widest allowlists** (5 with ≥5 exemptions): `no_raw_peer_url_outside_zp_net` (17), `no_raw_variable_spawn_outside_zp_host` (11), `singular_sovereign_root` (7), `no_raw_tcp_bind_outside_zp_net` (6), `no_raw_provider_http_outside_canonical_layer` (5) — each exemption is a place the rule does not hold. Worth re-reading when the count grows, since exemptions are added one at a time and never reviewed together.
 - **Cited document does not resolve** (0): none
 - **Promised but not landed** (2): `crates/zp-cli/src/commands.rs:65`; `crates/zp-keys/src/foundation_edge_signer.rs:91` — source comments announcing a pin that does not exist. These read as enforcement and enforce nothing (A11).
-- **Described by `docs/DISCIPLINE-PINS.md`** (2 of 29): `no_raw_peer_url_outside_zp_net`, `singular_sovereign_root`
+- **Described by `docs/DISCIPLINE-PINS.md`** (2 of 31): `no_raw_peer_url_outside_zp_net`, `singular_sovereign_root`

@@ -1,36 +1,37 @@
 {
-  "generated_from_commit": "9f0e160",
-  "governed_docs": 176,
+  "generated_from_commit": "a097fbd",
+  "governed_docs": 184,
   "totals": {
-    "connections": 1298,
-    "live": 584,
-    "tied_off": 433,
-    "defect": 281,
-    "maturity": 0.7835,
-    "live_only": 0.4499,
-    "tied_off_share": 0.3336
+    "connections": 1368,
+    "live": 613,
+    "tied_off": 441,
+    "defect": 314,
+    "maturity": 0.7705,
+    "live_only": 0.4481,
+    "tied_off_share": 0.3224
   },
   "tieoff_provenance": {
     "declared_tieoff": 1,
-    "pin_exception": 60,
-    "reserved_prefix": 372,
+    "pin_exception": 66,
+    "reserved_prefix": 374,
     "other": 0
   },
   "by_kind": {
-    "chain_to_registry/live": 85,
+    "chain_to_registry/live": 90,
     "code_to_artifact/defect": 129,
-    "code_to_artifact/live": 35,
+    "code_to_artifact/live": 36,
     "code_to_corpus/live": 6,
-    "corpus_to_chain/defect": 149,
-    "corpus_to_chain/live": 173,
-    "corpus_to_chain/tied_off": 372,
-    "corpus_to_code/live": 84,
-    "corpus_to_keel/live": 39,
-    "crate_dep/live": 134,
+    "corpus_to_chain/defect": 179,
+    "corpus_to_chain/live": 177,
+    "corpus_to_chain/tied_off": 374,
+    "corpus_to_code/defect": 3,
+    "corpus_to_code/live": 94,
+    "corpus_to_keel/live": 43,
+    "crate_dep/live": 136,
     "derived_artifact/defect": 3,
     "derived_artifact/tied_off": 1,
-    "pin/live": 28,
-    "pin_exception/tied_off": 60
+    "pin/live": 31,
+    "pin_exception/tied_off": 66
   },
   "dropped": [
     {
@@ -933,6 +934,15 @@
     {
       "kind": "crate_dep",
       "source": "crates/zp-regent",
+      "target": "zp-ontology",
+      "status": "live",
+      "detector": "cargo build --workspace",
+      "note": null,
+      "site": "crates/zp-regent/Cargo.toml"
+    },
+    {
+      "kind": "crate_dep",
+      "source": "crates/zp-regent",
       "target": "zp-config",
       "status": "live",
       "detector": "cargo build --workspace",
@@ -943,6 +953,15 @@
       "kind": "crate_dep",
       "source": "crates/zp-regent",
       "target": "zp-emission-coherence",
+      "status": "live",
+      "detector": "cargo build --workspace",
+      "note": null,
+      "site": "crates/zp-regent/Cargo.toml"
+    },
+    {
+      "kind": "crate_dep",
+      "source": "crates/zp-regent",
+      "target": "zp-net",
       "status": "live",
       "detector": "cargo build --workspace",
       "note": null,
@@ -1670,6 +1689,87 @@
     },
     {
       "kind": "corpus_to_code",
+      "source": "docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md",
+      "target": "crates/zp-identity-hosting/src/adapter.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md",
+      "target": "crates/zp-identity-hosting/src/client_auth_key.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md",
+      "target": "crates/zp-identity-hosting/src/client_id.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md",
+      "target": "crates/zp-identity-hosting/src/client_name.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md",
+      "target": "crates/zp-identity-hosting/src/document.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md",
+      "target": "crates/zp-identity-hosting/src/redirect.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md",
+      "target": "crates/zp-keys/src/cimd_signer.rs",
+      "status": "defect",
+      "detector": null,
+      "note": "claimed implementing path does not exist",
+      "site": "docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md",
+      "target": "crates/zp-keys/src/foundation_edge_signer.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md",
+      "target": "crates/zp-keys/src/gate_signer.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_code",
       "source": "docs/design/IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md",
       "target": "crates/zp-server/src/canary.rs",
       "status": "live",
@@ -1708,9 +1808,9 @@
       "kind": "corpus_to_code",
       "source": "docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md",
       "target": "crates/zp-llm/src/providers/ollama.rs",
-      "status": "live",
-      "detector": "connection-map check_doc_code_paths",
-      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "status": "defect",
+      "detector": null,
+      "note": "claimed implementing path does not exist",
       "site": "docs/design/INFERENCE-ARCHITECTURE-CONSOLIDATION-2026-05.md"
     },
     {
@@ -1829,6 +1929,42 @@
       "detector": "connection-map check_doc_code_paths",
       "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
       "site": "docs/design/REGENT-DOOM-LOOP-DETECTION-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "crates/zp-cli/src/main.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "crates/zp-regent/src/loop_runner.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "crates/zp-regent/src/onboarding/floor.rs",
+      "status": "live",
+      "detector": "connection-map check_doc_code_paths",
+      "note": "structural verification only \u2014 path exists in repo tree; content not semantically checked against the doc's claim",
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_code",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "crates/zp-server/src/routes.rs",
+      "status": "defect",
+      "detector": null,
+      "note": "claimed implementing path does not exist",
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
     },
     {
       "kind": "corpus_to_code",
@@ -2207,6 +2343,42 @@
       "detector": "corpus-lint check_keel_refs",
       "note": null,
       "site": "docs/design/REGENT-DOOM-LOOP-DETECTION-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_keel",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "KEEL \u00a7II.13",
+      "status": "live",
+      "detector": "corpus-lint check_keel_refs",
+      "note": null,
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_keel",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "KEEL \u00a7II.5",
+      "status": "live",
+      "detector": "corpus-lint check_keel_refs",
+      "note": null,
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_keel",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "KEEL \u00a7IV.2",
+      "status": "live",
+      "detector": "corpus-lint check_keel_refs",
+      "note": null,
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_keel",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "KEEL \u00a7IV.5",
+      "status": "live",
+      "detector": "corpus-lint check_keel_refs",
+      "note": null,
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
     },
     {
       "kind": "corpus_to_keel",
@@ -3110,6 +3282,15 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "cognitive:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/COGNITIVE-ACT-ACCOUNTING-2026-07.md",
       "target": "cognitive:act:recorded",
       "status": "live",
@@ -3134,6 +3315,51 @@
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
       "site": "docs/design/COGNITIVE-TOOLS-OPPORTUNITY-MAPPING-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/INTENT-CRYSTALLIZATION-CEREMONY-2026-08.md",
+      "target": "cognitive:ceremony:disconfirmation_rejected:v1",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/INTENT-CRYSTALLIZATION-CEREMONY-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/INTENT-CRYSTALLIZATION-CEREMONY-2026-08.md",
+      "target": "cognitive:ceremony:disconfirmation_upheld:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/INTENT-CRYSTALLIZATION-CEREMONY-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/INTENT-CRYSTALLIZATION-CEREMONY-2026-08.md",
+      "target": "cognitive:ceremony:precondition_check:v1",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/INTENT-CRYSTALLIZATION-CEREMONY-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/INTENT-CRYSTALLIZATION-CEREMONY-2026-08.md",
+      "target": "cognitive:ceremony:precondition_failed:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/INTENT-CRYSTALLIZATION-CEREMONY-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/INTENT-CRYSTALLIZATION-CEREMONY-2026-08.md",
+      "target": "cognitive:ceremony:reflexivity_witnessed:v1",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/INTENT-CRYSTALLIZATION-CEREMONY-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -3233,6 +3459,15 @@
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
       "site": "docs/design/CONVERSATIONAL-INFERENCE-BOUNDARY-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/INTENT-CRYSTALLIZATION-CEREMONY-2026-08.md",
+      "target": "cognitive:primitive:canonicalized:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/INTENT-CRYSTALLIZATION-CEREMONY-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -3713,12 +3948,39 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "delegation:seed:invariant",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/HARDWARE-COMPROMISE-EVIDENCE-2026-07.md",
       "target": "delegation:share:hardware_signatures",
       "status": "live",
       "detector": "corpus-lint check_receipt_vocabulary",
       "note": null,
       "site": "docs/design/HARDWARE-COMPROMISE-EVIDENCE-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/MCP-COMPOSITION-2026-08.md",
+      "target": "delegation:withdrawn:*",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/MCP-COMPOSITION-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/MCP-COMPOSITION-2026-08.md",
+      "target": "did:key",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/MCP-COMPOSITION-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -3872,6 +4134,24 @@
       "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
       "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
       "site": "docs/design/EMBODIMENT-STATE-PROTOCOL-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "emit:artifact",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "emit:cognitive",
+      "status": "live",
+      "detector": "corpus-lint check_receipt_vocabulary",
+      "note": null,
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -4802,6 +5082,33 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/INTENT-CRYSTALLIZATION-PRIMITIVE-2026-08.md",
+      "target": "intent:crystallized",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/INTENT-CRYSTALLIZATION-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/INTENT-CRYSTALLIZATION-CEREMONY-2026-08.md",
+      "target": "intent:crystallized:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/INTENT-CRYSTALLIZATION-CEREMONY-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/INTENT-CRYSTALLIZATION-PRIMITIVE-2026-08.md",
+      "target": "intent:crystallized:candidate:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/INTENT-CRYSTALLIZATION-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/SUBSTRATE-BOOT-INVARIANT-CEREMONY-2026-07.md",
       "target": "invariant:vault_key_composes_with_provider:verified",
       "status": "live",
@@ -4835,6 +5142,15 @@
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
       "site": "docs/design/OBSERVER-WINDOWS-INVESTIGATION-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/KEEL-AMENDMENT-ROOT-AUTHORITY-LOCUS-2026-08.md",
+      "target": "keel:layer_a:amended:v1",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/KEEL-AMENDMENT-ROOT-AUTHORITY-LOCUS-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -5450,6 +5766,15 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/INTENT-CRYSTALLIZATION-CEREMONY-2026-08.md",
+      "target": "lens:declared:intent_crystallization",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/INTENT-CRYSTALLIZATION-CEREMONY-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/MEDIA-PROVENANCE-2026-07.md",
       "target": "lens:declared:media_provenance",
       "status": "tied_off",
@@ -5663,6 +5988,15 @@
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
       "site": "docs/SAGE-WIZARD-SCRIPT-2026-05.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/MCP-COMPOSITION-2026-08.md",
+      "target": "mcp:elicitation:as_proposal:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/MCP-COMPOSITION-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -6998,6 +7332,24 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "read:crates",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "read:handoffs",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/SUBSTRATE-BOOT-INVARIANT-CEREMONY-2026-07.md",
       "target": "readiness:blocked",
       "status": "defect",
@@ -7040,6 +7392,15 @@
       "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
       "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
       "site": "docs/design/BLAST-RADIUS-AND-RECOVERY-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "regent:*",
+      "status": "defect",
+      "detector": "connection-map collect_emitted_receipts",
+      "note": "registry gap: code emits this receipt but KNOWN_RECEIPT_PREFIXES does not declare it \u2014 fix by adding to the registry",
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -7682,6 +8043,15 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "regent:named:*",
+      "status": "tied_off",
+      "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
+      "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/REGENT-NAMING-CEREMONY-2026-07.md",
       "target": "regent:named:v1",
       "status": "tied_off",
@@ -7715,6 +8085,24 @@
       "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
       "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
       "site": "docs/design/REGENT-NAMING-CEREMONY-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "regent:persona:v1",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "regent:persona:v2",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -7772,12 +8160,12 @@
     },
     {
       "kind": "corpus_to_chain",
-      "source": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md",
+      "source": "docs/design/MCP-COMPOSITION-2026-08.md",
       "target": "regent:proposal:*",
       "status": "live",
       "detector": "corpus-lint check_receipt_vocabulary",
       "note": null,
-      "site": "docs/design/TRAJECTORY-MAP-PRIMITIVE-2026-08.md"
+      "site": "docs/design/MCP-COMPOSITION-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -7796,6 +8184,15 @@
       "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
       "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
       "site": "docs/design/HARDWARE-DOSSIER-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "regent:read:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -7850,6 +8247,60 @@
       "detector": "connection-map RESERVED_RECEIPT_PREFIXES",
       "note": "reserved: vocabulary declared by canonical corpus; substrate emission deferred \u2014 see RESERVED_RECEIPT_PREFIXES in crates/zp-server/src/substrate_validate.rs",
       "site": "docs/design/HARDWARE-DOSSIER-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "regent:seeded:complete",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/INTENT-CRYSTALLIZATION-CEREMONY-2026-08.md",
+      "target": "regent:shaping:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/INTENT-CRYSTALLIZATION-CEREMONY-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/INTENT-CRYSTALLIZATION-PRIMITIVE-2026-08.md",
+      "target": "regent:shaping:accepted:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/INTENT-CRYSTALLIZATION-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/INTENT-CRYSTALLIZATION-PRIMITIVE-2026-08.md",
+      "target": "regent:shaping:declined:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/INTENT-CRYSTALLIZATION-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/INTENT-CRYSTALLIZATION-PRIMITIVE-2026-08.md",
+      "target": "regent:shaping:offered:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/INTENT-CRYSTALLIZATION-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/INTENT-CRYSTALLIZATION-PRIMITIVE-2026-08.md",
+      "target": "regent:shaping:redirected:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/INTENT-CRYSTALLIZATION-PRIMITIVE-2026-08.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -8096,6 +8547,15 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/INTENT-CRYSTALLIZATION-PRIMITIVE-2026-08.md",
+      "target": "shaping:bounded",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/INTENT-CRYSTALLIZATION-PRIMITIVE-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/HARDWARE-COMPROMISE-EVIDENCE-2026-07.md",
       "target": "share:hardware_signatures",
       "status": "defect",
@@ -8177,6 +8637,15 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "subprocess:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/CHAIN-WATCHER-AND-COMMITMENTS-2026-07.md",
       "target": "subscription:budget_exceeded",
       "status": "defect",
@@ -8192,6 +8661,15 @@
       "detector": null,
       "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
       "site": "docs/design/CHAIN-WATCHER-AND-COMMITMENTS-2026-07.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md",
+      "target": "substrate:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/REGENT-ONBOARDING-CEREMONY-2026-09.md"
     },
     {
       "kind": "corpus_to_chain",
@@ -8537,6 +9015,24 @@
     },
     {
       "kind": "corpus_to_chain",
+      "source": "docs/design/MCP-COMPOSITION-2026-08.md",
+      "target": "urn:agent:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/MCP-COMPOSITION-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
+      "source": "docs/design/MCP-COMPOSITION-2026-08.md",
+      "target": "urn:zp:*",
+      "status": "defect",
+      "detector": null,
+      "note": "aspirational: no code emitter found for this receipt name \u2014 fix by implementing the emitter, reserving via RESERVED_RECEIPT_PREFIXES, or rewording the doc mention",
+      "site": "docs/design/MCP-COMPOSITION-2026-08.md"
+    },
+    {
+      "kind": "corpus_to_chain",
       "source": "docs/design/INFORMATION-CUSTODY-TIERS-2026-08.md",
       "target": "vault:exported",
       "status": "defect",
@@ -8654,75 +9150,75 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-regent/src/context.rs:1011",
+      "source": "crates/zp-regent/src/context.rs:1074",
       "target": "arc:map:abandoned",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-regent/src/context.rs:1011"
+      "site": "crates/zp-regent/src/context.rs:1074"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-regent/src/context.rs:904",
+      "source": "crates/zp-regent/src/context.rs:967",
       "target": "arc:map:destination_accepted",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-regent/src/context.rs:904"
+      "site": "crates/zp-regent/src/context.rs:967"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-regent/src/context.rs:880",
+      "source": "crates/zp-regent/src/context.rs:943",
       "target": "arc:map:destination_proposed",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-regent/src/context.rs:880"
+      "site": "crates/zp-regent/src/context.rs:943"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-regent/src/context.rs:934",
+      "source": "crates/zp-regent/src/context.rs:997",
       "target": "arc:map:destination_superseded",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-regent/src/context.rs:934"
+      "site": "crates/zp-regent/src/context.rs:997"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-regent/src/context.rs:968",
+      "source": "crates/zp-regent/src/context.rs:1031",
       "target": "arc:map:settled_with_destination",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-regent/src/context.rs:968"
+      "site": "crates/zp-regent/src/context.rs:1031"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-regent/src/context.rs:990",
+      "source": "crates/zp-regent/src/context.rs:1053",
       "target": "arc:map:settled_without_destination",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-regent/src/context.rs:990"
+      "site": "crates/zp-regent/src/context.rs:1053"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-regent/src/context.rs:816",
+      "source": "crates/zp-regent/src/context.rs:879",
       "target": "arc:waypoint:opened",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-regent/src/context.rs:816"
+      "site": "crates/zp-regent/src/context.rs:879"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-regent/src/context.rs:849",
+      "source": "crates/zp-regent/src/context.rs:912",
       "target": "arc:waypoint:resolved",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-regent/src/context.rs:849"
+      "site": "crates/zp-regent/src/context.rs:912"
     },
     {
       "kind": "chain_to_registry",
@@ -8789,12 +9285,12 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-server/src/regent.rs:2909",
+      "source": "crates/zp-server/src/regent.rs:2973",
       "target": "delegation:granted:regent",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-server/src/regent.rs:2909"
+      "site": "crates/zp-server/src/regent.rs:2973"
     },
     {
       "kind": "chain_to_registry",
@@ -8816,39 +9312,39 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-regent/src/loop_runner.rs:2196",
+      "source": "crates/zp-regent/src/loop_runner.rs:2195",
       "target": "emission_coherence:finding",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-regent/src/loop_runner.rs:2196"
+      "site": "crates/zp-regent/src/loop_runner.rs:2195"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-regent/src/loop_runner.rs:2234",
+      "source": "crates/zp-regent/src/loop_runner.rs:2233",
       "target": "emission_coherence:summary",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-regent/src/loop_runner.rs:2234"
+      "site": "crates/zp-regent/src/loop_runner.rs:2233"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-cli/src/main.rs:8724",
+      "source": "crates/zp-cli/src/main.rs:8773",
       "target": "epoch:anchored",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-cli/src/main.rs:8724"
+      "site": "crates/zp-cli/src/main.rs:8773"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-server/src/lib.rs:5427",
+      "source": "crates/zp-server/src/lib.rs:5622",
       "target": "gate:denied",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-server/src/lib.rs:5427"
+      "site": "crates/zp-server/src/lib.rs:5622"
     },
     {
       "kind": "chain_to_registry",
@@ -8861,21 +9357,66 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-cli/src/main.rs:10881",
+      "source": "crates/zp-server/src/lib.rs:980",
+      "target": "invariant:s1_provider_resolves:verified",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/lib.rs:980"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/lib.rs:960",
+      "target": "invariant:s1_provider_resolves:violated",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/lib.rs:960"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/lib.rs:1076",
+      "target": "invariant:s2_model_installed:skipped",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/lib.rs:1076"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/lib.rs:1038",
+      "target": "invariant:s2_model_installed:verified",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/lib.rs:1038"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-server/src/lib.rs:1045",
+      "target": "invariant:s2_model_installed:violated",
+      "status": "live",
+      "detector": "connection-map collect_undeclared_emissions",
+      "note": null,
+      "site": "crates/zp-server/src/lib.rs:1045"
+    },
+    {
+      "kind": "chain_to_registry",
+      "source": "crates/zp-cli/src/main.rs:10930",
       "target": "model:capability:updated",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-cli/src/main.rs:10881"
+      "site": "crates/zp-cli/src/main.rs:10930"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-cli/src/main.rs:10668",
+      "source": "crates/zp-cli/src/main.rs:10717",
       "target": "model:registered",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-cli/src/main.rs:10668"
+      "site": "crates/zp-cli/src/main.rs:10717"
     },
     {
       "kind": "chain_to_registry",
@@ -8933,12 +9474,12 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-cli/src/main.rs:10455",
+      "source": "crates/zp-cli/src/main.rs:10504",
       "target": "preference:llm:policy:set",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-cli/src/main.rs:10455"
+      "site": "crates/zp-cli/src/main.rs:10504"
     },
     {
       "kind": "chain_to_registry",
@@ -8960,12 +9501,12 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-cli/src/main.rs:10283",
+      "source": "crates/zp-cli/src/main.rs:10332",
       "target": "pricing:refresh",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-cli/src/main.rs:10283"
+      "site": "crates/zp-cli/src/main.rs:10332"
     },
     {
       "kind": "chain_to_registry",
@@ -9140,12 +9681,12 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-server/src/lib.rs:1373",
+      "source": "crates/zp-server/src/lib.rs:1517",
       "target": "system:keychain:accessed",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-server/src/lib.rs:1373"
+      "site": "crates/zp-server/src/lib.rs:1517"
     },
     {
       "kind": "chain_to_registry",
@@ -9338,12 +9879,12 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-server/src/lib.rs:6693",
+      "source": "crates/zp-server/src/lib.rs:6888",
       "target": "tool:preflight:vault_validation_failed",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-server/src/lib.rs:6693"
+      "site": "crates/zp-server/src/lib.rs:6888"
     },
     {
       "kind": "chain_to_registry",
@@ -9365,12 +9906,12 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-server/src/lib.rs:6439",
+      "source": "crates/zp-server/src/lib.rs:6634",
       "target": "tool:removed",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-server/src/lib.rs:6439"
+      "site": "crates/zp-server/src/lib.rs:6634"
     },
     {
       "kind": "chain_to_registry",
@@ -9383,39 +9924,39 @@
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-server/src/lib.rs:6348",
+      "source": "crates/zp-server/src/lib.rs:6543",
       "target": "tool:stopped",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-server/src/lib.rs:6348"
+      "site": "crates/zp-server/src/lib.rs:6543"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-server/src/lib.rs:4074",
+      "source": "crates/zp-server/src/lib.rs:4269",
       "target": "vault:secret:removed",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-server/src/lib.rs:4074"
+      "site": "crates/zp-server/src/lib.rs:4269"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-server/src/lib.rs:4113",
+      "source": "crates/zp-server/src/lib.rs:4308",
       "target": "vault:secret:revealed",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-server/src/lib.rs:4113"
+      "site": "crates/zp-server/src/lib.rs:4308"
     },
     {
       "kind": "chain_to_registry",
-      "source": "crates/zp-server/src/lib.rs:4036",
+      "source": "crates/zp-server/src/lib.rs:4231",
       "target": "vault:secret:stored",
       "status": "live",
       "detector": "connection-map collect_undeclared_emissions",
       "note": null,
-      "site": "crates/zp-server/src/lib.rs:4036"
+      "site": "crates/zp-server/src/lib.rs:4231"
     },
     {
       "kind": "code_to_artifact",
@@ -9496,7 +10037,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:3271"
+      "site": "crates/zp-cli/src/main.rs:3281"
     },
     {
       "kind": "code_to_artifact",
@@ -9505,7 +10046,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:3515"
+      "site": "crates/zp-cli/src/main.rs:3525"
     },
     {
       "kind": "code_to_artifact",
@@ -9514,7 +10055,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:7157"
+      "site": "crates/zp-cli/src/main.rs:7206"
     },
     {
       "kind": "code_to_artifact",
@@ -9523,7 +10064,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:7710"
+      "site": "crates/zp-cli/src/main.rs:7759"
     },
     {
       "kind": "code_to_artifact",
@@ -9532,7 +10073,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:7713"
+      "site": "crates/zp-cli/src/main.rs:7762"
     },
     {
       "kind": "code_to_artifact",
@@ -9541,7 +10082,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:8298"
+      "site": "crates/zp-cli/src/main.rs:8347"
     },
     {
       "kind": "code_to_artifact",
@@ -9550,7 +10091,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:8501"
+      "site": "crates/zp-cli/src/main.rs:8550"
     },
     {
       "kind": "code_to_artifact",
@@ -9559,7 +10100,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-cli/src/main.rs:10345"
+      "site": "crates/zp-cli/src/main.rs:10394"
     },
     {
       "kind": "code_to_artifact",
@@ -9649,7 +10190,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-config/src/resolve.rs:346"
+      "site": "crates/zp-config/src/resolve.rs:383"
     },
     {
       "kind": "code_to_artifact",
@@ -9658,7 +10199,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-config/src/schema.rs:119"
+      "site": "crates/zp-config/src/schema.rs:142"
     },
     {
       "kind": "code_to_artifact",
@@ -10333,7 +10874,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:276"
+      "site": "crates/zp-server/src/lib.rs:279"
     },
     {
       "kind": "code_to_artifact",
@@ -10342,7 +10883,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:2064"
+      "site": "crates/zp-server/src/lib.rs:2249"
     },
     {
       "kind": "code_to_artifact",
@@ -10351,7 +10892,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:2267"
+      "site": "crates/zp-server/src/lib.rs:2462"
     },
     {
       "kind": "code_to_artifact",
@@ -10360,7 +10901,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:2440"
+      "site": "crates/zp-server/src/lib.rs:2635"
     },
     {
       "kind": "code_to_artifact",
@@ -10369,7 +10910,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:4161"
+      "site": "crates/zp-server/src/lib.rs:4356"
     },
     {
       "kind": "code_to_artifact",
@@ -10378,7 +10919,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:4817"
+      "site": "crates/zp-server/src/lib.rs:5012"
     },
     {
       "kind": "code_to_artifact",
@@ -10387,7 +10928,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:5071"
+      "site": "crates/zp-server/src/lib.rs:5266"
     },
     {
       "kind": "code_to_artifact",
@@ -10396,7 +10937,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:5513"
+      "site": "crates/zp-server/src/lib.rs:5708"
     },
     {
       "kind": "code_to_artifact",
@@ -10405,7 +10946,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:7222"
+      "site": "crates/zp-server/src/lib.rs:7417"
     },
     {
       "kind": "code_to_artifact",
@@ -10414,7 +10955,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:7223"
+      "site": "crates/zp-server/src/lib.rs:7418"
     },
     {
       "kind": "code_to_artifact",
@@ -10423,7 +10964,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:7224"
+      "site": "crates/zp-server/src/lib.rs:7419"
     },
     {
       "kind": "code_to_artifact",
@@ -10432,7 +10973,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:7225"
+      "site": "crates/zp-server/src/lib.rs:7420"
     },
     {
       "kind": "code_to_artifact",
@@ -10441,7 +10982,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:7227"
+      "site": "crates/zp-server/src/lib.rs:7422"
     },
     {
       "kind": "code_to_artifact",
@@ -10450,7 +10991,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:7228"
+      "site": "crates/zp-server/src/lib.rs:7423"
     },
     {
       "kind": "code_to_artifact",
@@ -10459,7 +11000,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:7229"
+      "site": "crates/zp-server/src/lib.rs:7424"
     },
     {
       "kind": "code_to_artifact",
@@ -10468,7 +11009,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:7230"
+      "site": "crates/zp-server/src/lib.rs:7425"
     },
     {
       "kind": "code_to_artifact",
@@ -10477,7 +11018,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:7231"
+      "site": "crates/zp-server/src/lib.rs:7426"
     },
     {
       "kind": "code_to_artifact",
@@ -10486,7 +11027,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:7232"
+      "site": "crates/zp-server/src/lib.rs:7432"
     },
     {
       "kind": "code_to_artifact",
@@ -10495,7 +11036,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:7234"
+      "site": "crates/zp-server/src/lib.rs:7433"
     },
     {
       "kind": "code_to_artifact",
@@ -10504,7 +11045,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:7235"
+      "site": "crates/zp-server/src/lib.rs:7435"
     },
     {
       "kind": "code_to_artifact",
@@ -10513,7 +11054,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:7236"
+      "site": "crates/zp-server/src/lib.rs:7436"
     },
     {
       "kind": "code_to_artifact",
@@ -10522,7 +11063,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:7237"
+      "site": "crates/zp-server/src/lib.rs:7437"
     },
     {
       "kind": "code_to_artifact",
@@ -10531,7 +11072,16 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:7239"
+      "site": "crates/zp-server/src/lib.rs:7438"
+    },
+    {
+      "kind": "code_to_artifact",
+      "source": "crates/zp-server/src/lib.rs",
+      "target": "include_str!",
+      "status": "live",
+      "detector": "rustc (compile-time embed)",
+      "note": "content embedded at build time; cannot break at runtime",
+      "site": "crates/zp-server/src/lib.rs:7440"
     },
     {
       "kind": "code_to_artifact",
@@ -10540,7 +11090,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:7240"
+      "site": "crates/zp-server/src/lib.rs:7441"
     },
     {
       "kind": "code_to_artifact",
@@ -10549,7 +11099,7 @@
       "status": "live",
       "detector": "rustc (compile-time embed)",
       "note": "content embedded at build time; cannot break at runtime",
-      "site": "crates/zp-server/src/lib.rs:7241"
+      "site": "crates/zp-server/src/lib.rs:7442"
     },
     {
       "kind": "code_to_artifact",
@@ -10558,7 +11108,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:7322"
+      "site": "crates/zp-server/src/lib.rs:7529"
     },
     {
       "kind": "code_to_artifact",
@@ -10567,7 +11117,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/lib.rs:7463"
+      "site": "crates/zp-server/src/lib.rs:7670"
     },
     {
       "kind": "code_to_artifact",
@@ -10675,7 +11225,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/onboard/inference.rs:476"
+      "site": "crates/zp-server/src/onboard/inference.rs:490"
     },
     {
       "kind": "code_to_artifact",
@@ -10684,7 +11234,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/onboard/inference.rs:783"
+      "site": "crates/zp-server/src/onboard/inference.rs:797"
     },
     {
       "kind": "code_to_artifact",
@@ -10693,7 +11243,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/onboard/inference.rs:798"
+      "site": "crates/zp-server/src/onboard/inference.rs:812"
     },
     {
       "kind": "code_to_artifact",
@@ -10810,7 +11360,7 @@
       "status": "defect",
       "detector": null,
       "note": "runtime path resolution; nothing verifies the artifact is present or versioned",
-      "site": "crates/zp-server/src/proxy.rs:197"
+      "site": "crates/zp-server/src/proxy.rs:209"
     },
     {
       "kind": "code_to_artifact",
@@ -10946,6 +11496,33 @@
       "detector": "cargo test -p zp-discipline --no-fail-fast",
       "note": null,
       "site": "crates/zp-discipline/tests/granted_tools_must_be_reachable.rs"
+    },
+    {
+      "kind": "pin",
+      "source": "invariant_floor_is_singly_declared",
+      "target": "workspace",
+      "status": "live",
+      "detector": "cargo test -p zp-discipline --no-fail-fast",
+      "note": null,
+      "site": "crates/zp-discipline/tests/invariant_floor_is_singly_declared.rs"
+    },
+    {
+      "kind": "pin_exception",
+      "source": "invariant_floor_is_singly_declared",
+      "target": "crates/zp-discipline/tests/invariant_floor_is_singly_declared.rs",
+      "status": "tied_off",
+      "detector": null,
+      "note": "allowlisted path -- declared exception",
+      "site": "crates/zp-discipline/tests/invariant_floor_is_singly_declared.rs"
+    },
+    {
+      "kind": "pin_exception",
+      "source": "invariant_floor_is_singly_declared",
+      "target": "crates/zp-regent/src/onboarding/floor.rs",
+      "status": "tied_off",
+      "detector": null,
+      "note": "allowlisted path -- declared exception",
+      "site": "crates/zp-discipline/tests/invariant_floor_is_singly_declared.rs"
     },
     {
       "kind": "pin",
@@ -11301,6 +11878,15 @@
     {
       "kind": "pin_exception",
       "source": "no_raw_provider_http_outside_canonical_layer",
+      "target": "crates/zp-configure/src/lib.rs",
+      "status": "tied_off",
+      "detector": null,
+      "note": "allowlisted path -- declared exception",
+      "site": "crates/zp-discipline/tests/no_raw_provider_http_outside_canonical_layer.rs"
+    },
+    {
+      "kind": "pin_exception",
+      "source": "no_raw_provider_http_outside_canonical_layer",
       "target": "crates/zp-llm/src/providers/anthropic.rs",
       "status": "tied_off",
       "detector": null,
@@ -11319,10 +11905,37 @@
     {
       "kind": "pin_exception",
       "source": "no_raw_provider_http_outside_canonical_layer",
+      "target": "crates/zp-server/src/onboard/detect.rs",
+      "status": "tied_off",
+      "detector": null,
+      "note": "allowlisted path -- declared exception",
+      "site": "crates/zp-discipline/tests/no_raw_provider_http_outside_canonical_layer.rs"
+    },
+    {
+      "kind": "pin_exception",
+      "source": "no_raw_provider_http_outside_canonical_layer",
       "target": "crates/zp-server/src/proxy.rs",
       "status": "tied_off",
       "detector": null,
       "note": "allowlisted path -- declared exception",
+      "site": "crates/zp-discipline/tests/no_raw_provider_http_outside_canonical_layer.rs"
+    },
+    {
+      "kind": "pin_exception",
+      "source": "no_raw_provider_http_outside_canonical_layer",
+      "target": "marker:RAW_OLLAMA_BASE_URL",
+      "status": "tied_off",
+      "detector": null,
+      "note": "skip-line marker -- declared exception, annotated at each site",
+      "site": "crates/zp-discipline/tests/no_raw_provider_http_outside_canonical_layer.rs"
+    },
+    {
+      "kind": "pin_exception",
+      "source": "no_raw_provider_http_outside_canonical_layer",
+      "target": "marker:zpd:raw-loopback-opt-in",
+      "status": "tied_off",
+      "detector": null,
+      "note": "skip-line marker -- declared exception, annotated at each site",
       "site": "crates/zp-discipline/tests/no_raw_provider_http_outside_canonical_layer.rs"
     },
     {
@@ -11588,6 +12201,15 @@
     },
     {
       "kind": "pin",
+      "source": "prompts_do_not_quote_forbidden_output",
+      "target": "workspace",
+      "status": "live",
+      "detector": "cargo test -p zp-discipline --no-fail-fast",
+      "note": null,
+      "site": "crates/zp-discipline/tests/prompts_do_not_quote_forbidden_output.rs"
+    },
+    {
+      "kind": "pin",
       "source": "read_state_files_must_have_a_writer",
       "target": "workspace",
       "status": "live",
@@ -11603,6 +12225,15 @@
       "detector": "cargo test -p zp-discipline --no-fail-fast",
       "note": null,
       "site": "crates/zp-discipline/tests/severity_thresholds_have_one_source.rs"
+    },
+    {
+      "kind": "pin",
+      "source": "single_declarant_model_election",
+      "target": "workspace",
+      "status": "live",
+      "detector": "cargo test -p zp-discipline --no-fail-fast",
+      "note": null,
+      "site": "crates/zp-discipline/tests/single_declarant_model_election.rs"
     },
     {
       "kind": "pin",
@@ -11701,25 +12332,25 @@
       "target": "c756728",
       "status": "defect",
       "detector": null,
-      "note": "3 relevant files changed since it was written (1 commits), declared source c756728 dated 2026-08-17",
+      "note": "77 relevant files changed since it was written (38 commits), declared source c756728 dated 2026-08-17",
       "site": "docs/lenses/manifest.json"
     },
     {
       "kind": "derived_artifact",
       "source": "docs/lenses/source-manifest.json",
-      "target": "c756728",
+      "target": "ffac87f",
       "status": "defect",
       "detector": null,
-      "note": "3 relevant files changed since it was written (1 commits), declared source c756728 dated 2026-08-17",
+      "note": "75 relevant files changed since it was written (30 commits), declared source ffac87f dated 2026-08-19",
       "site": "docs/lenses/source-manifest.json"
     },
     {
       "kind": "derived_artifact",
       "source": "tools/connection-map/connections.json",
-      "target": "c756728",
+      "target": "9f0e160",
       "status": "defect",
       "detector": null,
-      "note": "3 relevant files changed since it was written (1 commits), declared source c756728 dated 2026-08-17",
+      "note": "76 relevant files changed since it was written (36 commits), declared source 9f0e160 dated 2026-08-19",
       "site": "tools/connection-map/connections.json"
     }
   ]
