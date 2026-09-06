@@ -1125,7 +1125,20 @@ impl Regent {
             memory_fragments,
             standing_corrections,
             substrate_ground,
-            active_delegations: delegations.to_vec(),
+            active_delegations: {
+                // The Regent's seeded floor per REGENT-ONBOARDING-CEREMONY-2026-09
+                // §3 — four capabilities every Regent has by KEEL default,
+                // non-refusable. Merged into whatever operator-issued delegations
+                // arrived at `perceive`, so downstream code sees a Regent whose
+                // action space is bounded by both the floor and the operator's
+                // explicit grants. Without this merge the Regent boots with
+                // zero delegations, hits the propose-only branch in
+                // `build_available_actions`, and answers every operator input
+                // with a PROPOSAL — the 2026-09-06 first-exercise finding.
+                let mut all = crate::onboarding::floor::seeded_floor(now);
+                all.extend_from_slice(delegations);
+                all
+            },
             system_awareness,
             tool_results,
             work_arc,

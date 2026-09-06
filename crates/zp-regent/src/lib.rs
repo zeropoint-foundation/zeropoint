@@ -31,6 +31,7 @@ pub mod inference_classifier;
 pub mod intent;
 pub mod loop_runner;
 pub mod memory;
+pub mod onboarding;
 pub mod persona;
 pub mod precedent;
 pub mod regent;
