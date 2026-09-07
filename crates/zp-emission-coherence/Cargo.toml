@@ -1,0 +1,22 @@
+[package]
+name = "zp-emission-coherence"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Regent emission-coherence detection: Heuristics 1–3 (n-gram repetition, length-distribution collapse, token-entropy anomaly) + composition into R0/R1/R2 response classes per REGENT-DOOM-LOOP-DETECTION-2026-07."
+
+[[bin]]
+name = "zp-emission-coherence"
+path = "src/main.rs"
+
+[lib]
+name = "zp_emission_coherence"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"

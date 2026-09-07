@@ -131,7 +131,8 @@ impl AuditStore {
         // 64-bit targets. i64::MAX rows is effectively "no limit" for any
         // real audit chain.
         let entries = self.export_chain(i64::MAX as usize)?;
-        let wrapped: Vec<AuditVerifiableEntry<'_>> = entries.iter().map(AuditVerifiableEntry).collect();
+        let wrapped: Vec<AuditVerifiableEntry<'_>> =
+            entries.iter().map(AuditVerifiableEntry).collect();
         Ok(Verifier::new().verify(&wrapped))
     }
 }

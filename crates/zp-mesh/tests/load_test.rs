@@ -351,12 +351,12 @@ async fn load_multi_agent_mesh_10_agents() {
     }
 
     // Register all peers with each other
-    for i in 0..num_agents {
-        for j in 0..num_agents {
+    for (i, node) in nodes.iter().enumerate() {
+        for (j, identity) in identities.iter().enumerate() {
             if i != j {
-                let peer = PeerIdentity::from_combined_key(&identities[j].combined_public_key(), 1)
-                    .unwrap();
-                nodes[i].register_peer(peer, None).await;
+                let peer =
+                    PeerIdentity::from_combined_key(&identity.combined_public_key(), 1).unwrap();
+                node.register_peer(peer, None).await;
             }
         }
     }
@@ -365,13 +365,13 @@ async fn load_multi_agent_mesh_10_agents() {
     let start = Instant::now();
     let mut total_sent = 0u64;
 
-    for i in 0..num_agents {
+    for (i, node) in nodes.iter().enumerate() {
         let target_idx = (i + 1) % num_agents;
         let target_addr = identities[target_idx].address();
 
         for r in 0..receipts_per_agent {
             let receipt = make_receipt((i * receipts_per_agent + r) as u64);
-            nodes[i].send_receipt(&target_addr, &receipt).await.unwrap();
+            node.send_receipt(&target_addr, &receipt).await.unwrap();
             total_sent += 1;
         }
     }
@@ -416,12 +416,12 @@ async fn load_broadcast_storm() {
     }
 
     // Full mesh peer registration
-    for i in 0..num_agents {
-        for j in 0..num_agents {
+    for (i, node) in nodes.iter().enumerate() {
+        for (j, identity) in identities.iter().enumerate() {
             if i != j {
-                let peer = PeerIdentity::from_combined_key(&identities[j].combined_public_key(), 1)
-                    .unwrap();
-                nodes[i].register_peer(peer, None).await;
+                let peer =
+                    PeerIdentity::from_combined_key(&identity.combined_public_key(), 1).unwrap();
+                node.register_peer(peer, None).await;
             }
         }
     }

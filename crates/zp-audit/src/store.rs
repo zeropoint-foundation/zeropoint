@@ -135,11 +135,18 @@ pub struct AuditStore {
     /// `signer.is_none()` because the test-support path also has no signer
     /// but is allowed to write (with empty signatures).
     read_only: bool,
-    /// Optional post-commit notifier (P3 #176). Fires once per appended row so
-    /// the Merkle anchor pipeline can detect trigger events without the store
-    /// itself knowing about anchoring. Notifiers must be non-blocking — the
-    /// audit store's mutex is still held across the call.
-    notifier: Option<crate::notify::SharedNotifier>,
+    /// Post-commit notifiers. Fire once per appended row so external
+    /// consumers (Merkle anchor pipeline, Cartographer, future observers)
+    /// can react to chain growth without the store itself knowing about
+    /// them. Notifiers must be non-blocking — the audit store's mutex is
+    /// still held across each call.
+    ///
+    /// Vec supports multiple consumers per KEEL §II.10 composition contract:
+    /// each subsystem adds its own notifier at server startup via
+    /// `add_notifier`. Notifiers fire in insertion order; a slow or panicking
+    /// notifier delays subsequent ones — implementations must uphold the
+    /// non-blocking contract.
+    notifiers: Vec<crate::notify::SharedNotifier>,
 }
 
 impl AuditStore {
@@ -153,16 +160,13 @@ impl AuditStore {
     /// The signer should come from
     /// [`zp_keys::derive_audit_signer_seed`] applied to the in-memory
     /// Genesis seed (sovereignty unlock at startup, not on disk).
-    pub fn open_signed(
-        path: impl AsRef<std::path::Path>,
-        signer: AuditSigner,
-    ) -> Result<Self> {
+    pub fn open_signed(path: impl AsRef<std::path::Path>, signer: AuditSigner) -> Result<Self> {
         let conn = Connection::open(path).map_err(StoreError::Database)?;
         let store = AuditStore {
             conn,
             signer: Some(signer),
             read_only: false,
-            notifier: None,
+            notifiers: Vec::new(),
         };
         store.init()?;
         Ok(store)
@@ -182,7 +186,7 @@ impl AuditStore {
             conn,
             signer: None,
             read_only: true,
-            notifier: None,
+            notifiers: Vec::new(),
         };
         store.init()?;
         Ok(store)
@@ -201,7 +205,7 @@ impl AuditStore {
             conn,
             signer: None,
             read_only: false,
-            notifier: None,
+            notifiers: Vec::new(),
         };
         store.init()?;
         Ok(store)
@@ -226,7 +230,7 @@ impl AuditStore {
             conn,
             signer: None,
             read_only: false,
-            notifier: None,
+            notifiers: Vec::new(),
         };
         store.init()?;
         Ok(store)
@@ -235,8 +239,23 @@ impl AuditStore {
     /// Register a post-commit notifier. Replaces any prior notifier.
     /// The notifier fires once per successful `append` with the sealed entry
     /// and its SQLite rowid (treated as the chain sequence number).
+    /// Append a post-commit notifier. Notifiers fire in insertion order after
+    /// each successful `append`. Multiple consumers (anchor pipeline,
+    /// Cartographer, future observers) coexist by adding their notifier once
+    /// at server startup.
+    ///
+    /// Notifiers must be non-blocking per the `AppendNotifier` contract.
+    pub fn add_notifier(&mut self, notifier: crate::notify::SharedNotifier) {
+        self.notifiers.push(notifier);
+    }
+
+    /// Legacy single-notifier setter. Replaces the notifier set; retained for
+    /// callers that intend single-slot semantics. Prefer `add_notifier` for
+    /// new consumers.
+    #[deprecated(note = "Use add_notifier for multi-consumer composition")]
     pub fn set_notifier(&mut self, notifier: crate::notify::SharedNotifier) {
-        self.notifier = Some(notifier);
+        self.notifiers.clear();
+        self.notifiers.push(notifier);
     }
 
     /// Flush the prepared-statement cache on the underlying connection.
@@ -268,7 +287,11 @@ impl AuditStore {
     pub fn wal_checkpoint_restart(&self) -> Result<(i64, i64, i64)> {
         self.conn
             .query_row("PRAGMA wal_checkpoint(RESTART)", [], |row| {
-                Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?, row.get::<_, i64>(2)?))
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
             })
             .map_err(StoreError::Database)
     }
@@ -286,6 +309,40 @@ impl AuditStore {
     /// pre-v=3 entries cannot be rehashed by the v=3 verifier. The rejection
     /// + drop-and-recreate policy from AUDIT-03 covers the upgrade.
     const SCHEMA_VERSION: i32 = 3;
+
+    /// The indexed *kind* expression: the first two colon-delimited segments
+    /// of a `SystemEvent`'s event string (`officer:sen:security:x` →
+    /// `officer:sen`; `posture:computed` → `posture:computed`).
+    ///
+    /// This is the single source of truth for that expression. It backs
+    /// `idx_kind_ts` (see [`AuditStore::init`]) and should be substituted into
+    /// any query that wants to use that index.
+    ///
+    /// Measured, not assumed: SQLite matches an expression index on the
+    /// *parsed* expression, not its source text, so this constant's
+    /// single-line form and `init`'s indented multi-line DDL are equivalent
+    /// (confirmed: `SEARCH audit_entries USING INDEX idx_kind_ts (<expr>=?)`,
+    /// no temp B-tree). Whitespace is therefore safe to reformat. What is
+    /// *not* safe is semantic drift — a changed JSON path, a dropped `|| ':'`,
+    /// a rearranged operand. Any of those parse to a different expression and
+    /// fall back to a full scan silently, with no error and no plan warning.
+    /// That is the failure mode this constant exists to prevent, and it is
+    /// the reason to substitute rather than retype.
+    ///
+    /// Query it with equality, not `GLOB`/`LIKE`: a prefix pattern is a range,
+    /// which forces a sort for `ORDER BY timestamp` and measured *slower* than
+    /// having no index at all. See the note on `idx_kind_ts` in `init`.
+    ///
+    /// ```ignore
+    /// let sql = format!(
+    ///     "SELECT id FROM audit_entries WHERE {k} = ?1 \
+    ///      ORDER BY timestamp DESC LIMIT ?2",
+    ///     k = AuditStore::KIND_EXPR);
+    /// ```
+    pub const KIND_EXPR: &'static str = "substr(json_extract(action, '$.SystemEvent.event'), 1, \
+         instr(substr(json_extract(action, '$.SystemEvent.event') || ':', \
+                      instr(json_extract(action, '$.SystemEvent.event'), ':') + 1), ':') \
+       + instr(json_extract(action, '$.SystemEvent.event'), ':') - 1)";
 
     /// Initializes the audit_entries table and enforces the canonical
     /// schema. This is the single place that defines the audit store's
@@ -350,6 +407,55 @@ impl AuditStore {
                     ON audit_entries(conversation_id);
                 CREATE INDEX IF NOT EXISTS idx_timestamp
                     ON audit_entries(timestamp);
+
+                -- Kind index. `action` is JSON-tagged and 99.99% of live rows
+                -- are SystemEvent, whose `event` string carries the only
+                -- structure the chain has: a colon-delimited topic prefix
+                -- held by convention among producers and enforced nowhere.
+                -- Indexing the first two segments makes that convention
+                -- queryable without promoting it to a column yet.
+                --
+                -- Compound with `timestamp` deliberately. Measured on a copy
+                -- of the live chain (24,098 rows, 2026-08-08):
+                --
+                --   today, 500-row pull then filter in Rust  27.264 ms
+                --   index on the raw event + GLOB 'kind:*'    2.630 ms  (WORSE
+                --       than no index at all for a common prefix: 0.020 ms —
+                --       GLOB is a range, so ordering does not hold across it
+                --       and SQLite adds a TEMP B-TREE sort, which costs more
+                --       than early-terminating on idx_timestamp)
+                --   this index, equality on kind              0.004 ms
+                --
+                -- Equality on the leading column is what removes the sort:
+                -- rows are already timestamp-ordered within one kind, so
+                -- ORDER BY timestamp DESC LIMIT n walks the index backwards.
+                -- That is the whole difference between an index and a key.
+                --
+                -- The `|| ':'` sentinel handles events with a single colon
+                -- (698 live rows, 4,129 archived). Without it the expression
+                -- silently yields the first segment only, so `posture:computed`
+                -- would index as `posture` while `officer:sen:x` indexes as
+                -- `officer:sen` — inconsistent granularity, no error. Verified
+                -- against ground truth over all 24,095 parseable rows: 0
+                -- disagreements with, 698 without.
+                --
+                -- Index-only and additive: the row format is unchanged, so no
+                -- SCHEMA_VERSION bump — same reasoning as the append-only
+                -- triggers below. A bump would be a breaking change here, as
+                -- `init` refuses a mismatched `user_version` and there is no
+                -- migration path (see chain.rs module docs).
+                --
+                -- CALLERS: this expression must be written character-identical
+                -- at the query site or SQLite will not use the index. Use
+                -- `AuditStore::KIND_EXPR` — do not inline it a second time.
+                CREATE INDEX IF NOT EXISTS idx_kind_ts
+                    ON audit_entries(
+                        substr(json_extract(action, '$.SystemEvent.event'), 1,
+                            instr(substr(json_extract(action, '$.SystemEvent.event') || ':',
+                                         instr(json_extract(action, '$.SystemEvent.event'), ':') + 1), ':')
+                          + instr(json_extract(action, '$.SystemEvent.event'), ':') - 1),
+                        timestamp);
+
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_prev_hash
                     ON audit_entries(prev_hash)
                     WHERE prev_hash != '{genesis}';
@@ -507,7 +613,7 @@ impl AuditStore {
 
         debug!("Appended audit entry: {}", sealed.id.0);
 
-        if let Some(ref notifier) = self.notifier {
+        for notifier in &self.notifiers {
             notifier.notify(&sealed, sequence);
         }
 
@@ -534,41 +640,43 @@ impl AuditStore {
         warn!(entry_id = id, "pentest-demo: returning corrupted clone");
         // Load the entry by id. Reuse the existing column list so the
         // signatures column round-trips correctly.
-        let entry = self.conn.query_row(
-            "SELECT id, timestamp, prev_hash, entry_hash, actor, action,
+        let entry = self
+            .conn
+            .query_row(
+                "SELECT id, timestamp, prev_hash, entry_hash, actor, action,
                     conversation_id, policy_decision, policy_module, receipt, signatures
              FROM audit_entries WHERE id = ?1",
-            params![id],
-            |row| {
-                let id_str: String = row.get(0)?;
-                let timestamp_str: String = row.get(1)?;
-                let prev_hash: String = row.get(2)?;
-                let entry_hash: String = row.get(3)?;
-                let actor_json: String = row.get(4)?;
-                let action_json: String = row.get(5)?;
-                let conv_id_str: String = row.get(6)?;
-                let policy_decision_json: String = row.get(7)?;
-                let policy_module: String = row.get(8)?;
-                let receipt_json: Option<String> = row.get(9)?;
-                let signatures_json: String = row.get(10)?;
-                Ok((
-                    id_str,
-                    timestamp_str,
-                    prev_hash,
-                    entry_hash,
-                    actor_json,
-                    action_json,
-                    conv_id_str,
-                    policy_decision_json,
-                    policy_module,
-                    receipt_json,
-                    signatures_json,
-                ))
-            },
-        )
-        .optional()
-        .map_err(StoreError::Database)?
-        .ok_or(StoreError::NoEntries)?;
+                params![id],
+                |row| {
+                    let id_str: String = row.get(0)?;
+                    let timestamp_str: String = row.get(1)?;
+                    let prev_hash: String = row.get(2)?;
+                    let entry_hash: String = row.get(3)?;
+                    let actor_json: String = row.get(4)?;
+                    let action_json: String = row.get(5)?;
+                    let conv_id_str: String = row.get(6)?;
+                    let policy_decision_json: String = row.get(7)?;
+                    let policy_module: String = row.get(8)?;
+                    let receipt_json: Option<String> = row.get(9)?;
+                    let signatures_json: String = row.get(10)?;
+                    Ok((
+                        id_str,
+                        timestamp_str,
+                        prev_hash,
+                        entry_hash,
+                        actor_json,
+                        action_json,
+                        conv_id_str,
+                        policy_decision_json,
+                        policy_module,
+                        receipt_json,
+                        signatures_json,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(StoreError::Database)?
+            .ok_or(StoreError::NoEntries)?;
 
         let mut hydrated = self.hydrate_entries(vec![entry])?;
         let mut tampered = hydrated.pop().ok_or(StoreError::NoEntries)?;
@@ -603,7 +711,10 @@ impl AuditStore {
             .map_err(StoreError::Database)?;
         // Re-create the table + indexes + triggers via the canonical init().
         self.init()?;
-        info!("Cleared {} audit entries (table dropped and recreated)", count);
+        info!(
+            "Cleared {} audit entries (table dropped and recreated)",
+            count
+        );
         Ok(count)
     }
 
@@ -950,10 +1061,9 @@ impl AuditStore {
                     Err(_) => return Ok(None),
                 };
                 let epoch_num = match &action {
-                    zp_core::AuditAction::SystemEvent { event } => {
-                        event.strip_prefix("epoch:anchored:")
-                            .and_then(|s| s.parse::<u64>().ok())
-                    }
+                    zp_core::AuditAction::SystemEvent { event } => event
+                        .strip_prefix("epoch:anchored:")
+                        .and_then(|s| s.parse::<u64>().ok()),
                     _ => None,
                 };
                 let epoch_num = match epoch_num {
@@ -967,12 +1077,14 @@ impl AuditStore {
                     Err(_) => return Ok(None),
                 };
                 let last_seq = match &policy {
-                    zp_core::PolicyDecision::Allow { conditions } => {
-                        conditions.first().and_then(|c| {
-                            serde_json::from_str::<serde_json::Value>(c).ok()
+                    zp_core::PolicyDecision::Allow { conditions } => conditions
+                        .first()
+                        .and_then(|c| {
+                            serde_json::from_str::<serde_json::Value>(c)
+                                .ok()
                                 .and_then(|v| v.get("last_sequence")?.as_i64())
-                        }).unwrap_or(0)
-                    }
+                        })
+                        .unwrap_or(0),
                     _ => 0,
                 };
 
@@ -988,6 +1100,8 @@ impl AuditStore {
     /// `audit_entries_archive` (post-compaction storage) so post-compaction
     /// chains report accurate total counts. Same archive-boundary discipline
     /// as `verify_with_report` and `search_chain_by_action_keyword`.
+    ///
+    /// **Not for compaction decisions.** See [`AuditStore::live_entry_count`].
     pub fn entry_count(&self) -> Result<usize> {
         let live: usize = self
             .conn
@@ -1009,11 +1123,9 @@ impl AuditStore {
         if archive_exists {
             let archived: usize = self
                 .conn
-                .query_row(
-                    "SELECT COUNT(*) FROM audit_entries_archive",
-                    [],
-                    |row| row.get(0),
-                )
+                .query_row("SELECT COUNT(*) FROM audit_entries_archive", [], |row| {
+                    row.get(0)
+                })
                 .unwrap_or(0);
             Ok(live + archived)
         } else {
@@ -1025,6 +1137,20 @@ impl AuditStore {
     ///
     /// Used by compaction logic to decide how many entries to archive.
     /// For general "chain size" queries, use `entry_count()` instead.
+    ///
+    /// **Any decision about compaction must use this, not `entry_count`.**
+    /// `compact_chain` computes its own cutoff from the live table alone, so a
+    /// caller that gates on the live+archive total is comparing two different
+    /// populations: once anything has been archived the total can never fall
+    /// back below the threshold, and compaction re-fires on every start.
+    ///
+    /// Observed 2026-08-08 on the live chain: the server's auto-compact gate
+    /// called `entry_count()`, which returned 275,675 (24,272 live + 251,403
+    /// archived) against a 50,000 threshold — so it archived down to the
+    /// 10,000-row retain target on *every* boot. That churn is what stranded
+    /// the Cartographer's cursor below the retained floor, skipping ~25,700
+    /// entries silently. This function already existed and was correct; the
+    /// caller was simply reaching for the wrong one.
     pub fn live_entry_count(&self) -> Result<usize> {
         self.conn
             .query_row("SELECT COUNT(*) FROM audit_entries", [], |row| row.get(0))
@@ -1052,13 +1178,13 @@ impl AuditStore {
 
         // Find all entries with empty signature arrays.
         let unsigned: Vec<(i64, String)> = {
-            let mut stmt = self.conn.prepare(
-                "SELECT rowid, entry_hash FROM audit_entries WHERE signatures = '[]'"
-            ).map_err(StoreError::Database)?;
+            let mut stmt = self
+                .conn
+                .prepare("SELECT rowid, entry_hash FROM audit_entries WHERE signatures = '[]'")
+                .map_err(StoreError::Database)?;
 
-            let rows = stmt.query_map([], |row| {
-                    Ok((row.get(0)?, row.get(1)?))
-                })
+            let rows = stmt
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
                 .map_err(StoreError::Database)?;
             rows.filter_map(|r| r.ok()).collect()
         };
@@ -1077,7 +1203,8 @@ impl AuditStore {
         // compact_chain() with the DELETE trigger. Signature backfilling
         // is a legitimate maintenance operation: the entry_hash is
         // unchanged, only the signatures column gains a block.
-        let tx = self.conn
+        let tx = self
+            .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(StoreError::Database)?;
 
@@ -1090,15 +1217,17 @@ impl AuditStore {
             tx.execute(
                 "UPDATE audit_entries SET signatures = ?1 WHERE rowid = ?2",
                 params![signatures_json, rowid],
-            ).map_err(StoreError::Database)?;
+            )
+            .map_err(StoreError::Database)?;
         }
 
         // Restore the append-only trigger.
         tx.execute_batch(
             "CREATE TRIGGER IF NOT EXISTS no_update_audit_entries
                  BEFORE UPDATE ON audit_entries
-                 BEGIN SELECT RAISE(ABORT, 'audit_entries is append-only'); END"
-        ).map_err(StoreError::Database)?;
+                 BEGIN SELECT RAISE(ABORT, 'audit_entries is append-only'); END",
+        )
+        .map_err(StoreError::Database)?;
 
         tx.commit().map_err(StoreError::Database)?;
 
@@ -1166,7 +1295,8 @@ impl AuditStore {
     ///
     /// Returns the number of entries archived.
     pub fn compact_chain(&mut self, retain: usize) -> Result<usize> {
-        let total: i64 = self.conn
+        let total: i64 = self
+            .conn
             .query_row("SELECT COUNT(*) FROM audit_entries", [], |row| row.get(0))
             .map_err(StoreError::Database)?;
 
@@ -1177,7 +1307,8 @@ impl AuditStore {
         }
 
         // Find the cutoff rowid — entries with rowid <= this move to archive.
-        let cutoff_rowid: i64 = self.conn
+        let cutoff_rowid: i64 = self
+            .conn
             .query_row(
                 "SELECT rowid FROM audit_entries ORDER BY rowid ASC LIMIT 1 OFFSET ?",
                 params![to_archive],
@@ -1185,9 +1316,14 @@ impl AuditStore {
             )
             .map_err(StoreError::Database)?;
 
-        info!(total, retain, to_archive, cutoff_rowid, "chain compact: archiving entries");
+        info!(
+            total,
+            retain, to_archive, cutoff_rowid, "chain compact: archiving entries"
+        );
 
-        let tx = self.conn.transaction_with_behavior(TransactionBehavior::Immediate)
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(StoreError::Database)?;
 
         // Create archive table if it doesn't exist (same schema as active).
@@ -1204,15 +1340,18 @@ impl AuditStore {
                 policy_module TEXT NOT NULL,
                 receipt TEXT,
                 signatures TEXT NOT NULL DEFAULT '[]'
-            )"
-        ).map_err(StoreError::Database)?;
+            )",
+        )
+        .map_err(StoreError::Database)?;
 
         // Move entries to archive.
-        let archived = tx.execute(
-            "INSERT OR IGNORE INTO audit_entries_archive
+        let archived = tx
+            .execute(
+                "INSERT OR IGNORE INTO audit_entries_archive
              SELECT * FROM audit_entries WHERE rowid < ?",
-            params![cutoff_rowid],
-        ).map_err(StoreError::Database)?;
+                params![cutoff_rowid],
+            )
+            .map_err(StoreError::Database)?;
 
         // Temporarily drop the append-only trigger so we can delete
         // archived entries. The trigger is restored immediately after.
@@ -1222,14 +1361,16 @@ impl AuditStore {
         tx.execute(
             "DELETE FROM audit_entries WHERE rowid < ?",
             params![cutoff_rowid],
-        ).map_err(StoreError::Database)?;
+        )
+        .map_err(StoreError::Database)?;
 
         // Restore the append-only trigger.
         tx.execute_batch(
             "CREATE TRIGGER IF NOT EXISTS no_delete_audit_entries
                  BEFORE DELETE ON audit_entries
-                 BEGIN SELECT RAISE(ABORT, 'audit_entries is append-only'); END"
-        ).map_err(StoreError::Database)?;
+                 BEGIN SELECT RAISE(ABORT, 'audit_entries is append-only'); END",
+        )
+        .map_err(StoreError::Database)?;
 
         tx.commit().map_err(StoreError::Database)?;
 
@@ -1518,10 +1659,7 @@ impl AuditStore {
              LIMIT ?2"
         };
 
-        let mut stmt = self
-            .conn
-            .prepare(sql)
-            .map_err(StoreError::Database)?;
+        let mut stmt = self.conn.prepare(sql).map_err(StoreError::Database)?;
 
         let rows = stmt
             .query_map(params![like_pattern, limit], |row| {
@@ -1537,9 +1675,17 @@ impl AuditStore {
                 let receipt_json: Option<String> = row.get(9)?;
                 let signatures_json: String = row.get(10)?;
                 Ok((
-                    id_str, timestamp_str, prev_hash, entry_hash,
-                    actor_json, action_json, conv_id_str,
-                    policy_decision_json, policy_module, receipt_json, signatures_json,
+                    id_str,
+                    timestamp_str,
+                    prev_hash,
+                    entry_hash,
+                    actor_json,
+                    action_json,
+                    conv_id_str,
+                    policy_decision_json,
+                    policy_module,
+                    receipt_json,
+                    signatures_json,
                 ))
             })
             .map_err(StoreError::Database)?
@@ -1547,8 +1693,19 @@ impl AuditStore {
             .map_err(StoreError::Database)?;
 
         let mut result = Vec::new();
-        for (id_str, timestamp_str, prev_hash, entry_hash, actor_json, action_json,
-             conv_id_str, policy_decision_json, policy_module, receipt_json, signatures_json) in rows
+        for (
+            id_str,
+            timestamp_str,
+            prev_hash,
+            entry_hash,
+            actor_json,
+            action_json,
+            conv_id_str,
+            policy_decision_json,
+            policy_module,
+            receipt_json,
+            signatures_json,
+        ) in rows
         {
             let id = uuid::Uuid::parse_str(&id_str).unwrap_or_else(|_| uuid::Uuid::nil());
             let timestamp = chrono::DateTime::parse_from_rfc3339(&timestamp_str)
@@ -1558,17 +1715,23 @@ impl AuditStore {
             let actor = serde_json::from_str(&actor_json)
                 .unwrap_or_else(|_| zp_core::ActorId::System("unknown".to_string()));
             let action = serde_json::from_str(&action_json).unwrap_or_else(|_| {
-                zp_core::AuditAction::SystemEvent { event: "unknown".to_string() }
+                zp_core::AuditAction::SystemEvent {
+                    event: "unknown".to_string(),
+                }
             });
             let conversation_id = zp_core::ConversationId(
                 uuid::Uuid::parse_str(&conv_id_str).unwrap_or_else(|_| uuid::Uuid::nil()),
             );
-            let policy_decision = serde_json::from_str(&policy_decision_json)
-                .unwrap_or_else(|_| zp_core::PolicyDecision::Block {
-                    reason: "unknown".to_string(),
-                    policy_module: "unknown".to_string(),
+            let policy_decision =
+                serde_json::from_str(&policy_decision_json).unwrap_or_else(|_| {
+                    zp_core::PolicyDecision::Block {
+                        reason: "unknown".to_string(),
+                        policy_module: "unknown".to_string(),
+                    }
                 });
-            let receipt = receipt_json.as_ref().and_then(|json| serde_json::from_str(json).ok());
+            let receipt = receipt_json
+                .as_ref()
+                .and_then(|json| serde_json::from_str(json).ok());
             result.push(AuditEntry {
                 id: zp_core::AuditId(id),
                 timestamp,
@@ -1598,17 +1761,54 @@ impl AuditStore {
         after_rowid: i64,
         limit: usize,
     ) -> Result<Vec<(i64, AuditEntry)>> {
-        let mut stmt = self
+        // Span the archive boundary. Compaction moves old rows out of
+        // `audit_entries`, so a live-table-only read silently returns nothing
+        // for any cursor below the retained floor — the caller sees an empty
+        // page and reads it as "caught up" rather than "your cursor fell off
+        // the back of the table". Observed 2026-08-08: the Cartographer's
+        // persisted high-water mark sat at 225,690 while the oldest retained
+        // rowid was 251,404, so ~25,700 entries were skipped with no warning.
+        //
+        // Safe because archive rowids are the original rowids: the archive is
+        // contiguous `1..MAX`, `MAX(archive) + 1 == MIN(live)`, there are no
+        // id collisions, and the archive's tail `entry_hash` equals the live
+        // head's `prev_hash` — verified against the live chain before this
+        // change. That alignment is an *implicit* invariant, though: the
+        // archiving INSERT uses `SELECT *`, which does not carry rowid, so it
+        // holds only because SQLite's sequential allocation happens to track.
+        // Nothing enforces it. If archive rowids are ever reallocated, this
+        // union silently misorders — see the note in `compact_chain`.
+        let archive_exists: bool = self
             .conn
-            .prepare(
-                "SELECT rowid, id, timestamp, prev_hash, entry_hash, actor, action,
-                        conversation_id, policy_decision, policy_module, receipt, signatures
-                 FROM audit_entries
-                 WHERE rowid > ?
-                 ORDER BY rowid ASC
-                 LIMIT ?",
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM sqlite_master
+                    WHERE type='table' AND name='audit_entries_archive'
+                )",
+                [],
+                |row| row.get(0),
             )
-            .map_err(StoreError::Database)?;
+            .unwrap_or(false);
+
+        const COLS: &str = "rowid AS rid, id, timestamp, prev_hash, entry_hash, actor, action, \
+                            conversation_id, policy_decision, policy_module, receipt, signatures";
+        let sql = if archive_exists {
+            format!(
+                "SELECT {COLS} FROM audit_entries_archive WHERE rowid > ?1
+                 UNION ALL
+                 SELECT {COLS} FROM audit_entries WHERE rowid > ?1
+                 ORDER BY rid ASC
+                 LIMIT ?2"
+            )
+        } else {
+            format!(
+                "SELECT {COLS} FROM audit_entries WHERE rowid > ?1
+                 ORDER BY rid ASC
+                 LIMIT ?2"
+            )
+        };
+
+        let mut stmt = self.conn.prepare(&sql).map_err(StoreError::Database)?;
 
         let rows = stmt
             .query_map(params![after_rowid, limit as i64], |row| {
@@ -1632,8 +1832,20 @@ impl AuditStore {
             .map_err(StoreError::Database)?;
 
         let mut result = Vec::new();
-        for (rowid, id_str, timestamp_str, prev_hash, entry_hash, actor_json, action_json,
-             conv_id_str, policy_decision_json, policy_module, receipt_json, signatures_json) in rows
+        for (
+            rowid,
+            id_str,
+            timestamp_str,
+            prev_hash,
+            entry_hash,
+            actor_json,
+            action_json,
+            conv_id_str,
+            policy_decision_json,
+            policy_module,
+            receipt_json,
+            signatures_json,
+        ) in rows
         {
             let id = uuid::Uuid::parse_str(&id_str).unwrap_or_else(|_| uuid::Uuid::nil());
             let timestamp = chrono::DateTime::parse_from_rfc3339(&timestamp_str)
@@ -1702,7 +1914,8 @@ impl AuditStore {
         // Look it up and pass as expected_prev_hash so verify_linkage_report
         // doesn't default to genesis.
         let archive_tail_hash: Option<String> = {
-            let archive_exists: bool = self.conn
+            let archive_exists: bool = self
+                .conn
                 .query_row(
                     "SELECT EXISTS(
                         SELECT 1 FROM sqlite_master
@@ -1759,7 +1972,8 @@ impl AuditStore {
         if entries[0].1 != genesis_hash {
             // Check if the prev_hash exists in the archive (compacted chain).
             // The archive table may not exist on a never-compacted chain.
-            let in_archive: bool = self.conn
+            let in_archive: bool = self
+                .conn
                 .query_row(
                     "SELECT EXISTS(
                         SELECT 1 FROM sqlite_master
@@ -1769,7 +1983,8 @@ impl AuditStore {
                     |row| row.get(0),
                 )
                 .unwrap_or(false)
-                && self.conn
+                && self
+                    .conn
                     .query_row(
                         "SELECT EXISTS(SELECT 1 FROM audit_entries_archive WHERE entry_hash = ?)",
                         params![entries[0].1],

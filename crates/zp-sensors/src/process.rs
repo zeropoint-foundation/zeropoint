@@ -57,10 +57,7 @@ impl ProcessContext {
 
     /// Human-readable one-line summary for cockpit display.
     pub fn display_summary(&self) -> String {
-        let identity = self
-            .binary_path
-            .as_deref()
-            .unwrap_or(&self.name);
+        let identity = self.binary_path.as_deref().unwrap_or(&self.name);
         let user_part = self
             .user
             .as_deref()
@@ -71,7 +68,10 @@ impl ProcessContext {
             .as_deref()
             .map(|p| format!(" via {p}"))
             .unwrap_or_default();
-        format!("{identity}{user_part}{parent_part} [pid {pid}]", pid = self.pid)
+        format!(
+            "{identity}{user_part}{parent_part} [pid {pid}]",
+            pid = self.pid
+        )
     }
 }
 
@@ -168,11 +168,7 @@ mod macos {
     fn get_command_line(pid: i32) -> Option<String> {
         use std::mem;
 
-        let mib = [
-            libc::CTL_KERN,
-            libc::KERN_PROCARGS2,
-            pid,
-        ];
+        let mib = [libc::CTL_KERN, libc::KERN_PROCARGS2, pid];
 
         // First call: get buffer size
         let mut size: libc::size_t = 0;
@@ -271,8 +267,8 @@ mod macos {
         pbi_svuid: u32,
         pbi_svgid: u32,
         _reserved: u32,
-        pbi_comm: [u8; 16],    // MAXCOMLEN
-        pbi_name: [u8; 32],    // 2 * MAXCOMLEN
+        pbi_comm: [u8; 16], // MAXCOMLEN
+        pbi_name: [u8; 32], // 2 * MAXCOMLEN
         pbi_nfiles: u32,
         pbi_pgid: u32,
         pbi_pjobc: u32,
@@ -444,13 +440,13 @@ mod tests {
 
     #[test]
     fn display_summary_with_user_and_parent() {
-        let mut ctx = ProcessContext::minimal(789, "ironclaw".to_string());
-        ctx.binary_path = Some("/Users/ken/.cargo/bin/ironclaw".to_string());
+        let mut ctx = ProcessContext::minimal(789, "example-tool".to_string());
+        ctx.binary_path = Some("/Users/ken/.cargo/bin/example-tool".to_string());
         ctx.user = Some("ken".to_string());
         ctx.parent_name = Some("zsh".to_string());
         assert_eq!(
             ctx.display_summary(),
-            "/Users/ken/.cargo/bin/ironclaw (user: ken) via zsh [pid 789]"
+            "/Users/ken/.cargo/bin/example-tool (user: ken) via zsh [pid 789]"
         );
     }
 
@@ -494,8 +490,7 @@ mod tests {
         ctx.user = Some("root".to_string());
 
         let json = serde_json::to_string(&ctx).expect("serialize");
-        let deserialized: ProcessContext =
-            serde_json::from_str(&json).expect("deserialize");
+        let deserialized: ProcessContext = serde_json::from_str(&json).expect("deserialize");
 
         assert_eq!(deserialized.pid, 100);
         assert_eq!(deserialized.binary_path.as_deref(), Some("/bin/test"));

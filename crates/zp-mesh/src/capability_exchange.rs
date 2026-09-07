@@ -150,11 +150,14 @@ impl CapabilityPolicy {
 
         for requested in &request.requested {
             match self.find_matching_grantable(requested) {
-                Some(grantable) => {
+                Some(grantable) => match intersect_capability(requested, &grantable.capability) {
                     // Grant with the intersection of scopes
-                    let narrowed = intersect_capability(requested, &grantable.capability);
-                    granted.push(narrowed);
-                }
+                    Some(narrowed) => granted.push(narrowed),
+                    None => denied.push(DeniedCapability {
+                        capability: requested.clone(),
+                        reason: "No intersection with the grantable capability".to_string(),
+                    }),
+                },
                 None => {
                     denied.push(DeniedCapability {
                         capability: requested.clone(),
@@ -264,7 +267,7 @@ fn intersect_offers(
             offered
                 .iter()
                 .find(|off| std::mem::discriminant(*off) == std::mem::discriminant(req))
-                .map(|off| intersect_capability(req, off))
+                .and_then(|off| intersect_capability(req, off))
         })
         .collect()
 }
@@ -273,38 +276,87 @@ fn intersect_offers(
 ///
 /// When both sides have scope restrictions, take the most restrictive.
 /// A wildcard ("*") scope is the least restrictive.
-fn intersect_capability(a: &GrantedCapability, b: &GrantedCapability) -> GrantedCapability {
+///
+/// Returns `None` when no intersection can be formed. Previously this returned
+/// `a.clone()` for every pair it did not handle explicitly — and `a` is the
+/// *requested* capability at both call sites, so a peer requesting
+/// `ToolCall { tools: ["*"] }` against a grantable `ToolCall { tools: ["bash"] }`
+/// received `["*"]`: the request won over the grant, which is the opposite of
+/// intersecting. `None` lets the caller deny with a reason instead of silently
+/// granting what was asked for.
+///
+/// The match is exhaustive over same-type pairs with no catch-all for them, so
+/// a new `GrantedCapability` variant breaks this build rather than falling into
+/// a widening default.
+fn intersect_capability(a: &GrantedCapability, b: &GrantedCapability) -> Option<GrantedCapability> {
     match (a, b) {
         (GrantedCapability::Read { scope: sa }, GrantedCapability::Read { scope: sb }) => {
-            GrantedCapability::Read {
+            Some(GrantedCapability::Read {
                 scope: intersect_scopes(sa, sb),
-            }
+            })
         }
         (GrantedCapability::Write { scope: sa }, GrantedCapability::Write { scope: sb }) => {
-            GrantedCapability::Write {
+            Some(GrantedCapability::Write {
                 scope: intersect_scopes(sa, sb),
-            }
+            })
         }
         (
             GrantedCapability::MeshSend { destinations: da },
             GrantedCapability::MeshSend { destinations: db },
-        ) => GrantedCapability::MeshSend {
+        ) => Some(GrantedCapability::MeshSend {
             destinations: intersect_scopes(da, db),
-        },
+        }),
         (
             GrantedCapability::ApiCall { endpoints: ea },
             GrantedCapability::ApiCall { endpoints: eb },
-        ) => GrantedCapability::ApiCall {
+        ) => Some(GrantedCapability::ApiCall {
             endpoints: intersect_scopes(ea, eb),
-        },
+        }),
         (
             GrantedCapability::Execute { languages: la },
             GrantedCapability::Execute { languages: lb },
-        ) => GrantedCapability::Execute {
+        ) => Some(GrantedCapability::Execute {
             languages: intersect_scopes(la, lb),
-        },
-        // For types where intersection doesn't apply, return the first
-        _ => a.clone(),
+        }),
+        (
+            GrantedCapability::ConfigChange { settings: sa },
+            GrantedCapability::ConfigChange { settings: sb },
+        ) => Some(GrantedCapability::ConfigChange {
+            settings: intersect_scopes(sa, sb),
+        }),
+        (
+            GrantedCapability::CredentialAccess {
+                credential_refs: ra,
+            },
+            GrantedCapability::CredentialAccess {
+                credential_refs: rb,
+            },
+        ) => Some(GrantedCapability::CredentialAccess {
+            credential_refs: intersect_scopes(ra, rb),
+        }),
+        (GrantedCapability::ToolCall { tools: ta }, GrantedCapability::ToolCall { tools: tb }) => {
+            Some(GrantedCapability::ToolCall {
+                tools: intersect_scopes(ta, tb),
+            })
+        }
+        // Two `Custom` capabilities intersect only if they name the same thing.
+        // Parameters are not merged — there is no general way to intersect
+        // arbitrary JSON, and guessing would widen.
+        (
+            GrantedCapability::Custom {
+                name: na,
+                parameters: pa,
+            },
+            GrantedCapability::Custom { name: nb, .. },
+        ) => (na == nb).then(|| GrantedCapability::Custom {
+            name: na.clone(),
+            parameters: pa.clone(),
+        }),
+        // Different capability types have no intersection. Both callers already
+        // guard on `std::mem::discriminant`, so this is unreachable today —
+        // which is exactly why it must not return something grantable if that
+        // guard is ever removed.
+        _ => None,
     }
 }
 
@@ -678,11 +730,92 @@ mod tests {
             scope: vec!["data/public".to_string()],
         };
 
-        let result = intersect_capability(&a, &b);
+        let result = intersect_capability(&a, &b).expect("same-type pair must intersect");
         if let GrantedCapability::Read { scope } = result {
             assert_eq!(scope, vec!["data/public"]);
         } else {
             panic!("Expected Read");
         }
+    }
+
+    /// The arms added 2026-08-13, and the reason they were added: the previous
+    /// `_ => a.clone()` returned the *requested* capability unnarrowed for every
+    /// same-type pair it did not name, so the request won over the grant.
+    ///
+    /// Compared structurally rather than with `assert_eq!` — `GrantedCapability`
+    /// derives no `PartialEq`, which is also why `intersect_offers` matches on
+    /// `std::mem::discriminant` instead of equality.
+    #[test]
+    fn intersect_narrows_the_previously_unhandled_variants() {
+        let star = || vec!["*".to_string()];
+
+        let narrowed = intersect_capability(
+            &GrantedCapability::ToolCall { tools: star() },
+            &GrantedCapability::ToolCall {
+                tools: vec!["bash".to_string()],
+            },
+        )
+        .expect("same-type pair must intersect");
+        match narrowed {
+            GrantedCapability::ToolCall { tools } => {
+                assert_eq!(tools, vec!["bash"], "wildcard request must yield the grant");
+            }
+            other => panic!("expected ToolCall, got {other:?}"),
+        }
+
+        let narrowed = intersect_capability(
+            &GrantedCapability::ConfigChange { settings: star() },
+            &GrantedCapability::ConfigChange {
+                settings: vec!["llm.model".to_string()],
+            },
+        )
+        .expect("same-type pair must intersect");
+        match narrowed {
+            GrantedCapability::ConfigChange { settings } => {
+                assert_eq!(settings, vec!["llm.model"]);
+            }
+            other => panic!("expected ConfigChange, got {other:?}"),
+        }
+
+        let narrowed = intersect_capability(
+            &GrantedCapability::CredentialAccess {
+                credential_refs: star(),
+            },
+            &GrantedCapability::CredentialAccess {
+                credential_refs: vec!["vault/api".to_string()],
+            },
+        )
+        .expect("same-type pair must intersect");
+        match narrowed {
+            GrantedCapability::CredentialAccess { credential_refs } => {
+                assert_eq!(credential_refs, vec!["vault/api"]);
+            }
+            other => panic!("expected CredentialAccess, got {other:?}"),
+        }
+    }
+
+    /// Two `Custom` capabilities intersect only when they name the same thing.
+    #[test]
+    fn custom_intersects_only_on_matching_names() {
+        let propose = |n: &str| GrantedCapability::Custom {
+            name: n.to_string(),
+            parameters: serde_json::Value::Null,
+        };
+
+        match intersect_capability(
+            &propose("governance:propose"),
+            &propose("governance:propose"),
+        ) {
+            Some(GrantedCapability::Custom { name, .. }) => {
+                assert_eq!(name, "governance:propose");
+            }
+            other => panic!("matching Custom names must intersect, got {other:?}"),
+        }
+
+        assert!(
+            intersect_capability(&propose("governance:propose"), &propose("governance:vote"))
+                .is_none(),
+            "different Custom names must not intersect"
+        );
     }
 }

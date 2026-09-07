@@ -21,7 +21,13 @@ use zp_receipt::Signable;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let genesis_path = env::var("IRONCLAW_ZP_GENESIS_PATH")
+    // `ZP_GENESIS_PATH`, not `IRONCLAW_ZP_GENESIS_PATH`. The old name was the
+    // last live coupling to a specific external tool anywhere in the substrate
+    // — an env var that only one caller would ever think to set, naming a
+    // project ZeroPoint does not depend on. Renamed 2026-08-06 during the
+    // IronClaw purge. Any caller still exporting the old name falls through to
+    // the canonical path resolver below, which is the correct default anyway.
+    let genesis_path = env::var("ZP_GENESIS_PATH")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| {
             zp_core::paths::genesis_record_path()

@@ -38,4 +38,7 @@ pub mod types;
 pub use context::HostContext;
 pub use error::HostError;
 pub use system::SystemHostContext;
-pub use types::{HttpMethod, HttpRequest, HttpResult, SpawnRequest, SpawnResult, WriteMode, WriteRequest, WriteResult};
+pub use types::{
+    HttpMethod, HttpRequest, HttpResult, SpawnRequest, SpawnResult, WriteMode, WriteRequest,
+    WriteResult,
+};

@@ -4,6 +4,8 @@
 #        just build         — build release binary only
 #        just restart       — restart the running server
 #        just status        — show binary version + server state
+#        just pins          — discipline pins (what pre-commit runs)
+#        just check         — pins + build + clippy + fmt (local CI stand-in)
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
@@ -17,6 +19,54 @@ artemis_scp := env_var_or_default("ZP_ARTEMIS_SCP", "scp")
 playground_host := env_var_or_default("ZP_PLAYGROUND_HOST", "user@playground-host")
 playground_ssh := env_var_or_default("ZP_PLAYGROUND_SSH", "ssh")
 playground_scp := env_var_or_default("ZP_PLAYGROUND_SCP", "scp")
+
+# ── Verification (local-first posture, SEAM-010 / DECIDED-005) ────
+#
+# CI (.github/workflows/ci.yml) triggers on push to main. Work stays local,
+# so it does not run. These recipes are the local reader for the checks it
+# would otherwise provide. `pins` is what .githooks/pre-commit runs on every
+# commit; `check` is the heavier pass, run on a cadence you choose.
+
+# Discipline pins only — seconds. What pre-commit runs.
+pins:
+    cargo test -p zp-discipline --no-fail-fast
+
+# Mechanical coherence checks over docs/ and crates/.
+#
+# ~7s since the 2026-08-14 walk-pruning fix in check_doc_crossrefs; it was
+# 40s+ before, which is the whole reason it had no target here. Reports by
+# default and never fails - the standing defects are corpus debt, not this
+# run's. The pre-commit hook gates only on defects in the documents being
+# committed; see tools/corpus-lint/staged_gate.py.
+lint:
+    python3 tools/corpus-lint/corpus_lint.py .
+
+# Everything CI would have caught, minus the feature-gate matrix.
+#
+# --all-targets is the point of the first step, not a flourish: plain
+# `cargo check` compiles lib and bin targets only, so a test fixture that no
+# longer builds is invisible. Two of those accumulated undetected while the
+# workspace built green — zp-configure's ToolManifest fixture and
+# zp-hardening-tests' ServerConfig fixture, both struct-grew-fixture-didn't.
+# The last line stamps the marker .githooks/pre-commit reads for its staleness
+# warning. It runs only if every check above it passed, so the marker means what
+# the hook claims it means. Before 2026-08-17 nothing wrote that file at all:
+# the hook's "no recorded successful run" fired unconditionally on every commit,
+# and its two real detectors — toolchain change and the 7-day backstop — sat in
+# an else branch that could never be entered. This comment lives outside the
+# recipe because just echoes in-recipe comment lines to the terminal.
+check:
+    cargo check --workspace --all-targets
+    cargo test -p zp-discipline --no-fail-fast
+    cargo clippy --workspace --all-targets -- -D warnings
+    cargo fmt --all --check
+    python3 tools/corpus-lint/corpus_lint.py .
+    @printf '%s\n%s\n' "$(rustc --version 2>/dev/null || echo unknown)" "$(date -u '+%Y-%m-%d %H:%M UTC')" > "$(git rev-parse --git-dir)/zp-last-check"
+    @echo ""
+    @echo "✓  check passed — pins, build (all targets), clippy, fmt, corpus-lint"
+    @echo "   Not covered: the workspace test suite, and the six-way"
+    @echo "   feature-gate matrix in ci.yml. Run 'cargo test --workspace"
+    @echo "   --no-fail-fast' separately; it is slow and currently noisy."
 
 # ── Local operations ──────────────────────────────────────
 

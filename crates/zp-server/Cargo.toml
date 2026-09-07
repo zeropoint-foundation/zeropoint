@@ -35,11 +35,18 @@ zp-mesh = { path = "../zp-mesh" }
 zp-receipt = { path = "../zp-receipt" }
 zp-gate-envelope = { path = "../zp-gate-envelope" }
 zp-anchor = { path = "../zp-anchor" }
+# The default anchor backend (ANCHOR-BACKEND-SELECTION-2026-08 §6.1). Linked
+# unconditionally rather than behind a feature: `ZP_ANCHOR` is read at runtime,
+# so a feature-gated build would turn a misconfiguration into a compile-time
+# absence the operator cannot diagnose from a running server.
+zp-anchor-ots = { path = "../zp-anchor-ots" }
 zp-verbs = { path = "../zp-verbs" }
 zp-net = { path = "../zp-net" }
+zp-inference-observer = { path = "../zp-inference-observer" }
 zp-artifacts = { path = "../zp-artifacts" }
 zp-content = { path = "../zp-content" }
 zp-regent = { path = "../zp-regent" }
+zp-ontology = { path = "../zp-ontology" }
 mle-star-engine = { path = "../mle-star-engine" }
 monte-carlo-engine = { path = "../monte-carlo-engine" }
 

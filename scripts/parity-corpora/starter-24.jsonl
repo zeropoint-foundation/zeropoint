@@ -1,0 +1,24 @@
+{"id": "chat-001", "workload_class": "chat", "text": "Explain the difference between a stack and a queue in one paragraph.", "max_tokens": 128}
+{"id": "chat-002", "workload_class": "chat", "text": "What are three benefits of using version control for a solo developer?", "max_tokens": 128}
+{"id": "chat-003", "workload_class": "chat", "text": "Describe what happens when I press a key on my keyboard, from hardware to screen.", "max_tokens": 200}
+{"id": "chat-004", "workload_class": "chat", "text": "Summarize the main idea of the CAP theorem in two sentences.", "max_tokens": 96}
+{"id": "code-001", "workload_class": "code", "text": "Write a Python function that returns the nth Fibonacci number using memoization.", "max_tokens": 200}
+{"id": "code-002", "workload_class": "code", "text": "Write a Rust function `fn is_palindrome(s: &str) -> bool` that ignores case and non-alphanumeric characters.", "max_tokens": 200}
+{"id": "code-003", "workload_class": "code", "text": "Write a bash one-liner that finds all .rs files modified in the last 24 hours under the current directory.", "max_tokens": 96}
+{"id": "code-004", "workload_class": "code", "text": "Refactor this Python code to use a list comprehension: result = []\\nfor x in items:\\n    if x > 0:\\n        result.append(x * 2)", "max_tokens": 128}
+{"id": "code-005", "workload_class": "code", "text": "Write a SQL query that returns the top 5 customers by total order value, given a table `orders(customer_id, amount)`.", "max_tokens": 128}
+{"id": "math-001", "workload_class": "math", "text": "Compute step-by-step: what is the derivative of x^3 * sin(x) with respect to x?", "max_tokens": 200}
+{"id": "math-002", "workload_class": "math", "text": "A rectangular garden is 3 feet longer than it is wide, with area 40 square feet. What are its dimensions?", "max_tokens": 200}
+{"id": "math-003", "workload_class": "math", "text": "How many ways are there to arrange the letters of the word MISSISSIPPI?", "max_tokens": 200}
+{"id": "math-004", "workload_class": "math", "text": "Evaluate the integral of 1/(x^2 + 4) dx.", "max_tokens": 128}
+{"id": "reason-001", "workload_class": "reasoning", "text": "Alice, Bob, and Carol each have a hat that is either red or blue. Alice sees Bob's hat but not Carol's. Bob sees Carol's but not Alice's. Carol sees neither. Alice says 'I don't know my hat color.' Then Bob says 'I don't know my hat color either.' What color is Carol's hat, if the only way for the first two statements to be true is if Carol's hat gives that answer? Reason it out.", "max_tokens": 300}
+{"id": "reason-002", "workload_class": "reasoning", "text": "A train leaves Station A traveling east at 60 mph. Two hours later, another train leaves Station A traveling east at 80 mph. How long after the second train leaves will it catch up to the first?", "max_tokens": 200}
+{"id": "reason-003", "workload_class": "reasoning", "text": "You have 12 identical-looking coins. One is counterfeit and slightly heavier or lighter than the rest — you don't know which. Using a balance scale only 3 times, how do you identify the counterfeit and determine whether it's heavier or lighter?", "max_tokens": 400}
+{"id": "tool-001", "workload_class": "tool_dispatch", "text": "Return a JSON object with a single key 'tool' whose value is 'search' and a key 'query' with the value 'weather in Reykjavik tomorrow'. Reply with the JSON only.", "max_tokens": 64}
+{"id": "tool-002", "workload_class": "tool_dispatch", "text": "Output only the following JSON object, exactly: {\"intent\":\"respond\",\"content\":\"acknowledged\"}", "max_tokens": 64}
+{"id": "tool-003", "workload_class": "tool_dispatch", "text": "Reply with the following JSON only, no other text: {\"intent\":\"execute\",\"tool\":\"chain_query\",\"params\":{\"limit\":5}}", "max_tokens": 96}
+{"id": "other-001", "workload_class": "other", "text": "Translate to French: The morning fog obscured the shape of the ships in the harbor.", "max_tokens": 96}
+{"id": "other-002", "workload_class": "other", "text": "Continue this sentence with three plausible next sentences that maintain the tone: The letter had arrived on a Tuesday, unmarked and slightly damp from the rain.", "max_tokens": 200}
+{"id": "other-003", "workload_class": "other", "text": "List five factual differences between the Atlantic and Pacific oceans.", "max_tokens": 200}
+{"id": "other-004", "workload_class": "other", "text": "Write a two-line haiku about a submarine at rest.", "max_tokens": 48}
+{"id": "other-005", "workload_class": "other", "text": "In one sentence, explain the difference between compiled and interpreted languages.", "max_tokens": 64}

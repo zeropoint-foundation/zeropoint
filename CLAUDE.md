@@ -71,6 +71,14 @@ Ken Romero (kenrom), Founder of ThinkStream Labs. Building ZeroPoint — portabl
 | `~/ZeroPoint/data/audit.db` | Audit chain (SQLite) |
 | `~/ZeroPoint/keys/` | Signing keys |
 
+## Doc directory conventions
+- `docs/design/` — canonical Tier 2 design docs (elaborations of KEEL, formal design proposals).
+- `docs/handoffs/` (plural) — session-to-session design briefs. **Canonical.** The singular `docs/handoff/` is deprecated; do not create or write to it.
+- `docs/research/` — surveys and one-time external-tradition gathers. Default home for surveys unless the survey *is itself* the new design proposal, in which case it lives with related design briefs in `docs/design/` or `docs/handoffs/`.
+- `docs/review/` — ongoing observation artifacts (the daily AI landscape sweep log and its sources file live here). Distinct from `research/`: research is one-time, review is periodic.
+- `docs/lenses/` — formal lens declarations per `LENS-DISCIPLINE-2026-07.md`.
+- `docs/_to_delete/` — device-bash on the Cowork bridge cannot `rm`; items to be purged are `mv`'d here and Ken deletes the folder from the machine later.
+
 ## Preferences
 - Git doesn't work from Cowork sandbox — Ken runs git locally from ~/projects/zeropoint
 - zeropoint.global files are gitignored — must use `git add -f zeropoint.global/`
@@ -560,7 +568,9 @@ Octopus subsumes the others. Symphony emphasizes coordinated performance; body p
 
 Runaway alarms are direct violations of this discipline. Every runaway alarm class forces operator (or Regent as operator's cognitive advocate) to attend to routine flow. Alarm fatigue erodes signal quality; cognitive context pollution buries real signals in noise; coordination-noise cascade multiplies wasted cycles. Signal quality is not aesthetic — it's structural coordination hygiene.
 
-Example (2026-07-11): Sentinel's `unauthorized_listener` classification was flagging every browser helper, editor helper, messaging app, and system daemon as security incident. Regent's cognitive context drowned in false-positive noise. Operator (Ken) had to spend cognitive engagement on triaging alarms about legitimate user apps — exactly the failure mode this principle names. P1.2 Sentinel refactor added benign-class classification (`unregistered_known_app` at Info severity) so routine listener activity is chain-anchored for auditability without surfacing to operator attention. The refactor was tactical; the principle-preservation is broader.
+Example (2026-07-11): Sentinel's `unauthorized_listener` classification was flagging every browser helper, editor helper, messaging app, and system daemon as security incident. Operator (Ken) had to spend cognitive engagement on triaging alarms about legitimate user apps — exactly the failure mode this principle names. P1.2 Sentinel refactor added benign-class classification (`unregistered_known_app` at Info severity) so routine listener activity is chain-anchored for auditability without surfacing to operator attention. The refactor was tactical; the principle-preservation is broader.
+
+**Correction (2026-08-12):** this entry previously also claimed "Regent's cognitive context drowned in false-positive noise." That clause is withdrawn as unsupported. SEAM-009 establishes that `context.officer_findings` is populated only via `RegentHandle::send_findings`, whose sole call site is `spawn_sweep_task` — while every listener assessment lives in `spawn_sensor_forge_task`, which forwards nothing. On the chain for the 2026-08-06 recurrence, the listener findings never reached the Regent's context at all. For the 2026-07-11 instance dated above, `send_findings` does not appear in the history of `officers.rs` or `loop_runner.rs` before 2026-07-25, so the channel the claim depends on did not exist in its current form; whether some other path carried them is unverified and is not asserted here either way. What is not in doubt: the flood was real, the operator did triage it, and the fix was correct. The principle stands on the operator-attention half, which is the half that was witnessed. The cognitive-context half was inferred from the shape of the failure rather than read off the chain — which is the error this corpus names as *diagnosis stops too early*, applied to its own record.
 
 Design rule for any substrate component: **before emitting a finding, ask — does this signal warrant operator (or Regent) cognitive engagement, or is this routine flow?** If routine, chain-anchor for auditability at Info tier; don't crowd cognitive context. If it warrants engagement, verify it's actionable (not just observable) before emitting at Warning+ severity.
 
@@ -607,6 +617,69 @@ First instance: `COGNITIVE-ACT-ACCOUNTING-2026-07.md` §3, where the Deliberatio
 Why staged rather than canonical: this is arguably principle-shaped, and the nine design principles (KEEL §II.13) contain nothing governing the epistemic status of what the substrate records about itself — they were written for a chain-identity-delegation substrate before the cognitive layer existed. But §II.13 is **Layer A**: amending it requires a new substrate binary through the release chain per §III.6, not a ceremony. That bar is not met by a claim specified in one Tier 2 document with zero runtime evidence. If the distinction turns out to settle design arguments across subsystems the way P1–P9 do, it will have earned the binary. Until then it stages.
 
 Related and separate: §III.19 (*"silence is the enemy, not compromise"*) is currently scoped to security boundaries, but the same move — convert absence into a record — now recurs in tie-off dispositions, silent-drop detection, confabulation gaps, `canonicalization_rejected`, canary misses, and silent-lens-over-window. That argues for **widening an existing Layer B axiom at the next ceremony** rather than adding a principle, and is the cheaper of the two available moves.
+
+### Diagnosis stops too early exactly when the evidence starts agreeing.
+
+Investigation has a natural stopping point that is not the same as the correct
+one. Evidence accumulates, a story forms, the story explains the symptom — and
+the search ends there, because it feels finished. That moment is the point of
+highest risk in the whole process, not the point of highest confidence. The
+story explains the evidence gathered *so far*, and the reason gathering stopped
+is that it started agreeing.
+
+Two sub-forms, both cheap to catch once named:
+
+**Reading to the confirming sentence.** Open a document, find the passage that
+supports the current hypothesis, stop. The refutation is frequently in the next
+line, because documents that raise a claim tend to qualify it immediately.
+
+**Reasoning from a leaf instead of tracing from the entry point.** Inspect the
+function that obviously implements the behaviour, find it clean, conclude the
+behaviour cannot occur. Locally valid, globally wrong whenever something
+upstream is responsible. "Why does X happen" is a question about a *path*, and a
+path is traced, not inferred from one node on it.
+
+The discipline: before asserting a cause, state what would be observable if the
+story were false, and go look for that specific thing. Not "verify more" —
+verify the *disconfirming* case. And when the question is why some behaviour
+occurs, start at the entry point and walk down, rather than at the leaf and
+reason up.
+
+Example (2026-08-05): a Trezor-ceremony diagnosis was called wrong three times
+in one session. First an internal deadlock (process alive, port refused, chain
+frozen — consistent, and wrong). Then a CLI ceremony blocking the chain append
+path, built into a structural argument about resource semantics. Then, on
+finding `run_correction_list` made no sovereign-root call, an over-correction to
+"two processes interleaved in one terminal." The fourth attempt began with grep
+instead of a hypothesis — mapping every credential call between `main()`'s entry
+and pipeline construction — and found the cause in one pass: an unconditional
+`load_genesis_secret_composed()` at `main.rs:5993` that every command below it
+paid for. Two adjacent errors in the same session shared the shape: reading
+`DISCIPLINE-PINS.md` to the line confirming a pin was unlanded, three lines
+above "It is real"; and repeating `zp session login` from an error string
+without checking the `Commands` enum, where no such verb exists.
+
+Cost of the pattern: several wrong commands handed to the operator, one handoff
+document that had to be rewritten twice, and a task nearly filed against an
+append-path defect that does not exist. Cost of the fix: three greps, run first
+instead of fourth.
+
+This is the confabulation shape the substrate already names — plausible
+narrative, real evidence at the edges, invented middle — arriving in the
+reasoning layer rather than the cognitive one. Worth noticing that Regent's
+fabricated `150 trajectories / last_processed_sequence 150` and these
+misdiagnoses are the same failure at different altitudes, and that the
+substrate's answer for Regent was structural rather than exhortative: *state
+that the surface is not observable.* The analogue here is not "be more careful"
+but "trace the path, and name the disconfirming observation before committing to
+a cause."
+
+Connects to *verify before commit* (this is the specific mechanism by which
+verification gets skipped — not neglect, but premature sufficiency), *stated
+destination is not current state* (same error applied to plans rather than
+causes), and the Cognitive Self-Observer's reason for existing (post-emission
+verification exists because confident wrong output is indistinguishable from
+correct output at emission time).
 
 ## graphify
 

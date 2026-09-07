@@ -348,6 +348,20 @@ pub fn detect_system_resources() -> SystemResources {
 // Model recommendations
 // ============================================================================
 
+/// Recommend a model to install, sized to the detected hardware.
+///
+/// The `"qwen3:8b"` (and other model-name) literals in the tiers below are
+/// onboarding default recommendations, deliberately not derived from
+/// `ZpConfig`/`RegentConfig`: this runs during the `get_setup_guidance` /
+/// `start_model_pull` onboarding steps, gated only on `genesis_complete`,
+/// which is *before* the operator has chosen or persisted a
+/// `regent_reasoning_model` / `regent_routing_model` — there is no config
+/// value here to derive from, since none exists yet. (An operator can still
+/// override any tier via `~/ZeroPoint/config/model-recommendations.toml`,
+/// read by `load_model_override` above, so this is not the last word — just
+/// the bundled default.) Once onboarding completes and `ZpConfig` is
+/// populated, this function is not consulted again; do not wire `ZpConfig`
+/// into it.
 fn recommend_model(system: &SystemResources, runtime: &str) -> ModelRecommendation {
     if let Some(rec) = load_model_override(system.inference_memory_gb, runtime) {
         return rec;

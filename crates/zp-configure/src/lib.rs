@@ -242,7 +242,6 @@ impl ConfigEngine {
             proxy_port: None,
         }
     }
-
 }
 
 impl Default for ConfigEngine {
@@ -442,8 +441,7 @@ impl ConfigEngine {
                         if let Some((key, _)) = uncommented.split_once('=') {
                             let key = key.trim();
                             if BACKEND_VARS.contains(&key) && !backend_set.contains(key) {
-                                let best =
-                                    best_for_var(key, activated_providers, requirements);
+                                let best = best_for_var(key, activated_providers, requirements);
                                 if let Some(best_provider) = best {
                                     info!(
                                         "Provider coherence: activating {} = {}",
@@ -820,9 +818,7 @@ impl ConfigEngine {
                 Resolution::DefaultResolved {
                     var_name, value, ..
                 } => {
-                    if let Err(e) =
-                        vault.store_tool_env(tool_name, var_name, value.as_bytes())
-                    {
+                    if let Err(e) = vault.store_tool_env(tool_name, var_name, value.as_bytes()) {
                         tracing::warn!(
                             tool = tool_name,
                             var = var_name,
@@ -837,9 +833,7 @@ impl ConfigEngine {
                 Resolution::Preserved {
                     var_name, value, ..
                 } => {
-                    if let Err(e) =
-                        vault.store_tool_env(tool_name, var_name, value.as_bytes())
-                    {
+                    if let Err(e) = vault.store_tool_env(tool_name, var_name, value.as_bytes()) {
                         tracing::warn!(
                             tool = tool_name,
                             var = var_name,
@@ -964,9 +958,7 @@ impl ConfigEngine {
                         handled_vars.insert(env_var.clone());
                     } else {
                         // Static value from override — store directly
-                        if let Err(e) =
-                            vault.store_tool_env(tool_name, env_var, value.as_bytes())
-                        {
+                        if let Err(e) = vault.store_tool_env(tool_name, env_var, value.as_bytes()) {
                             tracing::warn!(
                                 tool = tool_name,
                                 var = env_var,
@@ -998,12 +990,11 @@ impl ConfigEngine {
                     // Check if this env var matches the provider's key pattern
                     if profile.env_patterns.contains(env_var) {
                         let vault_ref = format!("{}/api_key", provider_id);
-                        let target =
-                            if vault.contains(&format!("providers/{}", vault_ref)) {
-                                format!("providers/{}", vault_ref)
-                            } else {
-                                vault_ref
-                            };
+                        let target = if vault.contains(&format!("providers/{}", vault_ref)) {
+                            format!("providers/{}", vault_ref)
+                        } else {
+                            vault_ref
+                        };
                         let source = format!("tools/{}/{}", tool_name, env_var);
                         if let Err(e) = vault.store_ref(&source, &target) {
                             tracing::warn!(
@@ -1030,8 +1021,7 @@ impl ConfigEngine {
                 continue;
             }
 
-            if let Err(e) = vault.store_tool_env(tool_name, env_var, value.as_bytes())
-            {
+            if let Err(e) = vault.store_tool_env(tool_name, env_var, value.as_bytes()) {
                 tracing::warn!(
                     tool = tool_name,
                     var = env_var,
@@ -1823,9 +1813,7 @@ fn strip_legacy_env(tool_path: &Path, tool_name: &str) -> bool {
         tool = tool_name,
         "Stripped stale .env — config is now vault-only"
     );
-    println!(
-        "  \x1b[33m↳\x1b[0m stripped stale .env (archived to .env.pre-vault)"
-    );
+    println!("  \x1b[33m↳\x1b[0m stripped stale .env (archived to .env.pre-vault)");
     true
 }
 
@@ -1911,14 +1899,16 @@ pub fn run_tool(
             }
 
             // Store in vault graph — zero plaintext on disk
-            let result =
-                ConfigEngine::resolve_to_vault(&resolutions, tool_name, vault);
+            let result = ConfigEngine::resolve_to_vault(&resolutions, tool_name, vault);
             result.print_summary();
 
             // Persist vault to disk
             if let Some(vp) = vault_path {
                 if let Err(e) = vault.save(vp) {
-                    eprintln!("Warning: config stored in memory but vault persist failed: {}", e);
+                    eprintln!(
+                        "Warning: config stored in memory but vault persist failed: {}",
+                        e
+                    );
                 }
             }
 
@@ -2017,7 +2007,10 @@ pub fn run_vault_add(
                     value.len()
                 );
             }
-            info!(vault_ref = tiered_ref, "Credential stored in vault (providers tier)");
+            info!(
+                vault_ref = tiered_ref,
+                "Credential stored in vault (providers tier)"
+            );
             0
         }
         Err(e) => {
@@ -2059,10 +2052,7 @@ pub fn run_vault_set_tool_env(
             match vault.retrieve(&vault_ref) {
                 Ok(readback) => {
                     if readback.len() != value.len() {
-                        eprintln!(
-                            "ERROR: Round-trip verification FAILED for {}",
-                            vault_ref
-                        );
+                        eprintln!("ERROR: Round-trip verification FAILED for {}", vault_ref);
                         eprintln!(
                             "  Wrote {} bytes, read back {} bytes",
                             value.len(),
@@ -2109,20 +2099,13 @@ pub fn run_vault_set_tool_env(
                             );
                             for v in &violations {
                                 if v.severity == "error" {
-                                    eprintln!(
-                                        "  SCHEMA ERROR: {} — {}",
-                                        v.var, v.message
-                                    );
+                                    eprintln!("  SCHEMA ERROR: {} — {}", v.var, v.message);
                                 } else {
-                                    eprintln!(
-                                        "  schema warning: {} — {}",
-                                        v.var, v.message
-                                    );
+                                    eprintln!("  schema warning: {} — {}", v.var, v.message);
                                 }
                             }
-                            let errors = violations.iter()
-                                .filter(|v| v.severity == "error")
-                                .count();
+                            let errors =
+                                violations.iter().filter(|v| v.severity == "error").count();
                             if errors > 0 {
                                 eprintln!(
                                     "  {} schema error(s). The value was stored but \
@@ -2131,8 +2114,7 @@ pub fn run_vault_set_tool_env(
                                 );
                             } else if violations.is_empty() {
                                 // Only print if we found a matching rule for this var.
-                                let has_rule = manifest.vault_schema.iter()
-                                    .any(|s| s.var == var);
+                                let has_rule = manifest.vault_schema.iter().any(|s| s.var == var);
                                 if has_rule {
                                     println!("  Schema validation: PASSED");
                                 }
@@ -2143,7 +2125,10 @@ pub fn run_vault_set_tool_env(
                 }
             }
 
-            info!(vault_ref = vault_ref, "Tool env var stored in vault (tools tier)");
+            info!(
+                vault_ref = vault_ref,
+                "Tool env var stored in vault (tools tier)"
+            );
             0
         }
         Err(e) => {
@@ -2177,11 +2162,7 @@ fn manifest_search_paths(tool: &str) -> Vec<std::path::PathBuf> {
                 .join(".zp-configure.toml"),
         );
         // Tool's own project dir
-        paths.push(
-            home.join("projects")
-                .join(tool)
-                .join(".zp-configure.toml"),
-        );
+        paths.push(home.join("projects").join(tool).join(".zp-configure.toml"));
     }
     paths
 }
@@ -2200,11 +2181,7 @@ fn manifest_search_paths(tool: &str) -> Vec<std::path::PathBuf> {
 ///
 /// The vault's ref-based architecture means rotation is instant — there's no
 /// copy to update. This command is a verification pass, not a mutation.
-pub fn run_rotate(
-    vault: &CredentialVault,
-    provider: &str,
-    field: &str,
-) -> i32 {
+pub fn run_rotate(vault: &CredentialVault, provider: &str, field: &str) -> i32 {
     println!("ZeroPoint Configure — Rotate");
     println!("Provider: {}", provider);
     println!("Field: {}", field);
@@ -2240,11 +2217,17 @@ pub fn run_rotate(
             );
         }
         Ok(_) => {
-            eprintln!("  \x1b[31m✗\x1b[0m {} — credential is empty", canonical_path);
+            eprintln!(
+                "  \x1b[31m✗\x1b[0m {} — credential is empty",
+                canonical_path
+            );
             return 1;
         }
         Err(e) => {
-            eprintln!("  \x1b[31m✗\x1b[0m {} — resolve failed: {}", canonical_path, e);
+            eprintln!(
+                "  \x1b[31m✗\x1b[0m {} — resolve failed: {}",
+                canonical_path, e
+            );
             return 1;
         }
     }
@@ -2266,7 +2249,10 @@ pub fn run_rotate(
         if let Some(target) = vault.resolve_ref(entry_key) {
             if target == tiered_path || target == legacy_path {
                 // This tool var refs our provider — verify it resolves
-                let ok = vault.retrieve(entry_key).map(|v| !v.is_empty()).unwrap_or(false);
+                let ok = vault
+                    .retrieve(entry_key)
+                    .map(|v| !v.is_empty())
+                    .unwrap_or(false);
                 tools_checked
                     .entry(tool_name)
                     .or_default()
@@ -2291,7 +2277,11 @@ pub fn run_rotate(
     for tool_name in &tool_names {
         let vars = &tools_checked[*tool_name];
         let tool_ok = vars.iter().all(|(_, ok)| *ok);
-        let symbol = if tool_ok { "\x1b[32m✓\x1b[0m" } else { "\x1b[31m✗\x1b[0m" };
+        let symbol = if tool_ok {
+            "\x1b[32m✓\x1b[0m"
+        } else {
+            "\x1b[31m✗\x1b[0m"
+        };
         println!("  {} {}", symbol, tool_name);
         for (var, ok) in vars {
             let var_symbol = if *ok { "✓" } else { "✗ STALE" };
@@ -2317,13 +2307,15 @@ pub fn run_rotate(
             "Credential rotation verified"
         );
     } else {
-        eprintln!(
-            "\x1b[31m✗\x1b[0m Rotation incomplete: some tool refs failed to resolve"
-        );
+        eprintln!("\x1b[31m✗\x1b[0m Rotation incomplete: some tool refs failed to resolve");
         eprintln!("  Re-run `zp configure auto --overwrite` to rebuild stale refs");
     }
 
-    if all_ok { 0 } else { 1 }
+    if all_ok {
+        0
+    } else {
+        1
+    }
 }
 
 // ============================================================================
@@ -2824,7 +2816,9 @@ pub fn run_auto(
             }
 
             // Skip if already vault-configured and --no-overwrite
-            let has_vault_config = !vault.list_prefix(&format!("tools/{}/", tool.name)).is_empty();
+            let has_vault_config = !vault
+                .list_prefix(&format!("tools/{}/", tool.name))
+                .is_empty();
             if has_vault_config && !overwrite {
                 println!(
                     "  SKIP  {} — already configured in vault (use --overwrite to replace)",
@@ -2900,18 +2894,24 @@ pub fn run_auto(
             // The MVC resolver already knows which provider won each capability;
             // write refs and values directly to the vault graph.
             if dry_run {
-                let cap_count = resolved.capabilities.iter().filter(|c| {
-                    matches!(
-                        c.status,
-                        zp_engine::capability::ResolutionStatus::Resolved { .. }
-                            | zp_engine::capability::ResolutionStatus::Shared { .. }
-                            | zp_engine::capability::ResolutionStatus::DefaultLocal
-                            | zp_engine::capability::ResolutionStatus::AutoGenerated
-                    )
-                }).count();
+                let cap_count = resolved
+                    .capabilities
+                    .iter()
+                    .filter(|c| {
+                        matches!(
+                            c.status,
+                            zp_engine::capability::ResolutionStatus::Resolved { .. }
+                                | zp_engine::capability::ResolutionStatus::Shared { .. }
+                                | zp_engine::capability::ResolutionStatus::DefaultLocal
+                                | zp_engine::capability::ResolutionStatus::AutoGenerated
+                        )
+                    })
+                    .count();
                 println!(
                     "          would resolve {}/{} capabilities, {} env values",
-                    cap_count, resolved.capabilities.len(), resolved.env_output.len()
+                    cap_count,
+                    resolved.capabilities.len(),
+                    resolved.env_output.len()
                 );
             } else {
                 let vr = ConfigEngine::resolve_mvc_to_vault(
@@ -2988,7 +2988,9 @@ pub fn run_auto(
         }
 
         // Skip if already vault-configured and --no-overwrite
-        let has_vault_config = !vault.list_prefix(&format!("tools/{}/", tool.name)).is_empty();
+        let has_vault_config = !vault
+            .list_prefix(&format!("tools/{}/", tool.name))
+            .is_empty();
         if has_vault_config && !overwrite {
             println!(
                 "  SKIP  {} — already configured in vault (use --overwrite to replace)",
@@ -3041,11 +3043,7 @@ pub fn run_auto(
                     });
                 } else {
                     // Store in vault graph
-                    let vr = ConfigEngine::resolve_to_vault(
-                        &resolutions,
-                        &tool.name,
-                        vault,
-                    );
+                    let vr = ConfigEngine::resolve_to_vault(&resolutions, &tool.name, vault);
                     println!(
                         "          vault: {} refs + {} values stored",
                         vr.refs_stored, vr.values_stored
@@ -3372,16 +3370,19 @@ pub fn resolve_tool(
 
     let template = tool_path.join(".env.example");
     if !template.exists() {
-        return Err(format!(
-            "no .env.example found at {}",
-            template.display()
-        ));
+        return Err(format!("no .env.example found at {}", template.display()));
     }
 
     let engine = ConfigEngine::new();
     let manifest_reqs = load_manifest_requirements(tool_path);
     let resolutions = engine
-        .process_env_file(&template, vault, allow_all_policy, tool_name, &manifest_reqs)
+        .process_env_file(
+            &template,
+            vault,
+            allow_all_policy,
+            tool_name,
+            &manifest_reqs,
+        )
         .map_err(|e| format!("process_env_file: {}", e))?;
 
     let mut vault_resolved = 0u32;
@@ -3504,7 +3505,7 @@ mod tests {
     }
 
     #[test]
-    fn test_database_url_ironclaw() {
+    fn test_database_url_example_tool() {
         let engine = ConfigEngine::new();
         let m = engine.match_var("DATABASE_URL");
         assert!(m.is_some());
@@ -3726,17 +3727,25 @@ OLLAMA_SERVER_URL=http://localhost:11434
         vault.store("openai/api_key", b"sk-test-auto-key").unwrap();
 
         // Run auto in live mode — vault-backed
-        let exit_code = run_auto(&root, &mut vault, test_policy, 1, false, false, None, Some(&vault_file));
+        let exit_code = run_auto(
+            &root,
+            &mut vault,
+            test_policy,
+            1,
+            false,
+            false,
+            None,
+            Some(&vault_file),
+        );
         assert_eq!(exit_code, 0);
 
         // Verify config was stored in vault
         let env = vault.resolve_tool_env("my-tool").unwrap();
-        assert!(
-            !env.is_empty(),
-            "vault should have entries for my-tool"
-        );
+        assert!(!env.is_empty(), "vault should have entries for my-tool");
         // The OPENAI_API_KEY should resolve (via ref) to our provider credential
-        let key_val = env.get("OPENAI_API_KEY").expect("OPENAI_API_KEY should be in vault");
+        let key_val = env
+            .get("OPENAI_API_KEY")
+            .expect("OPENAI_API_KEY should be in vault");
         assert_eq!(
             std::str::from_utf8(key_val).unwrap(),
             "sk-test-auto-key",
@@ -3794,7 +3803,9 @@ OLLAMA_SERVER_URL=http://localhost:11434
         let mut vault = CredentialVault::new(&master_key);
         vault.store("openai/api_key", b"sk-new-key").unwrap();
         // Pre-configure the tool in vault so it appears "already configured"
-        vault.store_tool_env("has-vault", "OPENAI_API_KEY", b"sk-original-key").unwrap();
+        vault
+            .store_tool_env("has-vault", "OPENAI_API_KEY", b"sk-original-key")
+            .unwrap();
 
         // Without --overwrite: existing vault config triggers skip
         let exit_code = run_auto(&root, &mut vault, test_policy, 1, false, false, None, None);
@@ -3802,7 +3813,9 @@ OLLAMA_SERVER_URL=http://localhost:11434
 
         // Vault should still have the original key (not overwritten)
         let env = vault.resolve_tool_env("has-vault").unwrap();
-        let key_val = env.get("OPENAI_API_KEY").expect("OPENAI_API_KEY should be in vault");
+        let key_val = env
+            .get("OPENAI_API_KEY")
+            .expect("OPENAI_API_KEY should be in vault");
         assert_eq!(
             std::str::from_utf8(key_val).unwrap(),
             "sk-original-key",
@@ -3827,15 +3840,28 @@ OLLAMA_SERVER_URL=http://localhost:11434
         let mut vault = CredentialVault::new(&master_key);
         vault.store("openai/api_key", b"sk-fresh-key").unwrap();
         // Pre-configure with stale key
-        vault.store_tool_env("overwrite-me", "OPENAI_API_KEY", b"sk-old-key").unwrap();
+        vault
+            .store_tool_env("overwrite-me", "OPENAI_API_KEY", b"sk-old-key")
+            .unwrap();
 
         // With --overwrite: re-configure despite existing vault config
-        let exit_code = run_auto(&root, &mut vault, test_policy, 1, false, true, None, Some(&vault_file));
+        let exit_code = run_auto(
+            &root,
+            &mut vault,
+            test_policy,
+            1,
+            false,
+            true,
+            None,
+            Some(&vault_file),
+        );
         assert_eq!(exit_code, 0);
 
         // Vault should have the fresh key via ref resolution (overwritten)
         let env = vault.resolve_tool_env("overwrite-me").unwrap();
-        let key_val = env.get("OPENAI_API_KEY").expect("OPENAI_API_KEY should be in vault");
+        let key_val = env
+            .get("OPENAI_API_KEY")
+            .expect("OPENAI_API_KEY should be in vault");
         assert_eq!(
             std::str::from_utf8(key_val).unwrap(),
             "sk-fresh-key",
@@ -3865,10 +3891,7 @@ OLLAMA_SERVER_URL=http://localhost:11434
 
         // Dry run — vault should have no tool entries
         let env = vault.resolve_tool_env("dry-tool").unwrap();
-        assert!(
-            env.is_empty(),
-            "dry run should not store anything in vault"
-        );
+        assert!(env.is_empty(), "dry run should not store anything in vault");
 
         let _ = fs::remove_file(tool.join(".env.example"));
         let _ = fs::remove_dir(&tool);
@@ -3933,22 +3956,37 @@ LLM_MODEL=gpt-4
         vault.store("openai/api_key", b"sk-test-proxy-key").unwrap();
 
         // Run auto with proxy mode on port 3000
-        let exit_code = run_auto(&root, &mut vault, test_policy, 1, false, false, Some(17770), Some(&vault_file));
+        let exit_code = run_auto(
+            &root,
+            &mut vault,
+            test_policy,
+            1,
+            false,
+            false,
+            Some(17770),
+            Some(&vault_file),
+        );
         assert_eq!(exit_code, 0);
 
         // Verify vault has the proxy URL and API key
         let env = vault.resolve_tool_env("proxy-tool").unwrap();
 
-        let base_url = env.get("OPENAI_BASE_URL").expect("OPENAI_BASE_URL should be in vault");
+        let base_url = env
+            .get("OPENAI_BASE_URL")
+            .expect("OPENAI_BASE_URL should be in vault");
         // The proxy URL is loopback-normalized to the IPv4 literal via
         // zp_net::peer_url_with_path so the launched tool reaches the
         // substrate over IPv4 regardless of resolver order.
         assert!(
-            std::str::from_utf8(base_url).unwrap().contains("127.0.0.1:17770/api/v1/proxy/openai"),
+            std::str::from_utf8(base_url)
+                .unwrap()
+                .contains("127.0.0.1:17770/api/v1/proxy/openai"),
             "URL should be rewritten to proxy"
         );
 
-        let api_key = env.get("OPENAI_API_KEY").expect("OPENAI_API_KEY should be in vault");
+        let api_key = env
+            .get("OPENAI_API_KEY")
+            .expect("OPENAI_API_KEY should be in vault");
         assert_eq!(
             std::str::from_utf8(api_key).unwrap(),
             "sk-test-proxy-key",
@@ -3985,6 +4023,12 @@ LLM_MODEL=gpt-4
             deluxe: None,
             provider_overrides: overrides,
             verification: None,
+            // Added to `ToolManifest` after this fixture was written. The
+            // struct literal is exhaustive, so the omission is a hard compile
+            // error — but only under `--cfg test`, so `cargo build --workspace`
+            // stayed green while `cargo test --workspace` could not build at
+            // all. See SEAM-010.
+            vault_schema: vec![],
             configurable: vec![],
             capabilities: Default::default(),
             launch: None,
@@ -4014,7 +4058,9 @@ LLM_MODEL=gpt-4
     fn test_mvc_vault_writer_stores_provider_ref_from_override() {
         let master_key = [0x42u8; 32];
         let mut vault = CredentialVault::new(&master_key);
-        vault.store("anthropic/api_key", b"sk-ant-test-key").unwrap();
+        vault
+            .store("anthropic/api_key", b"sk-ant-test-key")
+            .unwrap();
 
         let manifest = test_manifest(
             "test-tool",
@@ -4074,7 +4120,9 @@ LLM_MODEL=gpt-4
 
         // Verify the ref resolves to the provider credential
         let env = vault.resolve_tool_env("test-tool").unwrap();
-        let key = env.get("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY should be in vault");
+        let key = env
+            .get("ANTHROPIC_API_KEY")
+            .expect("ANTHROPIC_API_KEY should be in vault");
         assert_eq!(
             std::str::from_utf8(key).unwrap(),
             "sk-ant-test-key",
@@ -4089,16 +4137,15 @@ LLM_MODEL=gpt-4
         vault.store("openai/api_key", b"sk-test").unwrap();
 
         let manifest = test_manifest("val-tool", vec![], vec![], vec![]);
-        let resolved = test_resolved(
-            "val-tool",
-            vec![],
-            {
-                let mut m = HashMap::new();
-                m.insert("LLM_MODEL".to_string(), "gpt-4".to_string());
-                m.insert("OLLAMA_SERVER_URL".to_string(), "http://localhost:11434".to_string());
-                m
-            },
-        );
+        let resolved = test_resolved("val-tool", vec![], {
+            let mut m = HashMap::new();
+            m.insert("LLM_MODEL".to_string(), "gpt-4".to_string());
+            m.insert(
+                "OLLAMA_SERVER_URL".to_string(),
+                "http://localhost:11434".to_string(),
+            );
+            m
+        });
 
         let catalog = zp_engine::providers::load_catalog();
         let vr = ConfigEngine::resolve_mvc_to_vault(&resolved, &manifest, &mut vault, &catalog);
@@ -4108,7 +4155,9 @@ LLM_MODEL=gpt-4
         let env = vault.resolve_tool_env("val-tool").unwrap();
         let model = env.get("LLM_MODEL").expect("LLM_MODEL in vault");
         assert_eq!(std::str::from_utf8(model).unwrap(), "gpt-4");
-        let url = env.get("OLLAMA_SERVER_URL").expect("OLLAMA_SERVER_URL in vault");
+        let url = env
+            .get("OLLAMA_SERVER_URL")
+            .expect("OLLAMA_SERVER_URL in vault");
         assert_eq!(std::str::from_utf8(url).unwrap(), "http://localhost:11434");
     }
 
@@ -4206,12 +4255,18 @@ LLM_MODEL=gpt-4
                 provider: "anthropic".to_string(),
                 env_map: {
                     let mut m = HashMap::new();
-                    m.insert("ANTHROPIC_API_KEY".to_string(), "${vault:anthropic/api_key}".to_string());
+                    m.insert(
+                        "ANTHROPIC_API_KEY".to_string(),
+                        "${vault:anthropic/api_key}".to_string(),
+                    );
                     m
                 },
                 also_set: {
                     let mut m = HashMap::new();
-                    m.insert("MODEL_NAME".to_string(), "claude-sonnet-4-20250514".to_string());
+                    m.insert(
+                        "MODEL_NAME".to_string(),
+                        "claude-sonnet-4-20250514".to_string(),
+                    );
                     m
                 },
                 shares: vec![],
@@ -4235,7 +4290,10 @@ LLM_MODEL=gpt-4
             }],
             {
                 let mut m = HashMap::new();
-                m.insert("MODEL_NAME".to_string(), "claude-sonnet-4-20250514".to_string());
+                m.insert(
+                    "MODEL_NAME".to_string(),
+                    "claude-sonnet-4-20250514".to_string(),
+                );
                 m
             },
         );
@@ -4269,24 +4327,32 @@ LLM_MODEL=gpt-4
         let mut vault = CredentialVault::new(&master_key);
 
         // Store a provider credential
-        vault.store_provider("anthropic", "api_key", b"sk-ant-v1").unwrap();
+        vault
+            .store_provider("anthropic", "api_key", b"sk-ant-v1")
+            .unwrap();
 
         // Create tool refs pointing to the provider
-        vault.store_ref(
-            "tools/my-tool/ANTHROPIC_API_KEY",
-            "providers/anthropic/api_key",
-        ).unwrap();
-        vault.store_ref(
-            "tools/other-tool/ANTHROPIC_API_KEY",
-            "providers/anthropic/api_key",
-        ).unwrap();
+        vault
+            .store_ref(
+                "tools/my-tool/ANTHROPIC_API_KEY",
+                "providers/anthropic/api_key",
+            )
+            .unwrap();
+        vault
+            .store_ref(
+                "tools/other-tool/ANTHROPIC_API_KEY",
+                "providers/anthropic/api_key",
+            )
+            .unwrap();
 
         // Rotate should succeed — all refs resolve
         let exit = run_rotate(&vault, "anthropic", "api_key");
         assert_eq!(exit, 0, "rotate should succeed when all refs resolve");
 
         // Now "rotate" the credential (update value)
-        vault.store_provider("anthropic", "api_key", b"sk-ant-v2").unwrap();
+        vault
+            .store_provider("anthropic", "api_key", b"sk-ant-v2")
+            .unwrap();
 
         // Rotate should still succeed — refs point to same path, new value
         let exit = run_rotate(&vault, "anthropic", "api_key");
@@ -4457,7 +4523,9 @@ prefer = ["openai", "anthropic"]
 
         // Verify LLM_BACKEND was stored as "openai" (manifest prefer wins over
         // hardcoded PROVIDER_PRIORITY which puts anthropic first)
-        let env = vault.resolve_tool_env("e2e-tool").expect("resolve_tool_env should succeed");
+        let env = vault
+            .resolve_tool_env("e2e-tool")
+            .expect("resolve_tool_env should succeed");
         let backend = env
             .get("LLM_BACKEND")
             .map(|v| String::from_utf8_lossy(v).into_owned());

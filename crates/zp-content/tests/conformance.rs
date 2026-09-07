@@ -7,8 +7,8 @@
 use chrono::Utc;
 use tempfile::TempDir;
 use zp_content::{
-    ContentFilter, ContentMeta, ContentStore,
     backends::{LocalFsBackend, MemoryBackend},
+    ContentFilter, ContentMeta, ContentStore,
 };
 
 // ---------------------------------------------------------------------------
@@ -125,10 +125,7 @@ macro_rules! conformance_suite {
             async fn list_limit_respected() {
                 let (store, _tmp) = make().await;
                 for i in 0u8..10 {
-                    store
-                        .put(&[i], meta("limit.test.v1"))
-                        .await
-                        .unwrap();
+                    store.put(&[i], meta("limit.test.v1")).await.unwrap();
                 }
                 let ids = store
                     .list(&ContentFilter {
@@ -150,7 +147,10 @@ macro_rules! conformance_suite {
                 let (store, _tmp) = make().await;
                 let before = Utc::now();
                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-                let id = store.put(b"after timestamp", meta("ts.test.v1")).await.unwrap();
+                let id = store
+                    .put(b"after timestamp", meta("ts.test.v1"))
+                    .await
+                    .unwrap();
 
                 let ids = store
                     .list(&ContentFilter {
@@ -160,7 +160,10 @@ macro_rules! conformance_suite {
                     })
                     .await
                     .unwrap();
-                assert!(ids.contains(&id), "created_after filter should include recently stored id");
+                assert!(
+                    ids.contains(&id),
+                    "created_after filter should include recently stored id"
+                );
             }
 
             #[tokio::test]
@@ -173,7 +176,11 @@ macro_rules! conformance_suite {
                     extensions: None,
                 };
                 let id = store.put(b"meta content", m.clone()).await.unwrap();
-                let fetched = store.meta(&id).await.unwrap().expect("meta should be present");
+                let fetched = store
+                    .meta(&id)
+                    .await
+                    .unwrap()
+                    .expect("meta should be present");
                 assert_eq!(fetched.kind, m.kind);
             }
 
@@ -190,7 +197,10 @@ macro_rules! conformance_suite {
                 let (store, _tmp) = make().await;
                 let id1 = store.put(b"content A", meta("test.v1")).await.unwrap();
                 let id2 = store.put(b"content B", meta("test.v1")).await.unwrap();
-                assert_ne!(id1, id2, "different bytes must produce different ContentIds");
+                assert_ne!(
+                    id1, id2,
+                    "different bytes must produce different ContentIds"
+                );
             }
         }
     };
@@ -209,7 +219,9 @@ conformance_suite!(local_fs, {
     let tmp = TempDir::new().unwrap();
     let content_dir = tmp.path().join("content");
     let index_path = tmp.path().join("content-index.db");
-    let store = LocalFsBackend::new(&content_dir, &index_path).await.unwrap();
+    let store = LocalFsBackend::new(&content_dir, &index_path)
+        .await
+        .unwrap();
     (store, Some(tmp))
 });
 

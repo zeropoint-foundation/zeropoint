@@ -21,6 +21,12 @@ pub struct SweepCycle {
     emitted: HashSet<(String, String)>,
 }
 
+impl Default for SweepCycle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SweepCycle {
     pub fn new() -> Self {
         Self {
@@ -55,11 +61,7 @@ fn extract_event(entry: &AuditEntry) -> Option<&str> {
 /// 1. Self-skip: never dispatch an officer's own receipts back to itself.
 /// 2. Depth cap: entries with `cross_domain_depth >= MAX_CROSS_DOMAIN_DEPTH` stop.
 /// 3. Dedup: one finding per type per cycle per officer.
-pub fn should_dispatch(
-    entry: &AuditEntry,
-    officer: &dyn Officer,
-    cycle: &SweepCycle,
-) -> bool {
+pub fn should_dispatch(entry: &AuditEntry, officer: &dyn Officer, cycle: &SweepCycle) -> bool {
     // Extract the event string from the SystemEvent action, if present.
     let event = match extract_event(entry) {
         Some(e) => e,

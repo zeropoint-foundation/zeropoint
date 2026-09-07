@@ -1911,7 +1911,7 @@ async fn test_e2e_pipeline_init_mesh_from_config() {
     let mesh_config = config.mesh.clone().unwrap();
     std::fs::create_dir_all(&config.data_dir).ok();
     let audit_store = Arc::new(std::sync::Mutex::new(
-        zp_audit::AuditStore::open_unsigned(&config.data_dir.join("audit.db")).unwrap(),
+        zp_audit::AuditStore::open_unsigned(config.data_dir.join("audit.db")).unwrap(),
     ));
     let mut pipeline = Pipeline::new(config, audit_store).expect("pipeline init");
     pipeline.init_mesh(&mesh_config).await.expect("mesh init");
@@ -2133,7 +2133,7 @@ async fn test_e2e_pipeline_mesh_store_lifecycle() {
         };
         std::fs::create_dir_all(&config.data_dir).ok();
         let audit_store = Arc::new(std::sync::Mutex::new(
-            zp_audit::AuditStore::open_unsigned(&config.data_dir.join("audit.db")).unwrap(),
+            zp_audit::AuditStore::open_unsigned(config.data_dir.join("audit.db")).unwrap(),
         ));
         let mut pipeline = zp_pipeline::Pipeline::new(config, audit_store).unwrap();
 
@@ -2941,4 +2941,63 @@ async fn test_sweep4_full_construction_end_to_end_coherence() {
     // verify_with_catalog — every receipt that passes catalog verification
     // has been re-hashed via `recompute_entry_hash` and compared against
     // its stored `entry_hash`. No extra loop is needed.
+}
+
+/// HARNESS-SEAM-2026-08 §4 S3 ("pool non-empty"), W7.
+///
+/// W1 (2026-08-09) made a failed `init_providers` boot-fatal in
+/// `zp-server::lib::AppState::init` (`eprintln!` + `std::process::exit(1)`
+/// on `Err`), closing the half-state where the server reported healthy
+/// while holding an empty provider pool. That boot-fatal wiring lives in
+/// `zp-server` and is not itself unit-testable without forking a process —
+/// but the invariant it depends on, "a successful `init_providers` never
+/// yields an empty pool," lives here in `zp-pipeline` and is directly
+/// testable. Prove the sensor is not lying: the synthetic violation
+/// `init_providers` was built to reject (an empty model string) must
+/// still be rejected, and a real model name must still populate a
+/// non-empty pool, in the same test.
+#[tokio::test]
+async fn test_s3_init_providers_pool_non_empty_sensor() {
+    use zp_pipeline::{Pipeline, PipelineConfig};
+
+    struct TestSigner;
+    impl zp_core::provider::RequestSigner for TestSigner {
+        fn authorization(&self, _method: &str, _path: &str, _body: &[u8]) -> Option<String> {
+            Some("Test dummy".to_string())
+        }
+    }
+
+    let tmp = tempfile::tempdir().unwrap();
+    let config = PipelineConfig {
+        data_dir: tmp.path().to_path_buf(),
+        ..Default::default()
+    };
+    std::fs::create_dir_all(&config.data_dir).ok();
+    let audit_store = Arc::new(std::sync::Mutex::new(
+        zp_audit::AuditStore::open_unsigned(config.data_dir.join("audit.db")).unwrap(),
+    ));
+    let pipeline = Pipeline::new(config, audit_store).expect("pipeline init");
+    let signer: Arc<dyn zp_core::provider::RequestSigner> = Arc::new(TestSigner);
+
+    // Synthetic violation: an empty model string — the exact condition
+    // `init_providers` rejects, and the state zp-server's S3 boot-fatal
+    // check exists to make sure never silently produces an empty pool.
+    let violation = pipeline
+        .init_providers(17010, "ollama", "", "", true, signer.clone())
+        .await;
+    assert!(
+        violation.is_err(),
+        "S3: an empty model must be rejected, never silently accepted into an empty pool"
+    );
+
+    // Fix: a real model name. The pool must come back non-empty.
+    let fixed = pipeline
+        .init_providers(17010, "ollama", "gemma4:26b-mlx", "", true, signer)
+        .await
+        .expect("pipeline init with a real model must succeed");
+    assert!(
+        fixed >= 1,
+        "S3: a successful init_providers must never yield an empty pool, got {}",
+        fixed
+    );
 }

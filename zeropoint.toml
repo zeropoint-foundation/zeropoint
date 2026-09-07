@@ -9,4 +9,4 @@ port = 17010
 operator = "kenrom"
 
 [llm]
-enabled = false
+enabled = true

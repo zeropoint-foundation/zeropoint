@@ -144,7 +144,7 @@ Each of these lands with concrete test implementation as its parent design doc's
 
 The load-bearing artifact that makes tonight's failure class structurally impossible for future capability additions.
 
-**Location:** `capability_composition_matrix.toml` at the workspace root, or `crates/zp-composition/matrix.toml`. Amended via SUPERSESSION-FRAMEWORK-2026-07.md ceremony.
+**Location:** `capability_composition_matrix.toml` at the workspace root, or `crates/zp-composition/matrix.toml` (not yet written; neither location exists and the choice is open). Amended via SUPERSESSION-FRAMEWORK-2026-07.md ceremony.
 
 **Schema:**
 

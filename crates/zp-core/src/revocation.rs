@@ -98,9 +98,7 @@ pub enum RevocationReason {
 
     /// A new grant supersedes this one. The replacement's id is recorded
     /// so verifiers can trace the handoff.
-    Superseded {
-        new_grant_id: String,
-    },
+    Superseded { new_grant_id: String },
 }
 
 impl RevocationClaim {
@@ -158,14 +156,24 @@ impl RevocationClaim {
     /// public key is malformed, or the signature does not verify.
     pub fn verify_signature(&self) -> bool {
         // Seam 5: routes through the canonical verify primitive.
-        let Some(sig_hex) = &self.signature else { return false };
-        let Ok(pubkey_bytes) = hex::decode(&self.issued_by) else { return false };
-        if pubkey_bytes.len() != 32 { return false }
+        let Some(sig_hex) = &self.signature else {
+            return false;
+        };
+        let Ok(pubkey_bytes) = hex::decode(&self.issued_by) else {
+            return false;
+        };
+        if pubkey_bytes.len() != 32 {
+            return false;
+        }
         let mut pk = [0u8; 32];
         pk.copy_from_slice(&pubkey_bytes);
 
-        let Ok(sig_bytes) = hex::decode(sig_hex) else { return false };
-        if sig_bytes.len() != 64 { return false }
+        let Ok(sig_bytes) = hex::decode(sig_hex) else {
+            return false;
+        };
+        if sig_bytes.len() != 64 {
+            return false;
+        }
         let mut sig = [0u8; 64];
         sig.copy_from_slice(&sig_bytes);
 
@@ -238,17 +246,17 @@ mod tests {
             CascadePolicy::SubtreeHalt,
             RevocationReason::OperatorRequested,
         );
-        assert!(!claim.verify_signature(), "unsigned claim should not verify");
+        assert!(
+            !claim.verify_signature(),
+            "unsigned claim should not verify"
+        );
 
         claim.sign(&key);
         assert!(claim.verify_signature(), "freshly-signed claim must verify");
 
         // Tamper with target grant id — signature must fail.
         claim.target_grant_id.push('X');
-        assert!(
-            !claim.verify_signature(),
-            "tampered claim must not verify"
-        );
+        assert!(!claim.verify_signature(), "tampered claim must not verify");
     }
 
     #[test]

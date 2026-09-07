@@ -62,7 +62,9 @@ pub fn canonical_preimage(receipt: &Receipt) -> Vec<u8> {
 /// Compute the Blake3 canonical hash (hex) of a receipt. Wraps
 /// [`canonical_preimage`] with BLAKE3.
 pub fn canonical_hash(receipt: &Receipt) -> String {
-    blake3::hash(&canonical_preimage(receipt)).to_hex().to_string()
+    blake3::hash(&canonical_preimage(receipt))
+        .to_hex()
+        .to_string()
 }
 
 impl crate::Signable for Receipt {

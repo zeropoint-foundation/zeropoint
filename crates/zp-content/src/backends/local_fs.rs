@@ -21,7 +21,7 @@ use chrono::Utc;
 use tokio::io::AsyncReadExt;
 use tracing::debug;
 
-use crate::{ContentError, ContentFilter, ContentId, ContentMeta, ContentStore, index::LocalIndex};
+use crate::{index::LocalIndex, ContentError, ContentFilter, ContentId, ContentMeta, ContentStore};
 
 /// Filesystem-backed `ContentStore` with two-level hash-prefix sharding.
 pub struct LocalFsBackend {

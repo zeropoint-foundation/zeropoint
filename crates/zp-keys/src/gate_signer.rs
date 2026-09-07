@@ -127,7 +127,11 @@ mod tests {
         for i in 0..32 {
             diff_bits += (s1[i] ^ s2[i]).count_ones();
         }
-        assert!(diff_bits > 64, "expected avalanche, got only {} diff bits", diff_bits);
+        assert!(
+            diff_bits > 64,
+            "expected avalanche, got only {} diff bits",
+            diff_bits
+        );
     }
 
     /// Known-answer test: pin the v1 derivation. If this hex changes, every

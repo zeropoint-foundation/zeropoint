@@ -395,7 +395,11 @@ impl EpochCompactor {
     }
 
     /// Verify that an epoch's Merkle root matches the given entries.
-    pub fn verify_epoch(&self, epoch: &Epoch, entries: &[ReceiptChainEntry]) -> Result<(), EpochError> {
+    pub fn verify_epoch(
+        &self,
+        epoch: &Epoch,
+        entries: &[ReceiptChainEntry],
+    ) -> Result<(), EpochError> {
         // Check that entries match the epoch's sequence range
         if entries.is_empty() {
             return Err(EpochError::NonContiguousEntries);
@@ -564,7 +568,9 @@ mod tests {
         let tree = MerkleTree::from_hashes(&hashes);
 
         for i in 0..4 {
-            let proof = tree.proof(i).expect(&format!("Proof for index {}", i));
+            let proof = tree
+                .proof(i)
+                .unwrap_or_else(|| panic!("Proof for index {}", i));
             assert!(proof.verify(), "Proof verification failed for index {}", i);
         }
     }
@@ -807,7 +813,7 @@ mod tests {
         };
 
         // 150 total entries means 50 uncompacted, not enough
-        assert!(!compactor.should_compact(150, &[epoch1.clone()]));
+        assert!(!compactor.should_compact(150, std::slice::from_ref(&epoch1)));
 
         // 250 total entries means 150 uncompacted, enough
         assert!(compactor.should_compact(250, &[epoch1]));

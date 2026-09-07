@@ -3,13 +3,13 @@
 # Tool Governance Lifecycle — Empirical Test
 # ─────────────────────────────────────────────────────────────────────
 #
-# Phase 1: Forge evaluates and hardens IronClaw (known governed tool)
+# Phase 1: Forge evaluates and hardens a known governed tool
 # Phase 2: ZP detects ungoverned process (python3 http.server)
 #
 # Prerequisites:
 #   - ./zp-dev.sh release completed
 #   - zp serve running
-#   - IronClaw registered in tool-ports.json
+#   - the tool registered in tool-ports.json
 #
 # Usage: ./scripts/test-governance-lifecycle.sh [phase1|phase2|both]
 
@@ -29,7 +29,7 @@ warn()   { echo -e "  ${Y}⚠${N} $1"; }
 fail()   { echo -e "  ${R}✗${N} $1"; }
 
 phase1() {
-    header "PHASE 1: Forge evaluates and hardens IronClaw"
+    header "PHASE 1: Forge evaluates and hardens a governed tool"
 
     # Step 1: Check current posture
     header "Step 1: Current governance posture"

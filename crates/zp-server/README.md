@@ -106,7 +106,7 @@ Configuration is loaded from environment variables with sensible defaults:
 | `ZP_OPERATOR_PROMPT` | (default prompt) | Custom base prompt for the operator |
 | `ZP_TRUST_TIER` | `tier0` | Trust tier: `tier0`, `tier1`, or `tier2` |
 | `ZP_DATA_DIR` | `./data/zeropoint` | Directory for persistent data |
-| `RUST_LOG` | `info` | Tracing subscriber log level |
+| `RUST_LOG` | `info` **in the daemon only** | Two paths, different defaults. `zp serve` daemonizes and `spawn_serve_daemon` sets `RUST_LOG=info` when it is unset (`zp-cli/src/main.rs:1736`), so the daemon's log file is useful by default — it is at `<ZP_HOME>/logs/zp-serve.log`, **not** wherever you redirected the launching command, which only captures the pre-fork lines. Every other path builds the subscriber from `EnvFilter::from_default_env()` with no fallback (`main.rs:1797`), where unset means `error` and every `info!` is discarded. |
 
 ## Server Startup
 

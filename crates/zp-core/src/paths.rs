@@ -191,9 +191,35 @@ pub fn guard_receipts_dir() -> Result<PathBuf, PathError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, MutexGuard, OnceLock};
+
+    /// Serialises the tests that mutate `ZP_HOME` / `ZP_DATA_DIR`.
+    ///
+    /// Those are **process-global**, and `cargo test` runs tests on parallel
+    /// threads, so without this the tests race each other rather than the code.
+    /// Observed 2026-08-09: `test_audit_db_is_under_data_dir_not_home` removed
+    /// `ZP_DATA_DIR`, resolved `audit_db_path()` correctly to
+    /// `/tmp/zp-paths-test-151/data/audit.db`, and then read `data_dir()` —
+    /// which `test_data_dir_override` had meanwhile pointed at `/custom/data`.
+    /// The assertion failed on a path that was, in isolation, entirely correct.
+    ///
+    /// The failure was latent for as long as the scheduling happened to favour
+    /// it; adding unrelated tests elsewhere in the crate was enough to surface
+    /// it. Do not "fix" this with `--test-threads=1` — that hides the race for
+    /// everyone else too. Any new test here that touches an env var must take
+    /// this lock.
+    fn env_lock() -> MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        // A panicking test poisons the mutex; recover rather than cascading one
+        // real failure into every other test in the module.
+        LOCK.get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 
     #[test]
     fn test_zp_home_override() {
+        let _env = env_lock();
         // ZP_HOME takes precedence
         std::env::set_var("ZP_HOME", "/tmp/zp-test-home");
         let h = home().unwrap();
@@ -203,6 +229,7 @@ mod tests {
 
     #[test]
     fn test_default_home_is_under_user_home() {
+        let _env = env_lock();
         std::env::remove_var("ZP_HOME");
         let h = home().unwrap();
         assert!(h.ends_with("ZeroPoint"));
@@ -210,13 +237,32 @@ mod tests {
 
     #[test]
     fn test_subdirectories() {
+        let _env = env_lock();
         std::env::set_var("ZP_HOME", "/tmp/zp-paths-test");
-        assert_eq!(keys_dir().unwrap(), PathBuf::from("/tmp/zp-paths-test/keys"));
-        assert_eq!(data_dir().unwrap(), PathBuf::from("/tmp/zp-paths-test/data"));
-        assert_eq!(audit_db_path().unwrap(), PathBuf::from("/tmp/zp-paths-test/data/audit.db"));
-        assert_eq!(vault_path().unwrap(), PathBuf::from("/tmp/zp-paths-test/vault.json"));
-        assert_eq!(session_path().unwrap(), PathBuf::from("/tmp/zp-paths-test/session.json"));
-        assert_eq!(policies_dir().unwrap(), PathBuf::from("/tmp/zp-paths-test/policies"));
+        assert_eq!(
+            keys_dir().unwrap(),
+            PathBuf::from("/tmp/zp-paths-test/keys")
+        );
+        assert_eq!(
+            data_dir().unwrap(),
+            PathBuf::from("/tmp/zp-paths-test/data")
+        );
+        assert_eq!(
+            audit_db_path().unwrap(),
+            PathBuf::from("/tmp/zp-paths-test/data/audit.db")
+        );
+        assert_eq!(
+            vault_path().unwrap(),
+            PathBuf::from("/tmp/zp-paths-test/vault.json")
+        );
+        assert_eq!(
+            session_path().unwrap(),
+            PathBuf::from("/tmp/zp-paths-test/session.json")
+        );
+        assert_eq!(
+            policies_dir().unwrap(),
+            PathBuf::from("/tmp/zp-paths-test/policies")
+        );
         std::env::remove_var("ZP_HOME");
     }
 
@@ -227,6 +273,7 @@ mod tests {
     /// under `data_dir()`, never directly under `home()`.
     #[test]
     fn test_audit_db_is_under_data_dir_not_home() {
+        let _env = env_lock();
         std::env::set_var("ZP_HOME", "/tmp/zp-paths-test-151");
         std::env::remove_var("ZP_DATA_DIR");
         let audit = audit_db_path().unwrap();
@@ -244,13 +291,17 @@ mod tests {
 
     #[test]
     fn test_data_dir_override() {
+        let _env = env_lock();
         std::env::set_var("ZP_HOME", "/tmp/zp-paths-test");
         std::env::set_var("ZP_DATA_DIR", "/custom/data");
         assert_eq!(data_dir().unwrap(), PathBuf::from("/custom/data"));
         // audit_db_path inherits the ZP_DATA_DIR override transitively —
         // this is the Architecture II.0 contract: one resolver, env-respecting,
         // every audit-store consumer sees the same file.
-        assert_eq!(audit_db_path().unwrap(), PathBuf::from("/custom/data/audit.db"));
+        assert_eq!(
+            audit_db_path().unwrap(),
+            PathBuf::from("/custom/data/audit.db")
+        );
         std::env::remove_var("ZP_DATA_DIR");
         std::env::remove_var("ZP_HOME");
     }

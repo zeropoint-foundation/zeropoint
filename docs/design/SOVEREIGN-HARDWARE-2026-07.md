@@ -2,13 +2,15 @@
 
 **Tier 2 canonical elaboration.** Elaborates `KEEL-2026-07.md` §II.14 (canonical substrate form) and Part XIV (Substrate Realization) at the hardware-design layer. Where `SUBSTRATE-FORM-2026-07.md` declares the three Forms and their trust-chain reach, this doc specifies the physical hardware architecture that realizes Sovereign Form on operator-controlled boards. Canonical claims live in KEEL.
 
-Draft — 2026-07-10 — internal audience only. Composes with `SUBSTRATE-FORM-2026-07.md` (Form definitions), `OBSERVATION-PLANE-2026-07.md` (adds physical observation layer via hardware self-observer), `HARDWARE-OBSERVER-2026-07.md` (companion — subsystem detail), `QUARANTINE-PLANE-2026-07.md` (firmware and boot artifacts are quarantine-relevant), `CIRCUIT-BREAKER-2026-07.md` (hardware anomalies can trigger circuit breaker escalation).
+Draft — 2026-07-10, **revised 2026-07-27** to add the two-role topology framing per `HARDWARE-ROLE-SEPARATION-2026-07.md`. Composes with `HARDWARE-ROLE-SEPARATION-2026-07.md` (canonical two-role topology — the tier ladder below is the *Sentinel-role* axis; the Regent-role hardware axis parallels it), `SUBSTRATE-FORM-2026-07.md` (Form definitions), `OBSERVATION-PLANE-2026-07.md` (adds physical observation layer via hardware self-observer), `HARDWARE-OBSERVER-2026-07.md` (companion — Tier 1+ hardware coprocessor observer, one of three observer classes per the role-separation doc), `QUARANTINE-PLANE-2026-07.md` (firmware and boot artifacts are quarantine-relevant), `CIRCUIT-BREAKER-2026-07.md` (hardware anomalies can trigger circuit breaker escalation).
 
 ## Framing
 
 The substrate's canonical Form is Sovereign — a reproducibly-built OS with operator-controlled hardware trust chain. Commodity Sovereign Form (Raspberry Pi 5 with LetsTrust TPM) works today at $200 all-in and validates the thesis. But commodity hardware carries residual vendor-controlled surfaces (Broadcom boot ROM, closed WiFi firmware, TPM firmware trust) that the operator cannot inspect or replace.
 
 The sovereign hardware arc is the substrate's answer to *what deeper hardware sovereignty looks like when the operator is willing to invest*. It's not "necessary for Sovereign Form" — Pi 5 is Sovereign Form. It's "how far can we extend operator control of the physical stack." Three graduation tiers, each with substantive trust-chain improvements, each achievable by ordinary independent development.
+
+**Two-role topology, per `HARDWARE-ROLE-SEPARATION-2026-07.md`:** the tier ladder below is now understood as the **Sentinel-role hardware axis** — hardware for the network-adjacent, network-boundary observer role. A parallel **Regent-role hardware axis** exists for the inference-host role, with M4 Pro Mac Mini (64GB unified memory) as the entry-point reference hardware and future dedicated inference boxes (discrete GPU, sovereign compute clusters) as higher tiers on that axis. The two axes intersect at the substrate: a sovereign node is a Sentinel-tier hardware plus a Regent-tier hardware, coordinated via chain-anchored discipline. This doc's tier structure describes the Sentinel-role axis in detail; the Regent-role axis is described at a higher level below and elaborated in the forthcoming Regent hardware design doc.
 
 The load-bearing architectural claim: **PCB design and manufacturing are NOT gatekept.** PCBway, JLCPCB, Seeed Studio, OSHPark — the fab industry is a commodity service. Anyone can upload Gerbers and receive PCBs in 3-7 days. The gate is at specific components (modern high-performance SoCs from vendors requiring NDA + volume) and advanced foundry nodes (billion-dollar partnerships). Everything else — SoMs, discrete TPMs, secure elements, hardware kill switches, tamper detection, custom board layout — is buildable today by small independent teams.
 
@@ -29,13 +31,14 @@ Four graduated tiers of hardware sovereignty. Each tier is real Sovereign Form; 
 
 ### Tier 0 — Commodity Sovereign Form (Pi 5 + LetsTrust TPM)
 
-The entry point. Raspberry Pi 5 (8GB), Argon ONE V3 M.2 NVMe case, Kingston NV2 250GB SSD, official 27W PSU, LetsTrust TPM 2.0 module. Total: ~$200.
+The entry point. Raspberry Pi 5 (8GB), Argon ONE V3 M.2 NVMe case, Kingston NV2 250GB SSD, official 27W PSU, LetsTrust TPM 2.0 module. Total: ~$200 (baseline, launch pricing; 2026 street prices reflect demand-driven premium).
 
+- **Role assignment (per `HARDWARE-ROLE-SEPARATION-2026-07.md`)**: **Sentinel-role reference hardware.** Network-adjacent, allowlist enforcement, destination monitoring, chain-anchored egress attestation. The Pi 5's strengths — cheap sustained pattern matching, NEON-accelerated hashing and regex, low-power always-on operation — are exactly what the Sentinel role needs. Regent-role work (LLM inference) lives on a parallel node (M4 Pro Mac Mini reference), not on Tier 0 hardware.
 - **Realized**: reproducibly-built OS (NixOS), measured boot with TPM PCR values, sealed FDE, chain-anchored `boot:generation` receipts, all Sovereign Form userland capabilities per SUBSTRATE-FORM-2026-07.md.
 - **Residual vendor surface**: Broadcom SoC boot ROM (closed), Broadcom WiFi firmware (closed), Cypress Bluetooth firmware (closed), Infineon TPM firmware (closed but well-audited, standardized).
-- **Form Disclosure**: "Sovereign Form userland with Broadcom-controlled SoC firmware and Infineon-implemented TPM."
+- **Form Disclosure**: "Sovereign Form userland in Sentinel role, with Broadcom-controlled SoC firmware and Infineon-implemented TPM."
 
-Available today. Democratizes sovereignty at accessible price point. Sufficient for substrate development, for smaller sovereigns, and as the reference against which higher tiers are compared.
+Available today. Democratizes sovereignty at accessible price point. Sufficient for the Sentinel-role sovereign, for substrate development, and as the reference against which higher Sentinel-role tiers are compared. Not sufficient as a Regent-role node — see the Regent-role tier axis below.
 
 ### Tier 1 — Custom carrier board around Pi CM5
 
@@ -90,6 +93,24 @@ The full sovereignty story. Design and tape out a custom SoC on an open Process 
 - **Cost**: Google MPW is free for open designs; commercial multi-project wafers are $10k-100k depending on node.
 
 This tier is aspirational for most operators today. Worth spec'ing so the architecture is prepared when it becomes accessible.
+
+## Regent-role hardware axis (parallel to the Sentinel-role tier ladder above)
+
+The Sentinel-role tier ladder describes hardware for the network-boundary observer role. The Regent-role — inference host, holds Companion state, runs adapters, does the cognitive work — has its own hardware axis with different design pressures. Full elaboration is deferred to a forthcoming Regent hardware design doc; this section names the entry point and sketches the axis so this doc's tier ladder is not misread as covering the whole sovereign node.
+
+### Regent-Tier 0 — APOLLO (M4 Pro Mac Mini, 64GB unified memory)
+
+The Regent-role entry point. M4 Pro Mac Mini with 64GB unified memory, running macOS in Full Security posture with FileVault-sealed OS, Secure Enclave-derived Genesis, in-process output observer as a launchd service. Total: ~$2000-2400 depending on configuration.
+
+- **Realized**: Metal-accelerated inference via llama.cpp or MLX at 7B–13B base models, comfortable concurrent adapter residence, X-LoRA-style experimentation feasible, in-process output observer without starving inference, Secure Enclave attestation of Genesis-signed events on the Regent chain segment.
+- **Residual vendor surface**: Apple secure boot ROM (closed, hardware-attested), macOS closed source (SEP firmware, Startup Security policy engine), Apple-controlled Secure Enclave firmware.
+- **Form Disclosure**: "Sovereign Form userland in Regent role, with Apple-controlled secure boot and Secure Enclave firmware, hardware-attested via SEP."
+
+Available today. Not price-democratic like Tier 0 Sentinel hardware, but a real entry point that pairs with the Pi 5 Sentinel to complete the two-node sovereign topology. Stand-up ceremony in `docs/handoffs/mac-mini-regent-standup-checklist-2026-07-27.md`.
+
+### Regent-Tier 1+ (future arc)
+
+Higher Regent tiers follow the same discipline pattern as the Sentinel-role ladder above — custom carrier boards around AI-workload SoMs, RISC-V vector-extension SoCs when they become inference-viable, dedicated inference boxes with discrete GPUs where the operator wants graphics-vendor-independence, and eventually sovereign compute clusters coordinated via the mesh protocol. Design pressures differ from the Sentinel axis: heat dissipation, GPU vendor stack (currently NVIDIA-dominant, with implications for the license posture — see `LOCAL-MODEL-SELECTION-2026-07.md`), memory bandwidth for large models. Full tier ladder for the Regent-role axis will be authored when Tier 1 Regent hardware becomes a concrete target.
 
 ## Canonical board architecture
 

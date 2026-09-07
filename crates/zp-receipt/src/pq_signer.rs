@@ -16,8 +16,8 @@
 
 use crate::Receipt;
 use base64::Engine;
-use ml_dsa::{ExpandedSigningKey, MlDsa65, VerifyingKey};
 use ml_dsa::signature::SignatureEncoding;
+use ml_dsa::{ExpandedSigningKey, MlDsa65, VerifyingKey};
 
 /// ML-DSA-65 post-quantum signer for receipts.
 ///
@@ -90,8 +90,7 @@ impl PqSigner {
 
         let sig = self.expanded.sign(receipt.content_hash.as_bytes());
         let sig_bytes = sig.to_bytes();
-        let sig_b64 =
-            base64::engine::general_purpose::STANDARD.encode::<&[u8]>(sig_bytes.as_ref());
+        let sig_b64 = base64::engine::general_purpose::STANDARD.encode::<&[u8]>(sig_bytes.as_ref());
         let vk_hex = self.verifying_key_hex();
 
         receipt
@@ -107,10 +106,7 @@ impl PqSigner {
     /// Searches [`Receipt::signatures`] for an `Experimental("ML-DSA-65")`
     /// block and verifies it. Returns `Err` if no ML-DSA-65 signature is
     /// present; returns `Ok(false)` if the signature doesn't match.
-    pub fn verify_receipt(
-        receipt: &Receipt,
-        verifying_key_hex: &str,
-    ) -> Result<bool, String> {
+    pub fn verify_receipt(receipt: &Receipt, verifying_key_hex: &str) -> Result<bool, String> {
         use ml_dsa::signature::Verifier;
 
         let sig_b64 = receipt
@@ -130,15 +126,13 @@ impl PqSigner {
 
         // Reconstruct verifying key from hex
         let vk_bytes = hex_decode(verifying_key_hex)?;
-        let encoded_vk = ml_dsa::EncodedVerifyingKey::<MlDsa65>::try_from(
-            vk_bytes.as_slice(),
-        )
-        .map_err(|_| {
-            format!(
-                "Invalid ML-DSA-65 verifying key length: expected 1952, got {}",
-                vk_bytes.len()
-            )
-        })?;
+        let encoded_vk = ml_dsa::EncodedVerifyingKey::<MlDsa65>::try_from(vk_bytes.as_slice())
+            .map_err(|_| {
+                format!(
+                    "Invalid ML-DSA-65 verifying key length: expected 1952, got {}",
+                    vk_bytes.len()
+                )
+            })?;
         let verifying_key = VerifyingKey::<MlDsa65>::decode(&encoded_vk);
 
         Ok(verifying_key

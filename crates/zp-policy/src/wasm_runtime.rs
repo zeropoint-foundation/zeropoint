@@ -325,18 +325,50 @@ impl PolicyRule for WasmPolicyModule {
         &self.name
     }
 
+    /// A module that cannot answer blocks.
+    ///
+    /// # Why this fails closed (2026-08-14)
+    ///
+    /// This arm previously returned `None` — "no opinion" — with the comment
+    /// *"We never let a broken WASM module block the pipeline."* Because
+    /// `DefaultAllowRule` sits last in the chain, no opinion resolves to
+    /// allow. The consequence is that **a module which fails reliably is a
+    /// module that has been silently disabled**, and an attacker who can make
+    /// a policy module trap — malformed input, fuel exhaustion, a memory
+    /// fault — has removed it from the gate without touching the registry.
+    ///
+    /// An error here is not a policy outcome. It means the policy was never
+    /// evaluated, and the correct response to "I could not determine whether
+    /// this is allowed" is not "allow". Compare `firewall-common`'s
+    /// `trap "error_handler" ERR`, which aborts rather than leave a
+    /// half-built ruleset: the failure of the enforcement mechanism must not
+    /// be indistinguishable from its permission.
+    ///
+    /// See `docs/design/WHONIX-LESSONS.md` §4 and
+    /// `docs/design/THREAT-MODEL-2026-08.md` §6.
+    ///
+    /// The availability cost is real and accepted: a module that traps on
+    /// every request now blocks every request routed through it. That is
+    /// loud, attributable to a named module, and fixable. The previous
+    /// behaviour was quiet and looked like a working gate.
     fn evaluate(&self, context: &PolicyContext) -> Option<PolicyDecision> {
         match self.evaluate_wasm(context) {
             Ok(decision) => decision,
             Err(e) => {
-                // WASM module errors are treated as "no opinion" with a warning.
-                // We never let a broken WASM module block the pipeline.
-                tracing::warn!(
+                tracing::error!(
                     module = %self.name,
                     error = %e,
-                    "WASM policy module error — treating as no opinion"
+                    "WASM policy module error — blocking; a module that cannot \
+                     answer must not be read as permission"
                 );
-                None
+                Some(PolicyDecision::Block {
+                    reason: format!(
+                        "policy module `{}` failed to evaluate: {e}. A policy \
+                         that cannot be evaluated is not a policy that permits.",
+                        self.name
+                    ),
+                    policy_module: self.name.clone(),
+                })
             }
         }
     }

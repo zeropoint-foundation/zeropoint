@@ -1,0 +1,38 @@
+[package]
+name = "zp-ontology"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Ontology layer + Cartographer — derived object graph over the ZeroPoint receipt chain"
+
+[dependencies]
+# Workspace substrate
+zp-core = { path = "../zp-core" }
+
+# Storage
+rusqlite = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Hashing (content-addressed object IDs)
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+# UUID reconstruction for AuditId roundtrip
+uuid = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

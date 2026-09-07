@@ -1,28 +1,29 @@
 {
-  "updated_at": "2026-07-10T20:45:00Z",
-  "current_phase": "Regent operational on Claude Sonnet 4.6 via Abacus RouteLLM; steering toward GLM 5.2 stand-up, not yet arrived",
-  "focus": "Substrate hygiene (chain integrity, hot-loop fix, corpus refactor) while running against Sonnet 4.6. GLM 5.2 stand-up is the next phase.",
-  "substrate_binary_status": "running on APOLLO",
+  "updated_at": "2026-08-18T21:40:00Z",
+  "current_phase": "Reserved authority named and half-wired; substrate reflex arc closed, learning arc not. Sequencing brief proposes S0 (turn officers + cartographer + regent on and watch 72h) as the next step.",
+  "focus": "Connect what exists rather than build more. Three of six loops are closed; L4 (understanding) has no consumer, L5 (verification) has no corrective, L6 (improvement) emits stage 1 only. Coverage is 78.4% reported / 45.0% live-only.",
+  "substrate_binary_status": "running on APOLLO — officers, cartographer and regent all default false in ServerConfig::default(); live config not verified from this session",
   "in_progress": [
-    "Chain integrity investigation: broken link at 019f433f-0dc0-79c2-aaf4-ebf56ed379db (Steward finding since 2026-07-08T19:45:18)",
-    "Regent behavior: over-cautious ask-permission loop on baseline-scope reads (Sonnet 4.6 alignment)",
-    "Spend log wiring: dashboard/data/spend.jsonl has no entries; InferenceBackend needs append hook",
-    "Build process design pass: kill/rebuild/restart cycle likely introduced chain break"
+    "Reserved-authority machinery: reserved_class + N0 probe live in zp-core with an end-to-end CLI refusal test; gate and chain-validation enforcement points (spec §4 rows 3-4) unbuilt",
+    "authority:reserved:{refused,declared,withdrawn} added to RESERVED_RECEIPT_PREFIXES 2026-08-18 — note it did NOT move the maturity number, because NON-DELEGABLE-AUTHORITY sits outside CANONICAL-CORPUS-INDEX and the connection map never declared those edges",
+    "30 paths staged and uncommitted: four 2026-08-16 design docs, the corpus index (5 additions), substrate_validate.rs (+81 reserved prefixes), docs/review/sources/ incl. the CACR primary",
+    "Two KEEL amendments in flight and disjoint — §III.18 + new §III.26 (reserved carve-out), §III.24 fifth clause (conversational-inference boundary). KEEL currently ends at III.25",
+    "Operator decision open: does Regent self-buildout require local inference? AUTONOMIC-ROADMAP says no, REGENT-SELF-BUILDOUT-TRAJECTORY says yes. Unreconciled, no mutual citation"
   ],
-  "next_phase_glm52_standup": [
-    "Author GLM 5.2 system prompt variant (prompts/glm/unified_system.md)",
-    "Write GLM 5.2 model dossier at models/glm/model_dossier.toml",
-    "Add GLM 5.2 to ~/ZeroPoint/cloud-models.toml",
-    "CloudMandate ceremony for Abacus + GLM 5.2 with token and cost caps",
-    "Swap config.toml reasoning_model and routing_model to glm-5.2 identifier",
-    "End-to-end test: operator prompt → Regent cycle → GLM 5.2 → tool dispatch → chain receipts"
+  "next": [
+    "S0 — enable officers_enabled + cartographer_enabled + regent_enabled together, run 72h, count emissions by receipt family",
+    "S1 — report live-only beside maturity; stamp tie-offs with commit + date; age un-renewed tie-offs back to defect",
+    "S2 — add zp-ontology to zp-regent deps and an ontology field on CognitiveContext BEFORE enabling the Cartographer (consumer first)",
+    "S3 — put a signature under the precedent loop: 0 of 10,018 chain entries signed as of 2026-08-01",
+    "S4 — decide what consumes cognitive:correction:violated, including the legitimate answer 'nothing, permanently'",
+    "Fix zp-memory-index: declared as backing the memory:retrieve gated tool, zero dependents"
   ],
   "recent_completions": [
-    "SUBSTRATE-FORM-2026-07.md drafted (three-Form architectural pivot: Companion, Appliance, Sovereign)",
-    "OBSERVATION-PLANE-2026-07.md drafted (six observation surfaces, delegation-scoped)",
-    "KEEL amended: Part XIV Substrate Realization, new invariant II.14, inference-sourcing decoupled from Form",
-    "CANONICAL-CORPUS-INDEX-2026-07.md established (four-tier hierarchy)",
-    "IronClaw purged from current-context canonical corpus",
-    "Substrate hot-loop bug fixed: PortRegistry::new no longer persists on empty load (broke 10Hz feedback loop)"
+    "External convergence evaluation — twelve external primitives, zero adopted, two deferred, ten rejected; six proved to be things ZP declared and has not built",
+    "Reserved-authority reevaluation — eleven predating assertions inventoried; the substrate cannot establish that an acting identity is the Genesis holder",
+    "Consolidation map across five concurrent workstreams; collision surface and landing order recorded",
+    "Substrate sequencing brief — six loops traced hop by hop, S0-S7 proposed with measurable exits",
+    "Full adversarial accuracy pass over all three briefs: 30 errors found and corrected, two blocking",
+    "Dashboard status schema fixed: index.html:724 reads status.next, the data file had next_phase_glm52_standup, so the Next panel had rendered empty since 2026-07-10"
   ]
 }

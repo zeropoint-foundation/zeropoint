@@ -72,11 +72,10 @@ pub fn run_emit(
     // use it here; a follow-up patch should rename that method and correct the
     // doc so future callers don't make the same mistake.
     let genesis_record_path = resolve_zp_home().join("genesis.json");
-    let genesis_secret = zp_keys::load_sovereign_root(&genesis_record_path)
-        .context(
-            "Failed to load Genesis via sovereignty provider — \
+    let genesis_secret = zp_keys::load_sovereign_root(&genesis_record_path).context(
+        "Failed to load Genesis via sovereignty provider — \
              run `zp init` or confirm hardware wallet is connected and unlocked",
-        )?;
+    )?;
 
     let secret: [u8; 32] = if let Some(agent) = agent_id {
         match keyring.load_agent(agent) {
@@ -234,8 +233,8 @@ pub fn emit_tool_launch_receipt(
             .context("genesis secret via sovereignty provider")?;
         let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
         let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
-        let mut store = AuditStore::open_signed(&db_path, audit_signer)
-            .context("open signed store")?;
+        let mut store =
+            AuditStore::open_signed(&db_path, audit_signer).context("open signed store")?;
         let entry = UnsealedEntry::new(
             ActorId::System("zp-configure-exec".to_string()),
             AuditAction::SystemEvent {

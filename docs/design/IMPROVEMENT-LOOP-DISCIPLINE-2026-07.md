@@ -153,7 +153,7 @@ Stage 1t declared `reopen_watch: "<canary schedule | chain_event_pattern | none>
 | `reviewed` | prose + declared cadence | surfaced to the operator on schedule |
 | `none` | — | legal only for `declined` and `limited` |
 
-**The tier split is the authority boundary, not a convenience.** Evaluating a structured predicate is *applying* criteria; under `ZEP-self-referential-authorship-2026-07.md` §III.27's criteria-versus-inputs test that is not Class 3, so the canary — and eventually the Regent — may do it without operator ceremony. Judging whether prose has become true is *interpreting* criteria, which is Class 3-adjacent and stays with the operator. The mechanical question and the authority question have the same answer, and a condition's tier declares which one it is.
+**The tier split is the authority boundary, not a convenience.** Evaluating a structured predicate is *applying* criteria; under `docs/handoffs/ZEP-self-referential-authorship-2026-07.md` §III.27's criteria-versus-inputs test that is not Class 3, so the canary — and eventually the Regent — may do it without operator ceremony. Judging whether prose has become true is *interpreting* criteria, which is Class 3-adjacent and stays with the operator. The mechanical question and the authority question have the same answer, and a condition's tier declares which one it is.
 
 **Predicate forms.** Deliberately four. Each is justified by a reopen condition that exists, not by anticipated need; adding a fifth requires a condition that needs it.
 

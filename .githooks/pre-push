@@ -27,8 +27,22 @@
 #
 # Pre-push needs to be fast (~5-30s) so people don't disable it.
 # `cargo check` catches the build-doesn't-resolve-types class of
-# bugs, which is what motivated this hook. Test failures are caught
-# by the existing discipline pins (cargo test on demand) and CI.
+# bugs, which is what motivated this hook.
+#
+# `--all-targets` added 2026-08-09. Without it, `cargo check` compiles
+# only the lib/bin targets — so a test fixture that no longer compiles
+# is invisible. On 2026-08-09 `zp-configure`'s `test_manifest` helper
+# was missing a `ToolManifest` field added later: `cargo build
+# --workspace` was green and `cargo test --workspace` could not build
+# at all. `--all-targets` closes that gap.
+#
+# What this hook once claimed — "test failures are caught by the
+# discipline pins (cargo test on demand) and CI" — turned out to rest
+# on two things that were not happening. `cargo test on demand` was a
+# developer-memory rule; CI triggers on push to main, and main sat 93
+# commits ahead of origin with no push. Under a local-first posture
+# this hook does not run at all. The pins are now read by
+# `.githooks/pre-commit`. See SEAM-010.
 #
 # # Activation
 #
@@ -58,7 +72,7 @@ echo "pre-push: materializing HEAD into temp worktree..."
 git worktree add --quiet --detach "$WORKTREE" HEAD
 
 echo "pre-push: cargo check --workspace against HEAD..."
-if ! ( cd "$WORKTREE" && cargo check --workspace --quiet ); then
+if ! ( cd "$WORKTREE" && cargo check --workspace --all-targets --quiet ); then
     echo ""
     echo "pre-push: HEAD does not build cleanly. Push aborted."
     echo ""

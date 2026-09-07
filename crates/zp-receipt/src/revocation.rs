@@ -35,9 +35,7 @@ impl RevocationIndex {
     ///
     /// Scans each receipt's `revokes` and `supersedes` fields to
     /// populate the index. Call this at startup with the full chain.
-    pub fn rebuild_from_receipts<'a>(
-        receipts: impl IntoIterator<Item = &'a Receipt>,
-    ) -> Self {
+    pub fn rebuild_from_receipts<'a>(receipts: impl IntoIterator<Item = &'a Receipt>) -> Self {
         let mut index = Self::new();
         for receipt in receipts {
             index.index_receipt(receipt);
@@ -50,8 +48,7 @@ impl RevocationIndex {
     /// Called incrementally when a new receipt is appended to the chain.
     pub fn index_receipt(&mut self, receipt: &Receipt) {
         for revoked_id in &receipt.revokes {
-            self.revoked
-                .insert(revoked_id.clone(), receipt.id.clone());
+            self.revoked.insert(revoked_id.clone(), receipt.id.clone());
         }
         for superseded_id in &receipt.supersedes {
             self.superseded
@@ -101,8 +98,8 @@ mod tests {
     use crate::{ReceiptBuilder, ReceiptType, Status};
 
     fn make_receipt(id: &str, revokes: Vec<&str>, supersedes: Vec<&str>) -> Receipt {
-        let mut builder = ReceiptBuilder::new(ReceiptType::Execution, "test")
-            .status(Status::Success);
+        let mut builder =
+            ReceiptBuilder::new(ReceiptType::Execution, "test").status(Status::Success);
 
         for r in &revokes {
             builder = builder.revokes_receipt(r);

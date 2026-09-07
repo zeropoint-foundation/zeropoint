@@ -24,6 +24,104 @@ pub mod trezor;
 pub mod yubikey;
 
 use crate::error::KeyError;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Whether the touch banner has already been shown this process.
+///
+/// One sovereign root per process means one ceremony per process, so the
+/// full banner belongs once. A device that asks twice gets a one-line
+/// reminder rather than a second wall of block letters.
+static TOUCH_PROMPTED: AtomicBool = AtomicBool::new(false);
+
+/// Tell the operator, on their terminal, that a hardware device is waiting
+/// for a physical touch.
+///
+/// # Why this exists
+///
+/// A hardware-Genesis boot blocks indefinitely on a button press — which
+/// is correct, because the ceremony is bounded by the operator and not by
+/// a clock. But until 2026-07-28 the only sign of it was
+/// `tracing::info!("Waiting for user confirmation…")`, which under a
+/// normal launch goes to a logfile. From the terminal, a boot waiting on a
+/// human was indistinguishable from a hang: `zp-dev.sh` gave up after 180
+/// seconds and printed "Failed to start" while the server was alive and
+/// healthy, with a device sitting three feet away asking to be touched.
+///
+/// `zp-dev.sh` now watches the log and prints a banner, but that only
+/// helps launches that go through the wrapper. Appliance and Sovereign
+/// Form have no wrapper. The prompt belongs to whoever is blocking, which
+/// is here.
+///
+/// # Why stderr, and why only on a TTY
+///
+/// stderr is the operator channel; stdout may be a pipe carrying real
+/// output. And block letters written into a captured logfile are noise —
+/// `std::io::IsTerminal` gates on an actual terminal being attached, so a
+/// headless or wrapped launch is unaffected and keeps the `tracing` line
+/// as its record.
+///
+/// This is deliberately not a `tracing` event. Tracing is the substrate's
+/// record of what happened; this is an instruction to a person standing
+/// at a keyboard, and routing it through the same channel is what caused
+/// the problem in the first place.
+/// # Why this never names the gesture
+///
+/// It used to read "Press its button." A Trezor Model T handles PIN entry
+/// on-device, in an exchange the host never sees — no `PinMatrixRequest`
+/// reaches this process, so at the moment the banner prints there is no way
+/// to know whether the device will ask for a press or a PIN.
+///
+/// Observed 2026-07-31: the operator read "press the button", waited for a
+/// button prompt that was never coming, and the device cancelled with
+/// `PIN entry cancelled`, taking the boot with it. A confident instruction
+/// about a state the process cannot observe is the same defect as a Regent
+/// claiming an act it did not perform — and it costs more, because a person
+/// acts on it.
+///
+/// Say what is known: the device wants something. Let the device say what.
+pub fn prompt_operator_touch(device: &str) {
+    use std::io::IsTerminal;
+
+    if !std::io::stderr().is_terminal() {
+        return;
+    }
+
+    // Bindings rather than consts: implicit format-arg capture is
+    // unambiguous for locals.
+    let y = "\x1b[1;33m";
+    let r = "\x1b[0m";
+
+    if TOUCH_PROMPTED.swap(true, Ordering::SeqCst) {
+        eprintln!("{y}   … still waiting on your {device} — check the device screen{r}");
+        return;
+    }
+
+    let spaced: String = device
+        .to_uppercase()
+        .chars()
+        .flat_map(|c| [c, ' '])
+        .collect();
+
+    eprint!("\x07"); // bell — a human is needed
+    eprintln!();
+    eprintln!("{y}   ██████  ████  ██  ██  █████ ██  ██{r}");
+    eprintln!("{y}     ██   ██  ██ ██  ██ ██     ██  ██{r}");
+    eprintln!("{y}     ██   ██  ██ ██  ██ ██     ██████{r}");
+    eprintln!("{y}     ██   ██  ██ ██  ██ ██     ██  ██{r}");
+    eprintln!("{y}     ██    ████   ████   █████ ██  ██{r}");
+    eprintln!();
+    eprintln!("{y}        ▶  Y O U R   {spaced}{r}");
+    eprintln!();
+    eprintln!("   Look at the device and do what it asks — that may be a button");
+    eprintln!("   press, or entering your PIN. The gesture is the device\'s to choose.");
+    eprintln!();
+    eprintln!("   ZeroPoint is unlocking the sovereign root — every signature this");
+    eprintln!("   session traces back to this one touch.");
+    eprintln!();
+    eprintln!("   This will wait as long as it takes. The ceremony is bounded by");
+    eprintln!("   you, not by a clock.");
+    eprintln!();
+}
 
 /// Shared constant for the encrypted secret file path.
 const SOVEREIGNTY_DIR: &str = "sovereignty";
@@ -258,10 +356,7 @@ fn decrypt_v2(blob_after_version: &[u8], wrapping_key: &[u8; 32]) -> Result<[u8;
 /// Legacy v0/v1 decrypt: deterministic BLAKE3-derived nonce.
 ///
 /// Read-only path — never used for new encryptions after Phase 2.
-fn decrypt_v1_legacy(
-    ciphertext: &[u8],
-    wrapping_key: &[u8; 32],
-) -> Result<[u8; 32], KeyError> {
+fn decrypt_v1_legacy(ciphertext: &[u8], wrapping_key: &[u8; 32]) -> Result<[u8; 32], KeyError> {
     use chacha20poly1305::{aead::Aead, ChaCha20Poly1305, KeyInit, Nonce};
 
     let cipher = ChaCha20Poly1305::new(wrapping_key.into());
@@ -381,7 +476,7 @@ pub(crate) fn save_enrollment(metadata: &EnrollmentMetadata) -> Result<(), KeyEr
     let filename = format!("{}_enrollment.json", metadata.mode);
     let json = serde_json::to_string_pretty(metadata)
         .map_err(|e| KeyError::Serialization(e.to_string()))?;
-    crate::secret_file::write_atomic(&dir.join(&filename), json.as_bytes())?;
+    crate::secret_file::write_atomic(dir.join(&filename), json.as_bytes())?;
     Ok(())
 }
 
@@ -418,7 +513,7 @@ pub(crate) fn load_enrollment(mode: &str) -> Result<EnrollmentMetadata, KeyError
 pub(crate) fn save_encrypted_secret(mode: &str, ciphertext: &[u8]) -> Result<(), KeyError> {
     let dir = sovereignty_dir()?;
     let filename = format!("{}_genesis.encrypted", mode);
-    crate::secret_file::write_atomic(&dir.join(&filename), ciphertext)?;
+    crate::secret_file::write_atomic(dir.join(&filename), ciphertext)?;
     Ok(())
 }
 
@@ -977,10 +1072,22 @@ mod tests {
     fn hw_providers_are_hardware_category() {
         use super::super::{SovereigntyCategory, SovereigntyMode};
 
-        assert_eq!(SovereigntyMode::YubiKey.category(), SovereigntyCategory::HardwareWallet);
-        assert_eq!(SovereigntyMode::Ledger.category(), SovereigntyCategory::HardwareWallet);
-        assert_eq!(SovereigntyMode::Trezor.category(), SovereigntyCategory::HardwareWallet);
-        assert_eq!(SovereigntyMode::OnlyKey.category(), SovereigntyCategory::HardwareWallet);
+        assert_eq!(
+            SovereigntyMode::YubiKey.category(),
+            SovereigntyCategory::HardwareWallet
+        );
+        assert_eq!(
+            SovereigntyMode::Ledger.category(),
+            SovereigntyCategory::HardwareWallet
+        );
+        assert_eq!(
+            SovereigntyMode::Trezor.category(),
+            SovereigntyCategory::HardwareWallet
+        );
+        assert_eq!(
+            SovereigntyMode::OnlyKey.category(),
+            SovereigntyCategory::HardwareWallet
+        );
     }
 
     // ── Stub providers return correct errors ────────────────────────
@@ -1071,7 +1178,9 @@ mod tests {
 
         for provider in &stubs {
             let cap = provider.detect();
-            if cap.implementation_status == super::super::ProviderStatus::DetectionOnly && !cap.available {
+            if cap.implementation_status == super::super::ProviderStatus::DetectionOnly
+                && !cap.available
+            {
                 assert!(
                     !cap.description.to_lowercase().contains("connect your"),
                     "{:?} says 'connect your' but is DetectionOnly: {:?}",
@@ -1167,14 +1276,38 @@ mod tests {
     fn from_onboard_str_parses_hardware_modes() {
         use super::super::SovereigntyMode;
 
-        assert_eq!(SovereigntyMode::from_onboard_str("trezor"), SovereigntyMode::Trezor);
-        assert_eq!(SovereigntyMode::from_onboard_str("ledger"), SovereigntyMode::Ledger);
-        assert_eq!(SovereigntyMode::from_onboard_str("yubikey"), SovereigntyMode::YubiKey);
-        assert_eq!(SovereigntyMode::from_onboard_str("yubi-key"), SovereigntyMode::YubiKey);
-        assert_eq!(SovereigntyMode::from_onboard_str("yubi_key"), SovereigntyMode::YubiKey);
-        assert_eq!(SovereigntyMode::from_onboard_str("onlykey"), SovereigntyMode::OnlyKey);
-        assert_eq!(SovereigntyMode::from_onboard_str("only-key"), SovereigntyMode::OnlyKey);
-        assert_eq!(SovereigntyMode::from_onboard_str("only_key"), SovereigntyMode::OnlyKey);
+        assert_eq!(
+            SovereigntyMode::from_onboard_str("trezor"),
+            SovereigntyMode::Trezor
+        );
+        assert_eq!(
+            SovereigntyMode::from_onboard_str("ledger"),
+            SovereigntyMode::Ledger
+        );
+        assert_eq!(
+            SovereigntyMode::from_onboard_str("yubikey"),
+            SovereigntyMode::YubiKey
+        );
+        assert_eq!(
+            SovereigntyMode::from_onboard_str("yubi-key"),
+            SovereigntyMode::YubiKey
+        );
+        assert_eq!(
+            SovereigntyMode::from_onboard_str("yubi_key"),
+            SovereigntyMode::YubiKey
+        );
+        assert_eq!(
+            SovereigntyMode::from_onboard_str("onlykey"),
+            SovereigntyMode::OnlyKey
+        );
+        assert_eq!(
+            SovereigntyMode::from_onboard_str("only-key"),
+            SovereigntyMode::OnlyKey
+        );
+        assert_eq!(
+            SovereigntyMode::from_onboard_str("only_key"),
+            SovereigntyMode::OnlyKey
+        );
     }
 
     #[test]

@@ -226,7 +226,9 @@ mod tests {
     #[test]
     fn upgrade_allowed() {
         let mut guard = DowngradeGuard::new();
-        guard.check_and_advance(PolicyVersion::new(1, 0, 0)).unwrap();
+        guard
+            .check_and_advance(PolicyVersion::new(1, 0, 0))
+            .unwrap();
         assert!(guard.check_and_advance(PolicyVersion::new(2, 0, 0)).is_ok());
         assert_eq!(guard.current_version(), PolicyVersion::new(2, 0, 0));
     }
@@ -234,21 +236,27 @@ mod tests {
     #[test]
     fn minor_upgrade_allowed() {
         let mut guard = DowngradeGuard::new();
-        guard.check_and_advance(PolicyVersion::new(1, 0, 0)).unwrap();
+        guard
+            .check_and_advance(PolicyVersion::new(1, 0, 0))
+            .unwrap();
         assert!(guard.check_and_advance(PolicyVersion::new(1, 1, 0)).is_ok());
     }
 
     #[test]
     fn patch_upgrade_allowed() {
         let mut guard = DowngradeGuard::new();
-        guard.check_and_advance(PolicyVersion::new(1, 2, 3)).unwrap();
+        guard
+            .check_and_advance(PolicyVersion::new(1, 2, 3))
+            .unwrap();
         assert!(guard.check_and_advance(PolicyVersion::new(1, 2, 4)).is_ok());
     }
 
     #[test]
     fn same_version_allowed_idempotent() {
         let mut guard = DowngradeGuard::new();
-        guard.check_and_advance(PolicyVersion::new(1, 0, 0)).unwrap();
+        guard
+            .check_and_advance(PolicyVersion::new(1, 0, 0))
+            .unwrap();
         assert!(guard.check_and_advance(PolicyVersion::new(1, 0, 0)).is_ok());
         // No history entry for same-version reload
         assert_eq!(guard.history().len(), 1); // Only the 0.0.0 → 1.0.0 transition
@@ -257,9 +265,13 @@ mod tests {
     #[test]
     fn major_downgrade_rejected() {
         let mut guard = DowngradeGuard::new();
-        guard.check_and_advance(PolicyVersion::new(2, 0, 0)).unwrap();
+        guard
+            .check_and_advance(PolicyVersion::new(2, 0, 0))
+            .unwrap();
 
-        let err = guard.check_and_advance(PolicyVersion::new(1, 0, 0)).unwrap_err();
+        let err = guard
+            .check_and_advance(PolicyVersion::new(1, 0, 0))
+            .unwrap_err();
         assert_eq!(err.attempted, PolicyVersion::new(1, 0, 0));
         assert_eq!(err.current, PolicyVersion::new(2, 0, 0));
     }
@@ -267,23 +279,33 @@ mod tests {
     #[test]
     fn minor_downgrade_rejected() {
         let mut guard = DowngradeGuard::new();
-        guard.check_and_advance(PolicyVersion::new(1, 5, 0)).unwrap();
+        guard
+            .check_and_advance(PolicyVersion::new(1, 5, 0))
+            .unwrap();
 
-        assert!(guard.check_and_advance(PolicyVersion::new(1, 4, 0)).is_err());
+        assert!(guard
+            .check_and_advance(PolicyVersion::new(1, 4, 0))
+            .is_err());
     }
 
     #[test]
     fn patch_downgrade_rejected() {
         let mut guard = DowngradeGuard::new();
-        guard.check_and_advance(PolicyVersion::new(1, 2, 5)).unwrap();
+        guard
+            .check_and_advance(PolicyVersion::new(1, 2, 5))
+            .unwrap();
 
-        assert!(guard.check_and_advance(PolicyVersion::new(1, 2, 4)).is_err());
+        assert!(guard
+            .check_and_advance(PolicyVersion::new(1, 2, 4))
+            .is_err());
     }
 
     #[test]
     fn is_allowed_without_advancing() {
         let mut guard = DowngradeGuard::new();
-        guard.check_and_advance(PolicyVersion::new(2, 0, 0)).unwrap();
+        guard
+            .check_and_advance(PolicyVersion::new(2, 0, 0))
+            .unwrap();
 
         assert!(guard.is_allowed(PolicyVersion::new(2, 0, 0)));
         assert!(guard.is_allowed(PolicyVersion::new(3, 0, 0)));
@@ -293,9 +315,15 @@ mod tests {
     #[test]
     fn version_history_tracked() {
         let mut guard = DowngradeGuard::new();
-        guard.check_and_advance(PolicyVersion::new(1, 0, 0)).unwrap();
-        guard.check_and_advance(PolicyVersion::new(2, 0, 0)).unwrap();
-        guard.check_and_advance(PolicyVersion::new(3, 0, 0)).unwrap();
+        guard
+            .check_and_advance(PolicyVersion::new(1, 0, 0))
+            .unwrap();
+        guard
+            .check_and_advance(PolicyVersion::new(2, 0, 0))
+            .unwrap();
+        guard
+            .check_and_advance(PolicyVersion::new(3, 0, 0))
+            .unwrap();
 
         let history = guard.history();
         assert_eq!(history.len(), 3);
@@ -310,7 +338,9 @@ mod tests {
         let mut guard = DowngradeGuard::with_version(PolicyVersion::new(5, 0, 0));
         assert_eq!(guard.current_version(), PolicyVersion::new(5, 0, 0));
 
-        assert!(guard.check_and_advance(PolicyVersion::new(4, 0, 0)).is_err());
+        assert!(guard
+            .check_and_advance(PolicyVersion::new(4, 0, 0))
+            .is_err());
         assert!(guard.check_and_advance(PolicyVersion::new(5, 0, 0)).is_ok());
         assert!(guard.check_and_advance(PolicyVersion::new(6, 0, 0)).is_ok());
     }

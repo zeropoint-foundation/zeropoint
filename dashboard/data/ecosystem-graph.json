@@ -1,0 +1,2378 @@
+{
+  "generated_from_commit": "a097fbd",
+  "width": 1680,
+  "height": 1180,
+  "counts": {
+    "live": 45,
+    "unknown": 28,
+    "absent": 1,
+    "partial": 4,
+    "unwired": 12
+  },
+  "origins": {
+    "declared": 42,
+    "derived": 48
+  },
+  "coverage": {
+    "crates_total": 47,
+    "crates_drawn": 47,
+    "crates_missing": [],
+    "crates_unmeasured": []
+  },
+  "nodes": [
+    {
+      "id": "zeropoint",
+      "label": "ZeroPoint",
+      "type": "core",
+      "desc": "Cryptographic governance primitives for autonomous agent systems",
+      "origin": "declared",
+      "x": 1072.0,
+      "y": 836.3,
+      "deg": 4,
+      "state": "live",
+      "why": "the substrate as a whole; boot path verified",
+      "cite": "crates/zp-server/src/lib.rs"
+    },
+    {
+      "id": "zp-server",
+      "label": "ZP Server",
+      "type": "core",
+      "desc": "Governance API on localhost:17770 \\u2014 routes: tools, codebase, analysis, system",
+      "origin": "derived",
+      "x": 830.7,
+      "y": 474.1,
+      "deg": 40,
+      "state": "live",
+      "why": "serves /ecosystem itself; the page you are reading is the proof",
+      "cite": "crates/zp-server/src/lib.rs:1625"
+    },
+    {
+      "id": "receipt-chain",
+      "label": "Receipt Chain",
+      "type": "core",
+      "desc": "Tamper-evident hash-linked audit chain \\u2014 single source of truth",
+      "origin": "declared",
+      "x": 1024.5,
+      "y": 762.3,
+      "deg": 11,
+      "state": "live",
+      "why": "append path exercised; chain integrity runtimes always on",
+      "cite": "crates/zp-server/src/lib.rs:2157-2171"
+    },
+    {
+      "id": "audit-store",
+      "label": "Audit Store",
+      "type": "core",
+      "desc": "SQLite-backed chain storage. All state is derived, never stored directly",
+      "origin": "declared",
+      "x": 885.2,
+      "y": 737.8,
+      "deg": 3,
+      "state": "live",
+      "why": "AuditStore::open_signed with a Genesis-derived audit signer",
+      "cite": "crates/zp-server/src/lib.rs:733-736"
+    },
+    {
+      "id": "mle-star",
+      "label": "MLE STAR",
+      "type": "engine",
+      "desc": "Expertise pre-learning \\u2014 builds statistical profiles from receipt chain observations",
+      "origin": "derived",
+      "x": 1062.8,
+      "y": 553.0,
+      "deg": 3,
+      "state": "live",
+      "why": "mle-star-engine, 2895 lines, 1 dependent crate(s), primary role utility",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "monte-carlo",
+      "label": "Monte Carlo",
+      "type": "engine",
+      "desc": "Probabilistic risk simulation \\u2014 VaR, CVaR, confidence intervals",
+      "origin": "derived",
+      "x": 1039.9,
+      "y": 457.2,
+      "deg": 2,
+      "state": "live",
+      "why": "monte-carlo-engine, 3495 lines, 1 dependent crate(s), primary role utility",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "analysis-bridge",
+      "label": "Analysis Bridge",
+      "type": "engine",
+      "desc": "Receipt \\u2192 Observation converter. Ingests chain events into MLE STAR",
+      "origin": "declared",
+      "x": 1140.4,
+      "y": 680.7,
+      "deg": 3,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "codebase-api",
+      "label": "Codebase API",
+      "type": "service",
+      "desc": "/api/v1/codebase/* \\u2014 governed project access with receipt auditing",
+      "origin": "declared",
+      "x": 997.6,
+      "y": 645.9,
+      "deg": 2,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "analysis-api",
+      "label": "Analysis API",
+      "type": "service",
+      "desc": "/api/v1/analysis/* \\u2014 progressive disclosure: index \\u2192 expertise \\u2192 simulate",
+      "origin": "declared",
+      "x": 1132.7,
+      "y": 559.0,
+      "deg": 3,
+      "state": "absent",
+      "why": "the page fetches /api/v1/analysis/index and that route does not exist anywhere in the server; 'Analysis API unreachable' is permanently true",
+      "cite": "grep '/api/v1/analysis/index' crates/zp-server/src/lib.rs -> 0 hits"
+    },
+    {
+      "id": "tools-api",
+      "label": "Tools API",
+      "type": "service",
+      "desc": "/api/v1/tools/* \\u2014 launch, stop, configure, preflight",
+      "origin": "declared",
+      "x": 1171.5,
+      "y": 610.4,
+      "deg": 8,
+      "state": "live",
+      "why": "governed tool registry and launch path",
+      "cite": "crates/zp-server/src/tool_ports.rs:97-109"
+    },
+    {
+      "id": "port-allocator",
+      "label": "Port Allocator",
+      "type": "service",
+      "desc": "Collision-free port assignment. Writes .env.zp per tool",
+      "origin": "declared",
+      "x": 1089.1,
+      "y": 369.6,
+      "deg": 3,
+      "state": "live",
+      "why": "port registry assigns and persists; hot-loop fix landed 2026-07",
+      "cite": "crates/zp-server/src/tool_ports.rs"
+    },
+    {
+      "id": "tool-proxy",
+      "label": "Tool Proxy",
+      "type": "service",
+      "desc": "Reverse proxy \\u2014 governed traffic to tools through ZP",
+      "origin": "declared",
+      "x": 1099.4,
+      "y": 408.8,
+      "deg": 2,
+      "state": "live",
+      "why": "subdomain proxy routes tool pages",
+      "cite": "crates/zp-server/src/lib.rs:1586-1587"
+    },
+    {
+      "id": "sentinel",
+      "label": "ZP Sentinel",
+      "type": "service",
+      "desc": "Network Sentinel on ASUS Merlin \\u2014 DNS filtering, device monitoring, mesh peer",
+      "origin": "declared",
+      "x": 1172.6,
+      "y": 822.3,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "agent-tool",
+      "label": "Agent Tool",
+      "type": "tool",
+      "desc": "Example governed agent tool \\u2014 external LLM backend, allocated port",
+      "origin": "declared",
+      "x": 1218.2,
+      "y": 449.9,
+      "deg": 6,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "zp-hedera",
+      "label": "zp-hedera",
+      "type": "tool",
+      "desc": "Hedera Hashgraph integration \\u2014 native Rust, genesis-bound",
+      "origin": "declared",
+      "x": 1270.7,
+      "y": 698.8,
+      "deg": 2,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "ember",
+      "label": "Ember",
+      "type": "tool",
+      "desc": "Local-first generative learning \\u2014 sovereign OpenMAIC fork by Mark Qvist",
+      "origin": "declared",
+      "x": 1283.1,
+      "y": 547.2,
+      "deg": 2,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "pentagi",
+      "label": "PentAGI",
+      "type": "tool",
+      "desc": "Pentesting agent \\u2014 Docker, port 8443, multi-provider",
+      "origin": "declared",
+      "x": 1285.0,
+      "y": 583.5,
+      "deg": 2,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "zp-core",
+      "label": "zp-core",
+      "type": "crate",
+      "desc": "AuditEntry, ActorId, PolicyDecision \\u2014 foundation types",
+      "origin": "derived",
+      "x": 562.8,
+      "y": 467.2,
+      "deg": 26,
+      "state": "live",
+      "why": "zp-core, 9285 lines, 25 dependent crate(s), primary role signing",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-audit",
+      "label": "zp-audit",
+      "type": "crate",
+      "desc": "ChainBuilder, AuditStore, chain verification",
+      "origin": "derived",
+      "x": 593.1,
+      "y": 442.3,
+      "deg": 13,
+      "state": "live",
+      "why": "zp-audit, 6822 lines, 10 dependent crate(s), primary role verifying",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-keys",
+      "label": "zp-keys",
+      "type": "crate",
+      "desc": "Sovereignty providers, Genesis ceremony, biometric/HW wallet",
+      "origin": "derived",
+      "x": 582.8,
+      "y": 590.1,
+      "deg": 10,
+      "state": "live",
+      "why": "zp-keys, 12504 lines, 6 dependent crate(s), primary role signing",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-trust",
+      "label": "zp-trust",
+      "type": "crate",
+      "desc": "Trust scoring and attestation framework",
+      "origin": "derived",
+      "x": 644.6,
+      "y": 564.5,
+      "deg": 9,
+      "state": "live",
+      "why": "zp-trust, 2377 lines, 7 dependent crate(s), primary role signing",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-receipt",
+      "label": "zp-receipt",
+      "type": "crate",
+      "desc": "Receipt types and Grade A/B/C generation",
+      "origin": "derived",
+      "x": 572.2,
+      "y": 415.0,
+      "deg": 17,
+      "state": "live",
+      "why": "zp-receipt, 7731 lines, 17 dependent crate(s), primary role signing",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-policy",
+      "label": "zp-policy",
+      "type": "crate",
+      "desc": "WASM policy engine \\u2014 governance gate for all actions",
+      "origin": "derived",
+      "x": 579.8,
+      "y": 624.7,
+      "deg": 10,
+      "state": "live",
+      "why": "zp-policy, 4614 lines, 6 dependent crate(s), primary role gating",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-engine",
+      "label": "zp-engine",
+      "type": "crate",
+      "desc": "Core governance engine orchestrating policy evaluation",
+      "origin": "derived",
+      "x": 673.4,
+      "y": 604.4,
+      "deg": 8,
+      "state": "live",
+      "why": "zp-engine, 6200 lines, 4 dependent crate(s), primary role utility",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "sovereignty",
+      "label": "Sovereignty",
+      "type": "concept",
+      "desc": "Genesis secret storage \\u2014 provider controls HOW stored, WHO unlocks",
+      "origin": "declared",
+      "x": 559.4,
+      "y": 782.4,
+      "deg": 6,
+      "state": "partial",
+      "why": "load_sovereign_root is a process-scoped OnceLock warmed once at boot; no runtime authority decision re-invokes a provider",
+      "cite": "crates/zp-keys/src/sovereignty/mod.rs:636-653"
+    },
+    {
+      "id": "touchid",
+      "label": "Touch ID",
+      "type": "hardware",
+      "desc": "v0.1 application-layer via bioutil. v0.2 = Secure Enclave",
+      "origin": "declared",
+      "x": 736.8,
+      "y": 845.5,
+      "deg": 2,
+      "state": "partial",
+      "why": "provider exists and is exercised once at boot, never per action",
+      "cite": "crates/zp-keys/src/sovereignty/touchid.rs:575-616"
+    },
+    {
+      "id": "trezor",
+      "label": "Trezor",
+      "type": "hardware",
+      "desc": "CipherKeyValue wrapping key derivation",
+      "origin": "declared",
+      "x": 442.7,
+      "y": 772.4,
+      "deg": 1,
+      "state": "partial",
+      "why": "same OnceLock posture as touchid",
+      "cite": "crates/zp-keys/src/sovereignty/mod.rs:649-653"
+    },
+    {
+      "id": "genesis",
+      "label": "Genesis Ceremony",
+      "type": "concept",
+      "desc": "32-byte Ed25519 seed generation. BIP-39 mnemonic backup",
+      "origin": "declared",
+      "x": 679.7,
+      "y": 843.0,
+      "deg": 4,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "quorum",
+      "label": "Quorum Sovereignty",
+      "type": "concept",
+      "desc": "M-of-N multi-device signing \\u2014 Shamir + threshold sigs (future)",
+      "origin": "declared",
+      "x": 442.7,
+      "y": 772.4,
+      "deg": 1,
+      "state": "unwired",
+      "why": "split_secret and reconstruct_secret have no callers outside their own module; quorum Genesis is built and tested but not reachable",
+      "cite": "docs/design/NON-DELEGABLE-AUTHORITY-2026-08.md \u00a711.1"
+    },
+    {
+      "id": "ken",
+      "label": "Ken Romero",
+      "type": "person",
+      "desc": "Founder, ThinkStream Labs. Portable trust for the Agentic Age",
+      "origin": "declared",
+      "x": 1011.8,
+      "y": 840.2,
+      "deg": 3,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "apollo3",
+      "label": "APOLLO-3",
+      "type": "hardware",
+      "desc": "Mac Mini @ 192.168.1.170 \\u2014 available for ZP Core server",
+      "origin": "declared",
+      "x": 1107.1,
+      "y": 828.4,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "artemis",
+      "label": "ARTEMIS",
+      "type": "hardware",
+      "desc": "M4 MacBook Pro \\u2014 travel system + clean install testing",
+      "origin": "declared",
+      "x": 897.3,
+      "y": 845.9,
+      "deg": 2,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "zp-playground",
+      "label": "zp-playground",
+      "type": "external",
+      "desc": "Hetzner CX23, Helsinki \\u2014 remote ZP server",
+      "origin": "declared",
+      "x": 1018.2,
+      "y": 346.1,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "anthropic",
+      "label": "Anthropic",
+      "type": "external",
+      "desc": "External LLM provider for a governed tool",
+      "origin": "declared",
+      "x": 1261.6,
+      "y": 442.5,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "cloudflare",
+      "label": "Cloudflare",
+      "type": "external",
+      "desc": "Workers hosting zeropoint.global + thinkstreamlabs.ai",
+      "origin": "declared",
+      "x": 1172.6,
+      "y": 822.3,
+      "deg": 1,
+      "state": "unwired",
+      "why": "zp-cloudflare has zero dependents in any Cargo.toml",
+      "cite": "source-manifest consumed_by == 0"
+    },
+    {
+      "id": "ed25519",
+      "label": "Ed25519",
+      "type": "concept",
+      "desc": "Signature scheme \\u2014 all receipts cryptographically signed",
+      "origin": "declared",
+      "x": 819.5,
+      "y": 847.1,
+      "deg": 2,
+      "state": "live",
+      "why": "KEEL II.1 signing primitive, in use on the audit and gate signers",
+      "cite": "crates/zp-keys/src/audit_signer.rs:52"
+    },
+    {
+      "id": "blake3",
+      "label": "BLAKE3",
+      "type": "concept",
+      "desc": "Hash function \\u2014 chain linking, content addressing",
+      "origin": "declared",
+      "x": 966.4,
+      "y": 837.4,
+      "deg": 2,
+      "state": "live",
+      "why": "KEEL II.1 content hash, in use for chain linkage and module hashing",
+      "cite": "crates/zp-policy/src/wasm_runtime.rs:90"
+    },
+    {
+      "id": "progressive-disclosure",
+      "label": "Progressive Disclosure",
+      "type": "concept",
+      "desc": "Three-tier: index \\u2192 details \\u2192 deep resources",
+      "origin": "declared",
+      "x": 1283.3,
+      "y": 617.6,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "process-lifecycle",
+      "label": "Process Lifecycle",
+      "type": "concept",
+      "desc": "PID tracking, stop-before-start, process group isolation",
+      "origin": "declared",
+      "x": 1278.7,
+      "y": 656.2,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "sqlite",
+      "label": "SQLite",
+      "type": "datastore",
+      "desc": "Audit chain persistence \\u2014 append-only, single-writer, WAL mode",
+      "origin": "declared",
+      "x": 858.7,
+      "y": 847.2,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "postgres-ic",
+      "label": "PostgreSQL (IC)",
+      "type": "datastore",
+      "desc": "A governed tool\\u2019s operational database \\u2014 conversation state, tool configs",
+      "origin": "declared",
+      "x": 1273.3,
+      "y": 482.5,
+      "deg": 2,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "genesis-json",
+      "label": "genesis.json",
+      "type": "datastore",
+      "desc": "Genesis record \\u2014 operator identity, sovereignty provider, ceremony timestamp",
+      "origin": "declared",
+      "x": 561.8,
+      "y": 828.1,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "env-zp",
+      "label": ".env.zp",
+      "type": "datastore",
+      "desc": "Per-tool sidecar \\u2014 ZP-assigned port, auth token, env var overrides",
+      "origin": "declared",
+      "x": 1167.2,
+      "y": 368.9,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "enrollment-files",
+      "label": "Enrollment Files",
+      "type": "datastore",
+      "desc": "{mode}_enrollment.json + {mode}_genesis.encrypted \\u2014 per-provider sovereignty data",
+      "origin": "declared",
+      "x": 638.4,
+      "y": 840.3,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "docker",
+      "label": "Docker",
+      "type": "runtime",
+      "desc": "Container runtime for governed tools and their datastores",
+      "origin": "declared",
+      "x": 1279.7,
+      "y": 515.8,
+      "deg": 3,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "wasm-runtime",
+      "label": "WASM Runtime",
+      "type": "runtime",
+      "desc": "Policy engine execution sandbox \\u2014 deterministic, isolated governance evaluation",
+      "origin": "declared",
+      "x": 413.6,
+      "y": 686.1,
+      "deg": 1,
+      "state": "partial",
+      "why": "WasmRuntime::load_module computes a content hash and instantiates without comparing it; verify_integrity re-reads metadata, not bytes",
+      "cite": "crates/zp-policy/src/wasm_runtime.rs:88-127"
+    },
+    {
+      "id": "piper-tts",
+      "label": "Piper TTS",
+      "type": "runtime",
+      "desc": "Voice synthesis \\u2014 Kusal + Amy models, localhost:8473",
+      "origin": "declared",
+      "x": 1135.6,
+      "y": 465.1,
+      "deg": 2,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "hedera",
+      "label": "Hedera Hashgraph",
+      "type": "external",
+      "desc": "DLT target for zp-hedera \\u2014 receipt anchoring, public verifiability",
+      "origin": "declared",
+      "x": 1202.8,
+      "y": 774.9,
+      "deg": 2,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "bip39",
+      "label": "BIP-39",
+      "type": "concept",
+      "desc": "Mnemonic word list standard \\u2014 24-word recovery phrase for Genesis secret",
+      "origin": "declared",
+      "x": 602.9,
+      "y": 835.4,
+      "deg": 1,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "receipt-flow",
+      "label": "Receipt Flow",
+      "type": "concept",
+      "desc": "Action \\u2192 Receipt \\u2192 Chain \\u2192 Store \\u2192 Bridge \\u2192 Observation \\u2192 Profile",
+      "origin": "declared",
+      "x": 1188.2,
+      "y": 735.1,
+      "deg": 2,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "governance-gate",
+      "label": "Governance Gate",
+      "type": "concept",
+      "desc": "Every action passes through policy evaluation before execution",
+      "origin": "declared",
+      "x": 768.2,
+      "y": 734.1,
+      "deg": 3,
+      "state": "live",
+      "why": "every spawn routes through GovernanceGate::evaluate and the decision is chain-sealed before the side effect",
+      "cite": "crates/zp-host/src/system.rs:79-155"
+    },
+    {
+      "id": "exec-ws",
+      "label": "Exec WebSocket",
+      "type": "service",
+      "desc": "/ws/exec \\u2014 governed command execution with streamed output and receipt audit",
+      "origin": "declared",
+      "x": 954.8,
+      "y": 718.9,
+      "deg": 3,
+      "state": "unknown",
+      "why": "no first-party evidence read for this node",
+      "cite": null
+    },
+    {
+      "id": "course-examples",
+      "label": "course-examples",
+      "type": "crate",
+      "desc": "1,437 lines across 17 files \u2014 role signing, 0 dependent crate(s)",
+      "origin": "derived",
+      "x": 490.5,
+      "y": 536.5,
+      "deg": 8,
+      "state": "unwired",
+      "why": "library crate, 1,437 lines, and no crate in the workspace imports it; it has no tests/ directory either",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "execution-engine",
+      "label": "execution-engine",
+      "type": "crate",
+      "desc": "1,800 lines across 7 files \u2014 role utility, 1 dependent crate(s)",
+      "origin": "derived",
+      "x": 397.0,
+      "y": 593.0,
+      "deg": 2,
+      "state": "live",
+      "why": "1,800 lines, 1 dependent crate(s), primary role utility",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "trust-triangle",
+      "label": "trust-triangle",
+      "type": "crate",
+      "desc": "1,348 lines across 10 files \u2014 role signing, 0 dependent crate(s)",
+      "origin": "derived",
+      "x": 451.7,
+      "y": 568.4,
+      "deg": 5,
+      "state": "unwired",
+      "why": "library crate, 1,348 lines, and no crate in the workspace imports it; it has no tests/ directory either",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-anchor",
+      "label": "zp-anchor",
+      "type": "crate",
+      "desc": "320 lines across 1 files \u2014 role utility, 3 dependent crate(s)",
+      "origin": "derived",
+      "x": 821.9,
+      "y": 333.0,
+      "deg": 3,
+      "state": "live",
+      "why": "320 lines, 3 dependent crate(s), primary role utility",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-anchor-ots",
+      "label": "zp-anchor-ots",
+      "type": "crate",
+      "desc": "805 lines across 2 files \u2014 role verifying, 1 dependent crate(s)",
+      "origin": "derived",
+      "x": 863.5,
+      "y": 333.3,
+      "deg": 2,
+      "state": "live",
+      "why": "805 lines, 1 dependent crate(s), primary role verifying",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-artifacts",
+      "label": "zp-artifacts",
+      "type": "crate",
+      "desc": "1,411 lines across 10 files \u2014 role signing, 1 dependent crate(s)",
+      "origin": "derived",
+      "x": 984.8,
+      "y": 342.2,
+      "deg": 2,
+      "state": "live",
+      "why": "1,411 lines, 1 dependent crate(s), primary role signing",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-bench",
+      "label": "zp-bench",
+      "type": "crate",
+      "desc": "496 lines across 1 files \u2014 role signing, 0 dependent crate(s)",
+      "origin": "derived",
+      "x": 482.7,
+      "y": 428.2,
+      "deg": 3,
+      "state": "unknown",
+      "why": "496 lines, no src/lib.rs \u2014 this is a bench or test harness, so 'nothing imports it' is expected rather than a defect, and no first-party evidence was read that it runs",
+      "cite": "crates/zp-bench/Cargo.toml; no crates/zp-bench/src/lib.rs"
+    },
+    {
+      "id": "zp-cli",
+      "label": "zp-cli",
+      "type": "crate",
+      "desc": "20,653 lines across 17 files \u2014 role signing, 0 dependent crate(s)",
+      "origin": "derived",
+      "x": 672.1,
+      "y": 471.3,
+      "deg": 19,
+      "state": "unknown",
+      "why": "20,653 lines, no src/lib.rs \u2014 this is a binary, so 'nothing imports it' is expected rather than a defect, and no first-party evidence was read that it runs",
+      "cite": "crates/zp-cli/Cargo.toml; no crates/zp-cli/src/lib.rs"
+    },
+    {
+      "id": "zp-cloudflare",
+      "label": "zp-cloudflare",
+      "type": "crate",
+      "desc": "109 lines across 3 files \u2014 role utility, 0 dependent crate(s)",
+      "origin": "derived",
+      "x": 1236.4,
+      "y": 395.4,
+      "deg": 0,
+      "state": "unwired",
+      "why": "library crate, 109 lines, and no crate in the workspace imports it; it has no tests/ directory either",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-config",
+      "label": "zp-config",
+      "type": "crate",
+      "desc": "2,142 lines across 8 files \u2014 role signing, 4 dependent crate(s)",
+      "origin": "derived",
+      "x": 775.9,
+      "y": 333.3,
+      "deg": 4,
+      "state": "live",
+      "why": "2,142 lines, 4 dependent crate(s), primary role signing",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-configure",
+      "label": "zp-configure",
+      "type": "crate",
+      "desc": "4,546 lines across 1 files \u2014 role gating, 2 dependent crate(s)",
+      "origin": "derived",
+      "x": 758.0,
+      "y": 530.1,
+      "deg": 7,
+      "state": "live",
+      "why": "4,546 lines, 2 dependent crate(s), primary role gating",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-content",
+      "label": "zp-content",
+      "type": "crate",
+      "desc": "763 lines across 6 files \u2014 role utility, 2 dependent crate(s)",
+      "origin": "derived",
+      "x": 955.3,
+      "y": 338.9,
+      "deg": 2,
+      "state": "live",
+      "why": "763 lines, 2 dependent crate(s), primary role utility",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-discipline",
+      "label": "zp-discipline",
+      "type": "crate",
+      "desc": "5,721 lines across 32 files \u2014 role verifying, 0 dependent crate(s)",
+      "origin": "derived",
+      "x": 421.7,
+      "y": 422.7,
+      "deg": 0,
+      "state": "unwired",
+      "why": "library crate, 5,721 lines, and no crate in the workspace imports it; its own tests/ directory is the only thing exercising it",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-emission-coherence",
+      "label": "zp-emission-coherence",
+      "type": "crate",
+      "desc": "1,073 lines across 5 files \u2014 role utility, 1 dependent crate(s)",
+      "origin": "derived",
+      "x": 503.7,
+      "y": 374.6,
+      "deg": 1,
+      "state": "live",
+      "why": "1,073 lines, 1 dependent crate(s), primary role utility",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-gate-envelope",
+      "label": "zp-gate-envelope",
+      "type": "crate",
+      "desc": "663 lines across 2 files \u2014 role signing, 2 dependent crate(s)",
+      "origin": "derived",
+      "x": 698.6,
+      "y": 364.1,
+      "deg": 4,
+      "state": "live",
+      "why": "663 lines, 2 dependent crate(s), primary role signing",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-gossip",
+      "label": "zp-gossip",
+      "type": "crate",
+      "desc": "827 lines across 6 files \u2014 role utility, 0 dependent crate(s)",
+      "origin": "derived",
+      "x": 407.1,
+      "y": 471.5,
+      "deg": 1,
+      "state": "unwired",
+      "why": "library crate, 827 lines, and no crate in the workspace imports it; it has no tests/ directory either",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-hardening-tests",
+      "label": "zp-hardening-tests",
+      "type": "crate",
+      "desc": "3,473 lines across 16 files \u2014 role signing, 0 dependent crate(s)",
+      "origin": "derived",
+      "x": 674.2,
+      "y": 402.0,
+      "deg": 7,
+      "state": "unwired",
+      "why": "library crate, 3,473 lines, and no crate in the workspace imports it; its own tests/ directory is the only thing exercising it",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-host",
+      "label": "zp-host",
+      "type": "crate",
+      "desc": "1,008 lines across 6 files \u2014 role utility, 4 dependent crate(s)",
+      "origin": "derived",
+      "x": 542.8,
+      "y": 562.2,
+      "deg": 7,
+      "state": "live",
+      "why": "1,008 lines, 4 dependent crate(s), primary role utility",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-identity-hosting",
+      "label": "zp-identity-hosting",
+      "type": "crate",
+      "desc": "717 lines across 7 files \u2014 role signing, 0 dependent crate(s)",
+      "origin": "derived",
+      "x": 421.7,
+      "y": 422.7,
+      "deg": 0,
+      "state": "unwired",
+      "why": "library crate, 717 lines, and no crate in the workspace imports it; it has no tests/ directory either",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-inference-observer",
+      "label": "zp-inference-observer",
+      "type": "crate",
+      "desc": "456 lines across 2 files \u2014 role receipt-authoring, 1 dependent crate(s)",
+      "origin": "derived",
+      "x": 895.9,
+      "y": 334.4,
+      "deg": 1,
+      "state": "live",
+      "why": "456 lines, 1 dependent crate(s), primary role receipt-authoring",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-introduction",
+      "label": "zp-introduction",
+      "type": "crate",
+      "desc": "467 lines across 5 files \u2014 role gating, 1 dependent crate(s)",
+      "origin": "derived",
+      "x": 435.1,
+      "y": 625.0,
+      "deg": 3,
+      "state": "live",
+      "why": "467 lines, 1 dependent crate(s), primary role gating",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-learning",
+      "label": "zp-learning",
+      "type": "crate",
+      "desc": "1,622 lines across 4 files \u2014 role utility, 1 dependent crate(s)",
+      "origin": "derived",
+      "x": 400.1,
+      "y": 505.4,
+      "deg": 2,
+      "state": "live",
+      "why": "1,622 lines, 1 dependent crate(s), primary role utility",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-llm",
+      "label": "zp-llm",
+      "type": "crate",
+      "desc": "1,689 lines across 8 files \u2014 role signing, 1 dependent crate(s)",
+      "origin": "derived",
+      "x": 396.3,
+      "y": 541.5,
+      "deg": 2,
+      "state": "live",
+      "why": "1,689 lines, 1 dependent crate(s), primary role signing",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-memory",
+      "label": "zp-memory",
+      "type": "crate",
+      "desc": "3,665 lines across 9 files \u2014 role utility, 1 dependent crate(s)",
+      "origin": "derived",
+      "x": 706.2,
+      "y": 336.8,
+      "deg": 4,
+      "state": "live",
+      "why": "3,665 lines, 1 dependent crate(s), primary role utility",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-memory-index",
+      "label": "zp-memory-index",
+      "type": "crate",
+      "desc": "436 lines across 3 files \u2014 role utility, 0 dependent crate(s)",
+      "origin": "derived",
+      "x": 489.1,
+      "y": 815.1,
+      "deg": 0,
+      "state": "unwired",
+      "why": "library crate, 436 lines, and no crate in the workspace imports it; it has no tests/ directory either",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-mesh",
+      "label": "zp-mesh",
+      "type": "crate",
+      "desc": "18,092 lines across 25 files \u2014 role signing, 4 dependent crate(s)",
+      "origin": "derived",
+      "x": 587.0,
+      "y": 513.0,
+      "deg": 8,
+      "state": "live",
+      "why": "18,092 lines, 4 dependent crate(s), primary role signing",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-net",
+      "label": "zp-net",
+      "type": "crate",
+      "desc": "484 lines across 4 files \u2014 role utility, 5 dependent crate(s)",
+      "origin": "derived",
+      "x": 789.3,
+      "y": 372.1,
+      "deg": 5,
+      "state": "live",
+      "why": "484 lines, 5 dependent crate(s), primary role utility",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-observation",
+      "label": "zp-observation",
+      "type": "crate",
+      "desc": "3,088 lines across 9 files \u2014 role utility, 2 dependent crate(s)",
+      "origin": "derived",
+      "x": 672.5,
+      "y": 340.8,
+      "deg": 4,
+      "state": "live",
+      "why": "3,088 lines, 2 dependent crate(s), primary role utility",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-officers",
+      "label": "zp-officers",
+      "type": "crate",
+      "desc": "8,301 lines across 15 files \u2014 role receipt-authoring, 3 dependent crate(s)",
+      "origin": "derived",
+      "x": 621.2,
+      "y": 376.6,
+      "deg": 6,
+      "state": "live",
+      "why": "8,301 lines, 3 dependent crate(s), primary role receipt-authoring",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-ontology",
+      "label": "zp-ontology",
+      "type": "crate",
+      "desc": "3,121 lines across 7 files \u2014 role receipt-authoring, 2 dependent crate(s)",
+      "origin": "derived",
+      "x": 740.3,
+      "y": 334.6,
+      "deg": 3,
+      "state": "live",
+      "why": "3,121 lines, 2 dependent crate(s), primary role receipt-authoring",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-pipeline",
+      "label": "zp-pipeline",
+      "type": "crate",
+      "desc": "7,159 lines across 5 files \u2014 role gating, 3 dependent crate(s)",
+      "origin": "derived",
+      "x": 517.1,
+      "y": 503.0,
+      "deg": 13,
+      "state": "live",
+      "why": "7,159 lines, 3 dependent crate(s), primary role gating",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-preflight",
+      "label": "zp-preflight",
+      "type": "crate",
+      "desc": "1,038 lines across 6 files \u2014 role utility, 0 dependent crate(s)",
+      "origin": "derived",
+      "x": 1257.5,
+      "y": 740.6,
+      "deg": 0,
+      "state": "unwired",
+      "why": "library crate, 1,038 lines, and no crate in the workspace imports it; it has no tests/ directory either",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-regent",
+      "label": "zp-regent",
+      "type": "crate",
+      "desc": "19,499 lines across 25 files \u2014 role receipt-authoring, 1 dependent crate(s)",
+      "origin": "derived",
+      "x": 644.9,
+      "y": 351.7,
+      "deg": 9,
+      "state": "live",
+      "why": "19,499 lines, 1 dependent crate(s), primary role receipt-authoring",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-sensors",
+      "label": "zp-sensors",
+      "type": "crate",
+      "desc": "1,527 lines across 6 files \u2014 role utility, 1 dependent crate(s)",
+      "origin": "derived",
+      "x": 926.0,
+      "y": 336.3,
+      "deg": 1,
+      "state": "live",
+      "why": "1,527 lines, 1 dependent crate(s), primary role utility",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-trace",
+      "label": "zp-trace",
+      "type": "crate",
+      "desc": "581 lines across 2 files \u2014 role signing, 0 dependent crate(s)",
+      "origin": "derived",
+      "x": 535.7,
+      "y": 363.8,
+      "deg": 2,
+      "state": "unwired",
+      "why": "library crate, 581 lines, and no crate in the workspace imports it; it has no tests/ directory either",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-verbs",
+      "label": "zp-verbs",
+      "type": "crate",
+      "desc": "77 lines across 2 files \u2014 role utility, 1 dependent crate(s)",
+      "origin": "derived",
+      "x": 1033.3,
+      "y": 378.8,
+      "deg": 1,
+      "state": "live",
+      "why": "77 lines, 1 dependent crate(s), primary role utility",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "zp-verify",
+      "label": "zp-verify",
+      "type": "crate",
+      "desc": "1,379 lines across 3 files \u2014 role verifying, 5 dependent crate(s)",
+      "origin": "derived",
+      "x": 576.6,
+      "y": 358.1,
+      "deg": 5,
+      "state": "live",
+      "why": "1,379 lines, 5 dependent crate(s), primary role verifying",
+      "cite": "docs/lenses/source-manifest.json consumed_by"
+    },
+    {
+      "id": "vault",
+      "label": "Credential Vault",
+      "type": "core",
+      "desc": "Tiered encrypted credential store \u2014 providers / tools / system / ephemeral, ChaCha20-Poly1305 per-tier derived keys, reference chasing",
+      "origin": "derived",
+      "x": 742.6,
+      "y": 619.5,
+      "deg": 6,
+      "state": "live",
+      "why": "82 references to CredentialVault across 5 crates outside zp-trust \u2014 zp-configure (34), zp-cli (22), zp-server (21), zp-engine (4)",
+      "cite": "crates/zp-trust/src/vault.rs; grep CredentialVault crates/*/src"
+    }
+  ],
+  "edges": [
+    {
+      "source": "ken",
+      "target": "zeropoint",
+      "label": "FOUNDED",
+      "kind": "declared"
+    },
+    {
+      "source": "zeropoint",
+      "target": "receipt-chain",
+      "label": "BUILT_ON",
+      "kind": "declared"
+    },
+    {
+      "source": "receipt-chain",
+      "target": "audit-store",
+      "label": "PERSISTED_IN",
+      "kind": "declared"
+    },
+    {
+      "source": "receipt-chain",
+      "target": "ed25519",
+      "label": "SIGNED_WITH",
+      "kind": "declared"
+    },
+    {
+      "source": "receipt-chain",
+      "target": "blake3",
+      "label": "LINKED_WITH",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-server",
+      "target": "tools-api",
+      "label": "EXPOSES",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-server",
+      "target": "codebase-api",
+      "label": "EXPOSES",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-server",
+      "target": "analysis-api",
+      "label": "EXPOSES",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-server",
+      "target": "tool-proxy",
+      "label": "INCLUDES",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-server",
+      "target": "port-allocator",
+      "label": "INCLUDES",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-server",
+      "target": "audit-store",
+      "label": "OWNS",
+      "kind": "declared"
+    },
+    {
+      "source": "analysis-bridge",
+      "target": "receipt-chain",
+      "label": "INGESTS",
+      "kind": "declared"
+    },
+    {
+      "source": "analysis-bridge",
+      "target": "mle-star",
+      "label": "FEEDS",
+      "kind": "declared"
+    },
+    {
+      "source": "mle-star",
+      "target": "monte-carlo",
+      "label": "INFORMS",
+      "kind": "declared"
+    },
+    {
+      "source": "analysis-api",
+      "target": "analysis-bridge",
+      "label": "TRIGGERS",
+      "kind": "declared"
+    },
+    {
+      "source": "analysis-api",
+      "target": "progressive-disclosure",
+      "label": "IMPLEMENTS",
+      "kind": "declared"
+    },
+    {
+      "source": "tools-api",
+      "target": "agent-tool",
+      "label": "GOVERNS",
+      "kind": "declared"
+    },
+    {
+      "source": "tools-api",
+      "target": "zp-hedera",
+      "label": "GOVERNS",
+      "kind": "declared"
+    },
+    {
+      "source": "tools-api",
+      "target": "ember",
+      "label": "GOVERNS",
+      "kind": "declared"
+    },
+    {
+      "source": "tools-api",
+      "target": "pentagi",
+      "label": "GOVERNS",
+      "kind": "declared"
+    },
+    {
+      "source": "agent-tool",
+      "target": "anthropic",
+      "label": "USES_LLM",
+      "kind": "declared"
+    },
+    {
+      "source": "tools-api",
+      "target": "receipt-chain",
+      "label": "EMITS_TO",
+      "kind": "declared"
+    },
+    {
+      "source": "tools-api",
+      "target": "process-lifecycle",
+      "label": "IMPLEMENTS",
+      "kind": "declared"
+    },
+    {
+      "source": "tool-proxy",
+      "target": "agent-tool",
+      "label": "PROXIES",
+      "kind": "declared"
+    },
+    {
+      "source": "port-allocator",
+      "target": "agent-tool",
+      "label": "ASSIGNS_PORT",
+      "kind": "declared"
+    },
+    {
+      "source": "codebase-api",
+      "target": "receipt-chain",
+      "label": "AUDITS_VIA",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-core",
+      "label": "DEPENDS",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-audit",
+      "label": "DEPENDS",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-keys",
+      "label": "DEPENDS",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-policy",
+      "label": "DEPENDS",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-trust",
+      "label": "DEPENDS",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-engine",
+      "label": "DEPENDS",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-receipt",
+      "label": "DEPENDS",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-audit",
+      "target": "zp-core",
+      "label": "DEPENDS",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-keys",
+      "target": "sovereignty",
+      "label": "PROVIDES",
+      "kind": "declared"
+    },
+    {
+      "source": "sovereignty",
+      "target": "touchid",
+      "label": "PROVIDER",
+      "kind": "declared"
+    },
+    {
+      "source": "sovereignty",
+      "target": "trezor",
+      "label": "PROVIDER",
+      "kind": "declared"
+    },
+    {
+      "source": "sovereignty",
+      "target": "genesis",
+      "label": "CEREMONY",
+      "kind": "declared"
+    },
+    {
+      "source": "genesis",
+      "target": "ed25519",
+      "label": "GENERATES",
+      "kind": "declared"
+    },
+    {
+      "source": "quorum",
+      "target": "sovereignty",
+      "label": "EVOLVES",
+      "kind": "declared"
+    },
+    {
+      "source": "ken",
+      "target": "artemis",
+      "label": "OPERATES",
+      "kind": "declared"
+    },
+    {
+      "source": "ken",
+      "target": "apollo3",
+      "label": "OPERATES",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-playground",
+      "target": "zp-server",
+      "label": "RUNS",
+      "kind": "declared"
+    },
+    {
+      "source": "sentinel",
+      "target": "zeropoint",
+      "label": "PART_OF",
+      "kind": "declared"
+    },
+    {
+      "source": "cloudflare",
+      "target": "zeropoint",
+      "label": "HOSTS",
+      "kind": "declared"
+    },
+    {
+      "source": "artemis",
+      "target": "touchid",
+      "label": "HAS",
+      "kind": "declared"
+    },
+    {
+      "source": "audit-store",
+      "target": "sqlite",
+      "label": "BACKED_BY",
+      "kind": "declared"
+    },
+    {
+      "source": "agent-tool",
+      "target": "postgres-ic",
+      "label": "STORES_IN",
+      "kind": "declared"
+    },
+    {
+      "source": "port-allocator",
+      "target": "env-zp",
+      "label": "WRITES",
+      "kind": "declared"
+    },
+    {
+      "source": "genesis",
+      "target": "genesis-json",
+      "label": "PERSISTS_TO",
+      "kind": "declared"
+    },
+    {
+      "source": "sovereignty",
+      "target": "enrollment-files",
+      "label": "PERSISTS_TO",
+      "kind": "declared"
+    },
+    {
+      "source": "genesis",
+      "target": "bip39",
+      "label": "ENCODES_VIA",
+      "kind": "declared"
+    },
+    {
+      "source": "agent-tool",
+      "target": "docker",
+      "label": "RUNS_ON",
+      "kind": "declared"
+    },
+    {
+      "source": "ember",
+      "target": "piper-tts",
+      "label": "USES_TTS",
+      "kind": "declared"
+    },
+    {
+      "source": "pentagi",
+      "target": "docker",
+      "label": "RUNS_ON",
+      "kind": "declared"
+    },
+    {
+      "source": "postgres-ic",
+      "target": "docker",
+      "label": "RUNS_ON",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-policy",
+      "target": "wasm-runtime",
+      "label": "EXECUTES_IN",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-server",
+      "target": "piper-tts",
+      "label": "INTEGRATES",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-hedera",
+      "target": "hedera",
+      "label": "ANCHORS_TO",
+      "kind": "declared"
+    },
+    {
+      "source": "receipt-chain",
+      "target": "hedera",
+      "label": "VERIFIABLE_ON",
+      "kind": "declared"
+    },
+    {
+      "source": "tools-api",
+      "target": "receipt-flow",
+      "label": "INITIATES",
+      "kind": "declared"
+    },
+    {
+      "source": "receipt-flow",
+      "target": "receipt-chain",
+      "label": "PRODUCES",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-engine",
+      "target": "governance-gate",
+      "label": "ENFORCES",
+      "kind": "declared"
+    },
+    {
+      "source": "governance-gate",
+      "target": "zp-policy",
+      "label": "EVALUATES_VIA",
+      "kind": "declared"
+    },
+    {
+      "source": "governance-gate",
+      "target": "receipt-chain",
+      "label": "RECORDS_IN",
+      "kind": "declared"
+    },
+    {
+      "source": "zp-server",
+      "target": "exec-ws",
+      "label": "EXPOSES",
+      "kind": "declared"
+    },
+    {
+      "source": "exec-ws",
+      "target": "receipt-chain",
+      "label": "AUDITS_VIA",
+      "kind": "declared"
+    },
+    {
+      "source": "exec-ws",
+      "target": "blake3",
+      "label": "HASHES_WITH",
+      "kind": "declared"
+    },
+    {
+      "source": "course-examples",
+      "target": "zp-audit",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "course-examples",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "course-examples",
+      "target": "zp-keys",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "course-examples",
+      "target": "zp-mesh",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "course-examples",
+      "target": "zp-pipeline",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "course-examples",
+      "target": "zp-policy",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "course-examples",
+      "target": "zp-receipt",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "course-examples",
+      "target": "zp-trust",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "execution-engine",
+      "target": "zp-host",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "trust-triangle",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "trust-triangle",
+      "target": "zp-introduction",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "trust-triangle",
+      "target": "zp-keys",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "trust-triangle",
+      "target": "zp-policy",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "trust-triangle",
+      "target": "zp-receipt",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-anchor-ots",
+      "target": "zp-anchor",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-artifacts",
+      "target": "zp-content",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-audit",
+      "target": "zp-receipt",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-audit",
+      "target": "zp-verify",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-bench",
+      "target": "zp-engine",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-bench",
+      "target": "zp-receipt",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-bench",
+      "target": "zp-verify",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "zp-anchor",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "zp-audit",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "zp-config",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "zp-configure",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "zp-engine",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "zp-gate-envelope",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "zp-host",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "zp-keys",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "zp-mesh",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "zp-net",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "zp-officers",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "zp-pipeline",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "zp-policy",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "zp-receipt",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "zp-server",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "zp-trust",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "zp-verify",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-configure",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-configure",
+      "target": "zp-engine",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-configure",
+      "target": "zp-net",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-configure",
+      "target": "zp-trust",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-core",
+      "target": "zp-receipt",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-engine",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-engine",
+      "target": "zp-trust",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-gate-envelope",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-gate-envelope",
+      "target": "zp-receipt",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-gossip",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-hardening-tests",
+      "target": "zp-audit",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-hardening-tests",
+      "target": "zp-config",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-hardening-tests",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-hardening-tests",
+      "target": "zp-keys",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-hardening-tests",
+      "target": "zp-net",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-hardening-tests",
+      "target": "zp-server",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-hardening-tests",
+      "target": "zp-verify",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-host",
+      "target": "zp-audit",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-host",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-host",
+      "target": "zp-policy",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-introduction",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-introduction",
+      "target": "zp-keys",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-keys",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-keys",
+      "target": "zp-receipt",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-learning",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-llm",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-memory",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-memory",
+      "target": "zp-observation",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-memory",
+      "target": "zp-receipt",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-mesh",
+      "target": "zp-audit",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-mesh",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-mesh",
+      "target": "zp-receipt",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-mesh",
+      "target": "zp-trust",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-observation",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-observation",
+      "target": "zp-receipt",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-officers",
+      "target": "zp-audit",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-officers",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-officers",
+      "target": "zp-receipt",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-ontology",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-pipeline",
+      "target": "execution-engine",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-pipeline",
+      "target": "zp-audit",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-pipeline",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-pipeline",
+      "target": "zp-host",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-pipeline",
+      "target": "zp-learning",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-pipeline",
+      "target": "zp-llm",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-pipeline",
+      "target": "zp-mesh",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-pipeline",
+      "target": "zp-policy",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-pipeline",
+      "target": "zp-receipt",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-pipeline",
+      "target": "zp-trust",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-policy",
+      "target": "zp-audit",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-policy",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-receipt",
+      "target": "zp-verify",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-regent",
+      "target": "zp-audit",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-regent",
+      "target": "zp-config",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-regent",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-regent",
+      "target": "zp-emission-coherence",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-regent",
+      "target": "zp-net",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-regent",
+      "target": "zp-officers",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-regent",
+      "target": "zp-ontology",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-regent",
+      "target": "zp-receipt",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "mle-star",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "monte-carlo",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-anchor",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-anchor-ots",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-artifacts",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-config",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-configure",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-content",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-gate-envelope",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-host",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-inference-observer",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-memory",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-mesh",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-net",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-observation",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-officers",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-ontology",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-pipeline",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-regent",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-sensors",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "zp-verbs",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-trace",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-trace",
+      "target": "zp-receipt",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-trust",
+      "target": "zp-core",
+      "label": "DEPENDS_ON",
+      "kind": "derived"
+    },
+    {
+      "source": "vault",
+      "target": "zp-trust",
+      "label": "DEFINED_IN",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-cli",
+      "target": "vault",
+      "label": "USES",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-configure",
+      "target": "vault",
+      "label": "USES",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-engine",
+      "target": "vault",
+      "label": "USES",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-keys",
+      "target": "vault",
+      "label": "USES",
+      "kind": "derived"
+    },
+    {
+      "source": "zp-server",
+      "target": "vault",
+      "label": "USES",
+      "kind": "derived"
+    }
+  ]
+}

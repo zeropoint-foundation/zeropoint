@@ -1,8 +1,8 @@
 //! Per-tool governance posture — which facets are currently true.
 //!
 //! Posture is derived purely from chain evidence + port registry state.
-//! Not a state machine — no required sequence. A tool can be Registered
-//! + Governed but not Provisioned (vault entries missing). Facets gain/drop
+//! Not a state machine — no required sequence. A tool can be Registered and
+//! Governed but not Provisioned (vault entries missing). Facets gain and drop
 //! as evidence appears or degrades.
 //!
 //! See `docs/design/TOOL-GOVERNANCE-LIFECYCLE-2026-07.md` §4.
@@ -12,8 +12,11 @@ use std::collections::{HashMap, HashSet};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
+use crate::chain_reads::{
+    delegation_events, officer_attestations, officer_operations_with_tool, tool_lifecycle_events,
+    DelegationKind, ToolLifecycleKind,
+};
 use crate::officer::ChainReader;
-use zp_core::AuditAction;
 
 // ── Facets ──────────────────────────────────────────────────────────────
 
@@ -154,19 +157,22 @@ pub fn compute_postures(
         let evidence = chain_evidence.get(tool);
 
         // Unregistered: sensor discovered, no chain presence.
-        if unregistered.contains(tool) && evidence.is_none() && !registry.registered_tools.contains_key(tool) {
+        if unregistered.contains(tool)
+            && evidence.is_none()
+            && !registry.registered_tools.contains_key(tool)
+        {
             facets.insert(GovernanceFacet::Unregistered);
         }
 
         // Registered: port allocated OR configured receipt exists.
         if registry.registered_tools.contains_key(tool)
-            || evidence.map_or(false, |e| e.has_configured || e.has_port_assigned)
+            || evidence.is_some_and(|e| e.has_configured || e.has_port_assigned)
         {
             facets.insert(GovernanceFacet::Registered);
         }
 
         // Provisioned: preflight passed (vault schema validated).
-        if evidence.map_or(false, |e| e.has_preflight_passed) {
+        if evidence.is_some_and(|e| e.has_preflight_passed) {
             facets.insert(GovernanceFacet::Provisioned);
         }
 
@@ -174,9 +180,10 @@ pub fn compute_postures(
         let has_launch_command = registry
             .registered_tools
             .get(tool)
-            .map_or(false, |r| r.has_launch_command);
-        if evidence.map_or(false, |e| e.has_launched) && has_launch_command
-            && evidence.map_or(false, |e| e.has_delegation)
+            .is_some_and(|r| r.has_launch_command);
+        if evidence.is_some_and(|e| e.has_launched)
+            && has_launch_command
+            && evidence.is_some_and(|e| e.has_delegation)
         {
             facets.insert(GovernanceFacet::Governed);
         }
@@ -185,8 +192,8 @@ pub fn compute_postures(
         // no Warning+ officer findings. Silence is not approval —
         // an officer must explicitly sign off via chain receipt.
         if facets.contains(&GovernanceFacet::Governed)
-            && evidence.map_or(false, |e| !e.officer_attestations.is_empty())
-            && evidence.map_or(true, |e| !e.has_officer_warnings)
+            && evidence.is_some_and(|e| !e.officer_attestations.is_empty())
+            && evidence.is_none_or(|e| !e.has_officer_warnings)
         {
             facets.insert(GovernanceFacet::Hardened);
         }
@@ -221,128 +228,83 @@ struct ToolChainEvidence {
 
 /// Scan chain for per-tool governance evidence using targeted keyword searches.
 ///
-/// Uses `search_by_keyword` for each event category instead of scanning
-/// a fixed tail window. This scales regardless of chain size — a chain
-/// with 400K entries won't push lifecycle events outside the search window.
+/// Uses the typed helpers in `crate::chain_reads` instead of raw
+/// `search_by_keyword` + `strip_prefix` — see
+/// `SUBSTRATE-LOOP-CLOSURE-2026-07.md` §S3. All receipt-format-string
+/// coupling for this function lives in `chain_reads.rs`; when
+/// Cartographer lands, this function keeps working unchanged while the
+/// helper's implementation shifts from raw chain reads to ontology
+/// queries.
+///
+/// Scales regardless of chain size — a chain with 400K entries won't
+/// push lifecycle events outside the search window because each helper
+/// searches by keyword rather than tail-scanning.
 fn scan_chain_evidence(chain: &ChainReader<'_>) -> HashMap<String, ToolChainEvidence> {
     let mut evidence: HashMap<String, ToolChainEvidence> = HashMap::new();
 
-    // Tool lifecycle: configured
-    if let Ok(entries) = chain.search_by_keyword("tool:configured:", 200) {
-        for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if let Some(tool) = event.strip_prefix("tool:configured:") {
-                    evidence.entry(tool.to_string()).or_default().has_configured = true;
-                }
-            }
+    // Tool lifecycle: configured / port_assigned / preflight_passed
+    if let Ok(events) = tool_lifecycle_events(chain, ToolLifecycleKind::Configured, 200) {
+        for ev in events {
+            evidence.entry(ev.tool_name).or_default().has_configured = true;
+        }
+    }
+    if let Ok(events) = tool_lifecycle_events(chain, ToolLifecycleKind::PortAssigned, 200) {
+        for ev in events {
+            evidence.entry(ev.tool_name).or_default().has_port_assigned = true;
+        }
+    }
+    if let Ok(events) = tool_lifecycle_events(chain, ToolLifecycleKind::PreflightPassed, 200) {
+        for ev in events {
+            evidence
+                .entry(ev.tool_name)
+                .or_default()
+                .has_preflight_passed = true;
         }
     }
 
-    // Tool lifecycle: port assigned
-    if let Ok(entries) = chain.search_by_keyword("tool:port:assigned:", 200) {
-        for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if let Some(rest) = event.strip_prefix("tool:port:assigned:") {
-                    if let Some(name) = rest.split(':').next() {
-                        evidence.entry(name.to_string()).or_default().has_port_assigned = true;
-                    }
-                }
-            }
-        }
-    }
-
-    // Tool lifecycle: preflight passed
-    if let Ok(entries) = chain.search_by_keyword("tool:preflight:passed:", 200) {
-        for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if let Some(tool) = event.strip_prefix("tool:preflight:passed:") {
-                    evidence.entry(tool.to_string()).or_default().has_preflight_passed = true;
-                }
-            }
-        }
-    }
-
-    // Tool lifecycle: launched
-    if let Ok(entries) = chain.search_by_keyword("tool:launched:", 200) {
-        for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if let Some(tool) = event.strip_prefix("tool:launched:") {
-                    evidence.entry(tool.to_string()).or_default().has_launched = true;
-                }
-            }
-        }
-    }
-
-    // Tool lifecycle: started (alternate event name)
-    if let Ok(entries) = chain.search_by_keyword("tool:started:", 200) {
-        for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if let Some(tool) = event.strip_prefix("tool:started:") {
-                    evidence.entry(tool.to_string()).or_default().has_launched = true;
-                }
+    // Tool lifecycle: launched — both `tool:launched:` and `tool:started:`
+    // are treated as the same semantic stage by this consumer. The
+    // helper keeps them as separate kinds; we merge here.
+    for kind in [ToolLifecycleKind::Launched, ToolLifecycleKind::Started] {
+        if let Ok(events) = tool_lifecycle_events(chain, kind, 200) {
+            for ev in events {
+                evidence.entry(ev.tool_name).or_default().has_launched = true;
             }
         }
     }
 
     // Delegation events — tool delegations only.
-    // Skip officer delegations (delegation:granted:officer:*) and any
+    // Skip officer delegations (`delegation:granted:officer:*`) and any
     // delegation target that looks like a raw hash (64 hex chars) rather
-    // than a tool name.
-    if let Ok(entries) = chain.search_by_keyword("delegation:granted:", 200) {
-        for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if let Some(rest) = event.strip_prefix("delegation:granted:") {
-                    if !rest.is_empty()
-                        && !rest.starts_with("officer:")
-                        && !(rest.len() == 64 && rest.chars().all(|c| c.is_ascii_hexdigit()))
-                    {
-                        evidence.entry(rest.to_string()).or_default().has_delegation = true;
-                    }
-                }
+    // than a tool name. Filtering via the `is_tool_target()` classifier.
+    if let Ok(events) = delegation_events(chain, DelegationKind::Granted, 200) {
+        for ev in events {
+            if ev.is_tool_target() {
+                evidence.entry(ev.target).or_default().has_delegation = true;
             }
         }
     }
 
     // Officer attestations: officer:<name>:attested:<tool>
-    if let Ok(entries) = chain.search_by_keyword("attested:", 500) {
-        for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if let Some(rest) = event.strip_prefix("officer:") {
-                    if let Some(pos) = rest.find(":attested:") {
-                        let officer_name = &rest[..pos];
-                        let tool_name = &rest[pos + ":attested:".len()..];
-                        if !tool_name.is_empty() {
-                            evidence
-                                .entry(tool_name.to_string())
-                                .or_default()
-                                .officer_attestations
-                                .insert(officer_name.to_string());
-                        }
-                    }
-                }
-            }
+    if let Ok(attestations) = officer_attestations(chain, 500) {
+        for a in attestations {
+            evidence
+                .entry(a.tool_name)
+                .or_default()
+                .officer_attestations
+                .insert(a.officer_name);
         }
     }
 
     // Officer findings with tool references (Warning+).
     // Recent warnings only — a tool's hardened status should degrade
     // if officers recently flagged it, not if they flagged it months ago.
-    if let Ok(entries) = chain.search_by_keyword(":operations:", 2000) {
-        for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if event.starts_with("officer:") {
-                    if let zp_core::PolicyDecision::Allow { conditions } = &entry.policy_decision {
-                        for condition in conditions {
-                            if let Some(tool_ref) = condition.strip_prefix("tool=") {
-                                evidence
-                                    .entry(tool_ref.to_string())
-                                    .or_default()
-                                    .has_officer_warnings = true;
-                            }
-                        }
-                    }
-                }
-            }
+    if let Ok(ops) = officer_operations_with_tool(chain, 2000) {
+        for op in ops {
+            evidence
+                .entry(op.tool_name)
+                .or_default()
+                .has_officer_warnings = true;
         }
     }
 
@@ -355,8 +317,8 @@ mod tests {
 
     #[test]
     fn empty_inputs_produce_no_postures() {
-        let store = zp_audit::store::AuditStore::open_readonly(":memory:")
-            .expect("open in-memory store");
+        let store =
+            zp_audit::store::AuditStore::open_readonly(":memory:").expect("open in-memory store");
         let chain = ChainReader::new(&store);
         let registry = ToolRegistrySnapshot::default();
         let unregistered = UnregisteredTools::new();
@@ -367,8 +329,8 @@ mod tests {
 
     #[test]
     fn unregistered_tool_from_sensor() {
-        let store = zp_audit::store::AuditStore::open_readonly(":memory:")
-            .expect("open in-memory store");
+        let store =
+            zp_audit::store::AuditStore::open_readonly(":memory:").expect("open in-memory store");
         let chain = ChainReader::new(&store);
         let registry = ToolRegistrySnapshot::default();
         let mut unregistered = UnregisteredTools::new();
@@ -383,12 +345,12 @@ mod tests {
 
     #[test]
     fn registered_tool_from_port_registry() {
-        let store = zp_audit::store::AuditStore::open_readonly(":memory:")
-            .expect("open in-memory store");
+        let store =
+            zp_audit::store::AuditStore::open_readonly(":memory:").expect("open in-memory store");
         let chain = ChainReader::new(&store);
         let mut registry = ToolRegistrySnapshot::default();
         registry.registered_tools.insert(
-            "ironclaw".to_string(),
+            "example-tool".to_string(),
             RegisteredToolInfo {
                 port: 9101,
                 pid: Some(12345),
@@ -431,13 +393,13 @@ mod tests {
     fn governed_without_attestation_is_not_hardened() {
         // Governed tool with no officer attestations should NOT be hardened.
         // Silence is not approval — signing is gravity.
-        let store = zp_audit::store::AuditStore::open_readonly(":memory:")
-            .expect("open in-memory store");
+        let store =
+            zp_audit::store::AuditStore::open_readonly(":memory:").expect("open in-memory store");
         let chain = ChainReader::new(&store);
 
         let mut registry = ToolRegistrySnapshot::default();
         registry.registered_tools.insert(
-            "ironclaw".to_string(),
+            "example-tool".to_string(),
             RegisteredToolInfo {
                 port: 9101,
                 pid: Some(12345),
@@ -460,9 +422,11 @@ mod tests {
         // Direct test of the facet logic: a ToolChainEvidence with
         // has_launched + has_delegation but empty attestations should
         // produce Governed but NOT Hardened.
-        let mut evidence = ToolChainEvidence::default();
-        evidence.has_launched = true;
-        evidence.has_delegation = true;
+        let mut evidence = ToolChainEvidence {
+            has_launched: true,
+            has_delegation: true,
+            ..Default::default()
+        };
         assert!(evidence.officer_attestations.is_empty());
 
         // With attestation added, Hardened should be reachable.

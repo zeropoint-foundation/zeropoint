@@ -122,10 +122,7 @@ pub fn ingest_observation(
     let confidence = priority_to_confidence(observation.priority);
 
     // Get the receipt ID backing this observation.
-    let receipt_id = observation
-        .receipt_id
-        .as_deref()
-        .unwrap_or(&observation.id);
+    let receipt_id = observation.receipt_id.as_deref().unwrap_or(&observation.id);
 
     // Register the observation as a new memory at Observed stage.
     let memory_id = engine.register_from_observation(

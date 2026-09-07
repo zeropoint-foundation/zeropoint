@@ -83,6 +83,16 @@ The four lenses compose losslessly. Click a bead on the abacus and it opens the 
 - Target footprint ~30KB gzipped for the whole visual substrate.
 - Forking Claude.ai's CodeFlow is the wrong move. Copy the grammar; the code is replaceable.
 
+## Future formalization direction (added 2026-07-27)
+
+The four-lens grammar is currently prose-defined convention rather than a formal visual language: each artifact (`docs/lenses/zeropoint-through-four-lenses.html`, `source-codeflow.html`, the mindmaps) re-implements rendering ad hoc against the shared aesthetic. That's working, and further formalization is deferred until the chain runtime lands and receipt-shaped visualizations become the primary substrate. But the direction worth naming, in case it becomes worth taking:
+
+Promote this grammar from prose convention to a **formally-defined visual language for deterministic substrate elements and processes** — a grammar you write *in* rather than a discipline you conform to. Concretely: a JSON/TOML grammar spec describing lens declarations, rewrite rules for composing visual elements from substrate elements, and auto-inference of layout dimensions (analogous to bus-width inference in circuit-description languages). A shared rendering runtime consumes grammar-instances; new artifacts are grammar declarations, not fresh code. `lens:declared:*` receipts (per LENS-DISCIPLINE-2026-07) carry actual grammar terms rather than prose descriptions of intent.
+
+**Reference implementation to study** if this direction becomes active: [MorphoHDL](https://paradigms-of-intelligence.github.io/morpho/) from Google Research's Paradigms of Intelligence Team. Not for its Boolean-circuit specifics — it describes recursive Boolean-circuit growth via cell rewrite rules, which is a different domain — but for its treatment of *how* a visual language for deterministic processes works: rewrite composition, dimensional inference, growth-driven rendering. Apache 2.0, small enough to read end-to-end. Evaluated as of 2026-07-27; see `docs/handoffs/morpho-visual-language-evaluation-2026-07-27.md` for the full assessment.
+
+Not urgent, not scoped. Bookmark.
+
 ## Closing
 
 *A bead is a receipt, crystallized.*

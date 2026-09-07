@@ -19,8 +19,7 @@ use serde_json;
 
 use crate::awareness::{BackgroundTask, SystemMonitor};
 use crate::context::{
-    BackgroundTaskKind, CockpitSource, DelegationSummary, OperatorInput,
-    ToolResult, WorkArc,
+    BackgroundTaskKind, CockpitSource, DelegationSummary, OperatorInput, ToolResult, WorkArc,
 };
 use crate::error::RegentError;
 use crate::evaluation;
@@ -42,10 +41,16 @@ pub enum IntentOutcome {
         output: serde_json::Value,
     },
     /// Gate denied the tool call.
-    ToolDenied {
-        tool: String,
-        reason: String,
-    },
+    ToolDenied { tool: String, reason: String },
+    /// The capability exists and is delegated, but this specific call has
+    /// no operator signature.
+    ///
+    /// Distinct from `ToolDenied` on purpose. A gate denial says the act is
+    /// not permitted; this says it is not permitted *yet*, and names the
+    /// thing that would permit it. That difference is the whole basis for
+    /// escalating to a proposal, and deriving it by matching words in a
+    /// denial string would make a control-flow decision out of prose.
+    ToolRefusedUnsigned { tool: String, reason: String },
     /// Response was delivered to a cockpit surface.
     Delivered,
     /// Observation recorded (no visible effect).
@@ -164,6 +169,14 @@ const MAX_TOOL_TURNS: u32 = 3;
 /// so the theoretical max is 10 × 3 = 30 tool invocations per arc.
 const MAX_ARC_CYCLES: u32 = 10;
 
+/// Consecutive no-change cycles before an arc is declared stalled.
+///
+/// Two, not one: a single repeat can be a model restating itself on the way
+/// to acting, and cutting an arc off at the first repetition would kill
+/// legitimate slow starts. Two identical cycles with no tool dispatched is
+/// not a slow start — it is a loop.
+const ARC_STALL_LIMIT: u32 = 2;
+
 /// Default idle threshold before the Regent considers background maintenance.
 /// The Regent won't start heavy work (model evaluation) until the operator
 /// has been idle for at least this long.
@@ -173,12 +186,22 @@ const IDLE_THRESHOLD_SECS: u64 = 300; // 5 minutes
 ///
 /// The loop runs until shutdown is requested. It wakes on:
 /// 1. Operator input (immediate cycle, cancels background tasks).
-/// 2. Officer findings (immediate cycle if urgent).
+/// 2. Officer findings — immediate cycle only at `Severity::INTERRUPT_FLOOR`.
+///    Findings at `ATTENTION_FLOOR` are stored and reasoned about on the next
+///    scheduled cycle; they do not start one. "Urgent" is two thresholds, not
+///    one — see `Severity`'s type docs (DECIDED-004 MEANWHILE-3).
 /// 3. Timer (autonomous cycle — system awareness + harmony maintenance).
 ///
 /// `delegations` — the tools granted to the Regent at startup. Passed into
 /// every cognitive cycle so the Regent's prompt includes the tool section.
 /// Eventually this will be read from the chain; for now it's static.
+// Eleven parameters, against clippy's threshold of seven. Bundling them into
+// a config struct is the obvious refactor and is deliberately not done here:
+// this is the Regent's construction seam, every argument is a distinct
+// collaborator the loop owns for its lifetime, and folding them into one type
+// would move the wiring decision out of the call site that makes it. Recorded
+// as a shape worth revisiting, not as noise to be silenced.
+#[allow(clippy::too_many_arguments)]
 pub fn start_loop(
     regent: Arc<Mutex<Regent>>,
     executor: Arc<dyn IntentExecutor>,
@@ -190,13 +213,46 @@ pub fn start_loop(
     operator_name: String,
     genesis_prefix: String,
     delegations: Vec<DelegationSummary>,
+    // H3 (token-entropy anomaly) baselines per model variant. Built by
+    // the caller from the dossier corpus so start_loop stays free of
+    // TOML-schema knowledge. Empty map → H3 stays silent.
+    entropy_baselines: std::collections::HashMap<String, zp_emission_coherence::EntropyBaseline>,
 ) -> RegentHandle {
     let (tx, mut rx) = mpsc::channel::<RegentMessage>(64);
+
+    // Emission-coherence analyzer per REGENT-DOOM-LOOP-DETECTION §Part II.
+    // Holds the rolling window for H2 (length-distribution collapse) and
+    // entropy baselines for H3 across cycles. Config defaults: 20-cycle
+    // window, CV threshold 0.15. H3 baselines come from `entropy_baselines`
+    // (this parameter), extracted at the caller site from the dossier
+    // corpus — every `[entropy_baseline]` section with `state = "calibrated"`
+    // and non-zero `std_dev` becomes an entry keyed by `target_variant`.
+    // Dossiers without a calibrated baseline are skipped: H3 simply doesn't
+    // fire for models whose baselines aren't measured yet.
+    //
+    // First-shipping discipline per the doc: instrumentation only. Findings
+    // are chain-anchored via SystemEvent receipts; response classification
+    // does NOT yet gate delivery or trigger retries. The R1/R2 wiring lands
+    // after the substrate has accumulated evidence of false-positive rates.
+    let analyzer_config = zp_emission_coherence::AnalyzerConfig {
+        entropy_baselines,
+        ..Default::default()
+    };
+    info!(
+        h3_baselines = analyzer_config.entropy_baselines.len(),
+        "emission-coherence analyzer starting"
+    );
+    let emission_analyzer: Arc<std::sync::Mutex<zp_emission_coherence::EmissionAnalyzer>> =
+        Arc::new(std::sync::Mutex::new(
+            zp_emission_coherence::EmissionAnalyzer::new(analyzer_config),
+        ));
 
     tokio::spawn(async move {
         let mut latest_findings: Vec<Finding> = Vec::new();
         let interval = if interval_secs > 0 {
-            Some(tokio::time::interval(std::time::Duration::from_secs(interval_secs)))
+            Some(tokio::time::interval(std::time::Duration::from_secs(
+                interval_secs,
+            )))
         } else {
             None
         };
@@ -216,6 +272,21 @@ pub fn start_loop(
                     msg = rx.recv() => msg,
                     _ = interval.tick() => {
                         // Autonomous wake — check system state, maybe do maintenance.
+                        //
+                        // This is unsolicited initiative: nothing asked for it.
+                        // Note the shape below — an autonomous wake is
+                        // constructed as `OperatorInput` with empty content,
+                        // so the type system does not distinguish "the
+                        // operator asked" from "I woke myself"; only
+                        // `CockpitSource::Autonomous` carries the difference.
+                        // The warrant receipt records the distinction on chain
+                        // where it cannot be lost in a refactor.
+                        emit_initiative_warrant_receipt(
+                            &audit_store,
+                            "timer",
+                            "none",
+                            false,
+                        );
                         Some(RegentMessage::OperatorInput {
                             content: String::new(),
                             source: CockpitSource::Autonomous,
@@ -241,21 +312,41 @@ pub fn start_loop(
                 }
 
                 RegentMessage::OfficerFindings(findings) => {
+                    // Unsolicited initiative with a resolvable warrant: the
+                    // severity floors are declared thresholds, so a
+                    // finding-driven wake traces to something the operator
+                    // set. Contrast the timer arm above, which traces to
+                    // nothing.
+                    emit_initiative_warrant_receipt(
+                        &audit_store,
+                        "finding",
+                        &format!("severity_floor/count={}", findings.len()),
+                        true,
+                    );
                     latest_findings = findings;
-                    let has_critical = latest_findings.iter().any(|f| {
-                        matches!(
-                            f.severity,
-                            zp_officers::finding::Severity::Critical
-                        )
-                    });
-                    if !has_critical {
+                    // `INTERRUPT_FLOOR` — findings below it are retained in
+                    // `latest_findings` and reach the next scheduled cycle,
+                    // where `reason` applies `ATTENTION_FLOOR`. Continuing
+                    // here drops the cycle, not the finding.
+                    let has_interrupting = latest_findings.iter().any(|f| f.severity.interrupts());
+                    if !has_interrupting {
                         continue;
                     }
-                    debug!("critical finding — triggering immediate cycle");
+                    debug!("finding at interrupt floor — triggering immediate cycle");
                     // Fall through to run_cycle below.
                 }
 
-                RegentMessage::OperatorInput { content, source, reply_tx } => {
+                RegentMessage::OperatorInput {
+                    content,
+                    source,
+                    reply_tx,
+                } => {
+                    // Enact whatever the operator has granted since the last
+                    // tick, before reasoning about anything new. A signature
+                    // that has been sitting unhonoured is the oldest
+                    // outstanding instruction in the system.
+                    drain_enactable_approvals(&audit_store, &executor).await;
+
                     let is_operator = !content.is_empty();
                     // Capture operator question for the mirror before content is moved.
                     let operator_question_for_mirror = if is_operator {
@@ -280,12 +371,31 @@ pub fn start_loop(
                     };
 
                     // ── Arc loop: run cycles until Done or budget exhausted ──
+                    let cycle_directive_for_arc: Option<String> =
+                        operator_input.as_ref().map(|i| i.content.clone());
                     let mut arc: Option<WorkArc> = None;
                     let mut arc_input = operator_input;
                     // Mirror: carry the prior response into the first cycle.
                     // Updated after each cycle so the Regent always sees her
                     // most recent output in the next perceive().
                     let mut cycle_prior = last_prior_response.take();
+                    // Whether the answer came from the substrate rather than
+                    // from the Regent. A stall notice and a budget-exhausted
+                    // notice are written here, by the loop, about the Regent —
+                    // they are the correct thing to tell an *operator* and the
+                    // wrong thing to hand back to the Regent as "what you
+                    // said", because it never said it.
+                    //
+                    // Observed 2026-08-01: after an arc stalled, the mirror
+                    // presented the stall notice as the Regent's own prior
+                    // turn. The next message was "hi", and routing answered
+                    // {"intent":"continue","progress":"I started on ",
+                    // "tool":"chain_compact"} — lifting the opening words of
+                    // the notice verbatim into its plan. Rewording the
+                    // mirror's instructions did not stop it, because the
+                    // problem was never the instruction: a small model given
+                    // text in the "you said this" slot will continue it.
+                    let mut substrate_authored = false;
                     let response = loop {
                         let awareness = monitor.lock().await.snapshot().await;
 
@@ -300,7 +410,9 @@ pub fn start_loop(
                             &delegations,
                             arc.clone(),
                             cycle_prior.take(),
-                        ).await;
+                            &emission_analyzer,
+                        )
+                        .await;
 
                         match outcome {
                             CycleOutcome::Done(response) => {
@@ -310,29 +422,52 @@ pub fn start_loop(
                                         tools = a.tool_history.len(),
                                         "work arc completed"
                                     );
-                                    emit(&cognitive_event_tx, CognitiveEvent::new(Phase::ArcEnd, 0)
-                                        .with_detail(format!(
+                                    emit(
+                                        &cognitive_event_tx,
+                                        CognitiveEvent::new(Phase::ArcEnd, 0).with_detail(format!(
                                             "cycles={} tools={}",
-                                            a.cycles_completed, a.tool_history.len()
-                                        )));
+                                            a.cycles_completed,
+                                            a.tool_history.len()
+                                        )),
+                                    );
                                 }
                                 break response;
                             }
-                            CycleOutcome::Continue { progress, tool_results } => {
+                            CycleOutcome::Continue {
+                                progress,
+                                tool_results,
+                            } => {
                                 let is_new_arc = arc.is_none();
                                 let current = arc.get_or_insert_with(|| WorkArc {
                                     progress: String::new(),
                                     cycles_completed: 0,
                                     max_cycles: MAX_ARC_CYCLES,
                                     tool_history: Vec::new(),
+                                    stall_count: 0,
+                                    directive: cycle_directive_for_arc.clone(),
+                                    waypoints: Vec::new(),
+                                    destination_hypotheses: Vec::new(),
+                                    settlement: crate::context::SettlementState::Open,
                                 });
+                                // Read the arc's prior state before overwriting it.
+                                let no_advance = !is_new_arc
+                                    && current.progress == progress
+                                    && current.tool_history.len() == tool_results.len();
+                                current.stall_count = if no_advance {
+                                    current.stall_count + 1
+                                } else {
+                                    0
+                                };
                                 current.progress = progress.clone();
                                 current.cycles_completed += 1;
                                 current.tool_history = tool_results;
 
                                 if is_new_arc {
-                                    emit(&cognitive_event_tx, CognitiveEvent::new(Phase::ArcStart, 0)
-                                        .with_detail(progress.clone()));
+                                    emit(
+                                        &cognitive_event_tx,
+                                        CognitiveEvent::new(Phase::ArcStart, 0)
+                                            .with_detail(progress.clone()),
+                                    );
                                 }
 
                                 info!(
@@ -342,11 +477,50 @@ pub fn start_loop(
                                     "work arc continuing"
                                 );
 
-                                emit(&cognitive_event_tx, CognitiveEvent::new(Phase::ArcProgress, 0)
-                                    .with_detail(format!(
-                                        "{}/{}: {}",
-                                        current.cycles_completed, MAX_ARC_CYCLES, progress
-                                    )));
+                                emit(
+                                    &cognitive_event_tx,
+                                    CognitiveEvent::new(Phase::ArcProgress, 0).with_detail(
+                                        format!(
+                                            "{}/{}: {}",
+                                            current.cycles_completed, MAX_ARC_CYCLES, progress
+                                        ),
+                                    ),
+                                );
+
+                                // Stall check, ahead of the budget check —
+                                // an arc that is going nowhere should say so
+                                // rather than spend nine more cycles proving
+                                // it, and "stopped after 10 cycles (budget)"
+                                // is indistinguishable from work attempted.
+                                if current.stall_count >= ARC_STALL_LIMIT {
+                                    warn!(
+                                        cycles = current.cycles_completed,
+                                        stalls = current.stall_count,
+                                        progress = progress.as_str(),
+                                        "work arc stalled — same plan, no tool dispatched"
+                                    );
+                                    emit(
+                                        &cognitive_event_tx,
+                                        CognitiveEvent::new(Phase::ArcEnd, 0).with_detail(format!(
+                                            "stalled after {} cycles: {}",
+                                            current.cycles_completed, progress
+                                        )),
+                                    );
+                                    emit_arc_stalled_receipt(
+                                        &audit_store,
+                                        &progress,
+                                        current.cycles_completed,
+                                    );
+                                    substrate_authored = true;
+                                    break format!(
+                                        "I started on \"{progress}\" and then made no \
+                                         progress on it — {} cycles with the same plan and \
+                                         no tool run. I have stopped rather than keep \
+                                         going in circles. Tell me what to do differently, \
+                                         or ask me to try a specific step.",
+                                        current.cycles_completed
+                                    );
+                                }
 
                                 // Budget check.
                                 if current.cycles_completed >= MAX_ARC_CYCLES {
@@ -354,6 +528,7 @@ pub fn start_loop(
                                         cycles = current.cycles_completed,
                                         "work arc hit budget — forcing stop"
                                     );
+                                    substrate_authored = true;
                                     break format!(
                                         "Work arc stopped after {} cycles (budget). Last: {}",
                                         current.cycles_completed, progress
@@ -402,7 +577,14 @@ pub fn start_loop(
                     };
 
                     // Mirror: capture the Regent's response for the next cycle.
-                    last_prior_response = if !response.starts_with("error:") {
+                    //
+                    // Only what the Regent actually composed. Errors were
+                    // already excluded; substrate-authored notices are too,
+                    // for the same reason — the mirror's contract is "this is
+                    // what you said", and putting anything else in that slot
+                    // makes it a suggestion instead of a memory.
+                    last_prior_response = if !substrate_authored && !response.starts_with("error:")
+                    {
                         let model = {
                             let rg = regent.lock().await;
                             rg.model_label()
@@ -428,7 +610,8 @@ pub fn start_loop(
                             &audit_store,
                             &operator_name,
                             &genesis_prefix,
-                        ).await;
+                        )
+                        .await;
                     }
 
                     continue;
@@ -451,45 +634,93 @@ pub fn start_loop(
                     &delegations,
                     arc.clone(),
                     None, // No mirror for autonomous cycles — no operator question to reflect on.
-                ).await;
+                    &emission_analyzer,
+                )
+                .await;
 
                 match outcome {
                     CycleOutcome::Done(_) => {
                         if let Some(ref a) = arc {
-                            emit(&cognitive_event_tx, CognitiveEvent::new(Phase::ArcEnd, 0)
-                                .with_detail(format!(
+                            emit(
+                                &cognitive_event_tx,
+                                CognitiveEvent::new(Phase::ArcEnd, 0).with_detail(format!(
                                     "cycles={} tools={}",
-                                    a.cycles_completed, a.tool_history.len()
-                                )));
+                                    a.cycles_completed,
+                                    a.tool_history.len()
+                                )),
+                            );
                         }
                         break;
                     }
-                    CycleOutcome::Continue { progress, tool_results } => {
+                    CycleOutcome::Continue {
+                        progress,
+                        tool_results,
+                    } => {
                         let is_new_arc = arc.is_none();
                         let current = arc.get_or_insert_with(|| WorkArc {
                             progress: String::new(),
                             cycles_completed: 0,
                             max_cycles: MAX_ARC_CYCLES,
                             tool_history: Vec::new(),
+                            stall_count: 0,
+                            // Findings-triggered: no operator directive.
+                            directive: None,
+                            waypoints: Vec::new(),
+                            destination_hypotheses: Vec::new(),
+                            settlement: crate::context::SettlementState::Open,
                         });
+                        let no_advance = !is_new_arc
+                            && current.progress == progress
+                            && current.tool_history.len() == tool_results.len();
+                        current.stall_count = if no_advance {
+                            current.stall_count + 1
+                        } else {
+                            0
+                        };
                         current.progress = progress.clone();
                         current.cycles_completed += 1;
                         current.tool_history = tool_results;
 
                         if is_new_arc {
-                            emit(&cognitive_event_tx, CognitiveEvent::new(Phase::ArcStart, 0)
-                                .with_detail(progress.clone()));
+                            emit(
+                                &cognitive_event_tx,
+                                CognitiveEvent::new(Phase::ArcStart, 0)
+                                    .with_detail(progress.clone()),
+                            );
                         }
-                        emit(&cognitive_event_tx, CognitiveEvent::new(Phase::ArcProgress, 0)
-                            .with_detail(format!(
+                        emit(
+                            &cognitive_event_tx,
+                            CognitiveEvent::new(Phase::ArcProgress, 0).with_detail(format!(
                                 "{}/{}: {}",
                                 current.cycles_completed, MAX_ARC_CYCLES, progress
-                            )));
+                            )),
+                        );
+
+                        if current.stall_count >= ARC_STALL_LIMIT {
+                            warn!(
+                                cycles = current.cycles_completed,
+                                progress = progress.as_str(),
+                                "critical finding arc stalled — same plan, no tool dispatched"
+                            );
+                            emit(
+                                &cognitive_event_tx,
+                                CognitiveEvent::new(Phase::ArcEnd, 0).with_detail("stalled"),
+                            );
+                            emit_arc_stalled_receipt(
+                                &audit_store,
+                                &progress,
+                                current.cycles_completed,
+                            );
+                            break;
+                        }
 
                         if current.cycles_completed >= MAX_ARC_CYCLES {
                             warn!("critical finding arc hit budget");
-                            emit(&cognitive_event_tx, CognitiveEvent::new(Phase::ArcEnd, 0)
-                                .with_detail("budget_exhausted"));
+                            emit(
+                                &cognitive_event_tx,
+                                CognitiveEvent::new(Phase::ArcEnd, 0)
+                                    .with_detail("budget_exhausted"),
+                            );
                             break;
                         }
                     }
@@ -579,12 +810,14 @@ async fn maybe_start_background_work(
                     action: zp_core::AuditAction::SystemEvent {
                         event: format!(
                             "regent:model_evaluated:{} passed={}/{} latency={}ms",
-                            report.model, report.passed, report.total_tests,
+                            report.model,
+                            report.passed,
+                            report.total_tests,
                             report.total_latency_ms
                         ),
                     },
                     conversation_id: zp_core::ConversationId(
-                        uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap()
+                        uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap(),
                     ),
                     policy_decision: zp_core::PolicyDecision::Allow {
                         conditions: Vec::new(),
@@ -607,7 +840,8 @@ async fn maybe_start_background_work(
             prefix,
             cancel_clone,
             emit_receipt,
-        ).await;
+        )
+        .await;
 
         if result.cancelled {
             info!(
@@ -652,6 +886,8 @@ fn emit(tx: &Option<EventTx>, event: CognitiveEvent) {
     }
 }
 
+// Same eleven collaborators as `start_loop`, borrowed for one cycle.
+#[allow(clippy::too_many_arguments)]
 async fn run_cycle(
     regent: &Arc<Mutex<Regent>>,
     executor: &Arc<dyn IntentExecutor>,
@@ -663,7 +899,18 @@ async fn run_cycle(
     delegations: &[DelegationSummary],
     work_arc: Option<WorkArc>,
     prior_response: Option<crate::context::PriorResponse>,
+    emission_analyzer: &Arc<std::sync::Mutex<zp_emission_coherence::EmissionAnalyzer>>,
 ) -> CycleOutcome {
+    // Retained for every turn of this cycle. `current_input.take()` below
+    // hands the operator's message to perceive exactly once, so that a
+    // narration turn is not re-read as a new directive — correct, but it
+    // also left later turns with no idea what was asked.
+    let cycle_directive: Option<String> = initial_input
+        .as_ref()
+        .map(|i| i.content.clone())
+        // An arc continuation has no input of its own; the directive it is
+        // serving belongs to the arc.
+        .or_else(|| work_arc.as_ref().and_then(|a| a.directive.clone()));
     let mut current_input = initial_input;
     // If resuming a work arc, seed tool_results with the arc's history
     // so the Regent sees what she's already done across prior cycles.
@@ -673,8 +920,14 @@ async fn run_cycle(
         .unwrap_or_default();
 
     let cycle_t0 = std::time::Instant::now();
-    emit(event_tx, CognitiveEvent::new(Phase::CycleStart, 0)
-        .with_detail(format!("findings={} arc={}", findings.len(), work_arc.is_some())));
+    emit(
+        event_tx,
+        CognitiveEvent::new(Phase::CycleStart, 0).with_detail(format!(
+            "findings={} arc={}",
+            findings.len(),
+            work_arc.is_some()
+        )),
+    );
 
     // Cognitive act accounting (v0, per COGNITIVE-ACT-ACCOUNTING-2026-07.md
     // §6 / BRIEF-cognitive-act-v0-m0-2026-07.md §2). The act receipt cites
@@ -688,6 +941,16 @@ async fn run_cycle(
     for turn in 0..MAX_TOOL_TURNS {
         // Lock the regent first (async-safe tokio Mutex).
         let mut regent_guard = regent.lock().await;
+        // The counter lives on Regent and is incremented by `Regent::cycle()`,
+        // which this loop does not call — it drives perceive/reason directly.
+        // Without this the chain records every autonomous cycle as "cycle 0".
+        let cycle_no = regent_guard.begin_cycle(findings);
+        debug!(
+            cycle = cycle_no,
+            turn,
+            wake = regent_guard.wake().as_str(),
+            "regent cycle starting"
+        );
 
         // ── Perceive ─────────────────────────────────────────────
         let perceive_t0 = std::time::Instant::now();
@@ -696,43 +959,58 @@ async fn run_cycle(
                 Ok(s) => s,
                 Err(e) => {
                     warn!("regent cycle: audit store lock poisoned: {}", e);
-                    emit(event_tx, CognitiveEvent::new(Phase::Error, cycle_t0.elapsed().as_millis() as u64)
-                        .with_detail("audit store lock poisoned"));
+                    emit(
+                        event_tx,
+                        CognitiveEvent::new(Phase::Error, cycle_t0.elapsed().as_millis() as u64)
+                            .with_detail("audit store lock poisoned"),
+                    );
                     return CycleOutcome::Done(format!("error: audit store lock poisoned: {}", e));
                 }
             };
-            let chain_reader = ChainReader::new(&*store);
+            let chain_reader = ChainReader::new(&store);
             match regent_guard.perceive(
                 &chain_reader,
                 findings,
                 current_input.take(),
-                &delegations,
+                delegations,
                 system_awareness.clone(),
                 tool_results.clone(),
                 work_arc.clone(),
                 // Mirror: only show prior response on first turn of the cycle.
                 // Subsequent turns (tool dispatch → narration) don't need it.
-                if turn == 0 { prior_response.clone() } else { None },
+                if turn == 0 {
+                    prior_response.clone()
+                } else {
+                    None
+                },
+                // Unlike the mirror above, this is passed on *every* turn.
+                // It is the one thing a narration turn cannot do without.
+                cycle_directive.clone(),
             ) {
                 Ok(ctx) => ctx,
                 Err(e) => {
                     warn!("regent perceive failed: {}", e);
-                    emit(event_tx, CognitiveEvent::new(Phase::Error, cycle_t0.elapsed().as_millis() as u64)
-                        .with_detail(format!("perceive: {}", e)));
+                    emit(
+                        event_tx,
+                        CognitiveEvent::new(Phase::Error, cycle_t0.elapsed().as_millis() as u64)
+                            .with_detail(format!("perceive: {}", e)),
+                    );
                     return CycleOutcome::Done(format!("error: perceive failed: {}", e));
                 }
             }
         };
         let perceive_ms = perceive_t0.elapsed().as_millis() as u64;
-        emit(event_tx, CognitiveEvent::new(Phase::Perceive, perceive_ms)
-            .with_detail(format!(
+        emit(
+            event_tx,
+            CognitiveEvent::new(Phase::Perceive, perceive_ms).with_detail(format!(
                 "chain={} findings={} delegations={} corrections={} prior_tools={}",
                 context.recent_chain.len(),
                 context.officer_findings.len(),
                 context.active_delegations.len(),
                 context.standing_corrections.len(),
                 context.tool_results.len(),
-            )));
+            )),
+        );
         info!(perceive_ms, turn, "regent perceive completed");
 
         // ── Composition receipt ──────────────────────────────────
@@ -741,26 +1019,35 @@ async fn run_cycle(
         // per COGNITIVE-INPUT-PLANE-2026-07.md Step 6. Structural only
         // (hashes, counts) — no content bloat on chain per cycle.
         if let Some(ref summary) = context.composition_summary {
-            last_composition_hash = emit_composition_receipt(&audit_store, summary);
+            last_composition_hash = emit_composition_receipt(audit_store, summary);
             last_composition_summary = Some(summary.clone());
         }
 
         // ── Reason (inference) ───────────────────────────────────
         let reason_t0 = std::time::Instant::now();
-        emit(event_tx, CognitiveEvent::new(Phase::InferenceStart, 0)
-            .with_detail(format!("model={} turn={}", regent_guard.model_label(), turn)));
+        emit(
+            event_tx,
+            CognitiveEvent::new(Phase::InferenceStart, 0).with_detail(format!(
+                "model={} turn={}",
+                regent_guard.model_label(),
+                turn
+            )),
+        );
 
         let intent = match regent_guard.reason(&context).await {
             Ok(i) => i,
             Err(e) => {
                 warn!("regent reason failed: {}", e);
-                emit(event_tx, CognitiveEvent::new(Phase::Error, cycle_t0.elapsed().as_millis() as u64)
-                    .with_detail(format!("reason: {}", e)));
+                emit(
+                    event_tx,
+                    CognitiveEvent::new(Phase::Error, cycle_t0.elapsed().as_millis() as u64)
+                        .with_detail(format!("reason: {}", e)),
+                );
                 // A cycle where reasoning failed is precisely the kind of
                 // act the accounting layer exists to make visible — the
                 // exit a bottom-of-function emit would silently drop.
                 emit_cognitive_act_receipt(
-                    &audit_store,
+                    audit_store,
                     last_composition_hash.as_deref(),
                     last_composition_summary.as_ref(),
                     None, // no intent — reasoning never produced one
@@ -771,11 +1058,22 @@ async fn run_cycle(
             }
         };
         let reason_ms = reason_t0.elapsed().as_millis() as u64;
-        emit(event_tx, CognitiveEvent::new(Phase::InferenceEnd, reason_ms)
-            .with_detail(format!("intent={}", intent.receipt_event())));
-        emit(event_tx, CognitiveEvent::new(Phase::IntentParsed, 0)
-            .with_detail(format!("{}", intent.receipt_event())));
-        info!(reason_ms, turn, intent = intent.receipt_event(), "regent reason completed");
+        emit(
+            event_tx,
+            CognitiveEvent::new(Phase::InferenceEnd, reason_ms)
+                .with_detail(format!("intent={}", intent.receipt_event())),
+        );
+        emit(
+            event_tx,
+            CognitiveEvent::new(Phase::IntentParsed, 0)
+                .with_detail(intent.receipt_event().to_string()),
+        );
+        info!(
+            reason_ms,
+            turn,
+            intent = intent.receipt_event(),
+            "regent reason completed"
+        );
 
         // ── Fallback diagnostics ─────────────────────────────────
         // If cloud inference failed and the backend fell back to local
@@ -794,13 +1092,11 @@ async fn run_cycle(
                 action: zp_core::AuditAction::SystemEvent {
                     event: format!(
                         "regent:inference:fallback provider={} error={} fallback_model={}",
-                        fb.cloud_provider,
-                        fb.cloud_error,
-                        fb.fallback_model,
+                        fb.cloud_provider, fb.cloud_error, fb.fallback_model,
                     ),
                 },
                 conversation_id: zp_core::ConversationId(
-                    uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap()
+                    uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap(),
                 ),
                 policy_decision: zp_core::PolicyDecision::Allow {
                     conditions: Vec::new(),
@@ -811,6 +1107,68 @@ async fn run_cycle(
             if let Ok(mut s) = audit_store.lock() {
                 if let Err(e) = s.append(entry) {
                     warn!("fallback receipt emission failed: {}", e);
+                }
+            }
+        }
+
+        // ── Layer 2 classifier decision ────────────────────────
+        // Per INFERENCE-ROUTING-DISCIPLINE-2026-07 §Layer 2 — every
+        // inference call generates a classifier decision. Advisory-only
+        // in first-shipping: envelopes today are single-model, so every
+        // decision is SoleAuthorized. Chain-anchoring even the trivial
+        // case builds the empirical foundation for evidence-based
+        // routing when multi-model envelopes ship via operator ceremony.
+        // Which model actually served this cycle. Captured here because
+        // `regent_guard` is dropped below (see the comment at the drop) and
+        // the emission-coherence hook that needs it runs after that point.
+        // Peeked, not drained — see `InferenceBackend::last_served_model`.
+        let served_this_cycle = regent_guard.inference().last_served_model();
+
+        if let Some(decision) = regent_guard.inference().take_classifier_decision() {
+            // `prefix + space + JSON`, matching every other emitter on the
+            // chain (`cognitive:correction:standing {…}`, `…:violated {…}`).
+            //
+            // Until 2026-08-06 this one serialized the whole event as bare
+            // JSON, with `receipt_type()` — the canonical key, documented and
+            // format-tested on `ClassifierDecision` — demoted to a payload
+            // field. The receipt-type inventory partitions the chain by leading
+            // token, so these registered their first serialized key as a
+            // prefix: `{"chosen_model"`, because serde sorts keys and
+            // `chosen_model` precedes `class`. They surfaced in a posture check
+            // as two receipts with an unrecognized prefix, invisible to every
+            // prefix-scoped query in between.
+            //
+            // `class` and `receipt_type` leave the payload — the prefix now
+            // carries both structurally (P4, every bit counts).
+            //
+            // Forward-only: the two malformed receipts stay on the chain as
+            // history. Chain is truth and is not rewritten.
+            let payload = serde_json::to_string(&serde_json::json!({
+                "decision_id": decision.decision_id,
+                "chosen_model": decision.chosen_model,
+                "envelope_size": decision.envelope_size,
+                "routable_count": decision.routable_count,
+                "selection_reason": decision.selection_reason,
+                "query_hint": decision.query_hint,
+                "timestamp": decision.timestamp,
+            }))
+            .unwrap_or_else(|_| "{}".to_string());
+            let event = format!("{} {}", decision.receipt_type(), payload);
+            let entry = zp_audit::UnsealedEntry {
+                actor: zp_core::ActorId::System("regent".to_string()),
+                action: zp_core::AuditAction::SystemEvent { event },
+                conversation_id: zp_core::ConversationId(
+                    uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000004").unwrap(),
+                ),
+                policy_decision: zp_core::PolicyDecision::Allow {
+                    conditions: Vec::new(),
+                },
+                policy_module: "regent-inference-classifier".to_string(),
+                receipt: None,
+            };
+            if let Ok(mut s) = audit_store.lock() {
+                if let Err(e) = s.append(entry) {
+                    warn!("classifier decision receipt emission failed: {}", e);
                 }
             }
         }
@@ -828,14 +1186,15 @@ async fn run_cycle(
         // even when the operator said "navigate to X". Extract the URL
         // from the operator's input and inject it.
         let intent = if let Intent::Execute { tool, params } = &intent {
-            if tool == "browser_use"
-                && params.as_object().is_some_and(|m| m.is_empty())
-            {
+            if tool == "browser_use" && params.as_object().is_some_and(|m| m.is_empty()) {
                 if let Some(ref input) = context.pending_input {
                     const ENRICH_DOMAINS: &[(&str, &str)] = &[
                         ("zeropoint.global", "https://zeropoint.global"),
                         ("zeropointfoundation.org", "https://zeropointfoundation.org"),
-                        ("github.com/zeropoint-foundation", "https://github.com/zeropoint-foundation"),
+                        (
+                            "github.com/zeropoint-foundation",
+                            "https://github.com/zeropoint-foundation",
+                        ),
                     ];
                     let lower = input.content.to_lowercase();
                     let mut found = None;
@@ -865,10 +1224,14 @@ async fn run_cycle(
 
         match &intent {
             Intent::Execute { tool, .. } => {
-                emit(event_tx, CognitiveEvent::new(Phase::ToolDispatch, 0)
-                    .with_detail(format!("{}  turn={}", tool, turn)));
+                emit(
+                    event_tx,
+                    CognitiveEvent::new(Phase::ToolDispatch, 0)
+                        .with_detail(format!("{}  turn={}", tool, turn)),
+                );
                 let tool_t0 = std::time::Instant::now();
 
+                let mut refused_call: Option<crate::intent::Enactment> = None;
                 let (response, succeeded) = match executor.execute(&intent).await {
                     Ok(IntentOutcome::ToolCompleted { tool: _, output }) => {
                         let s = serde_json::to_string_pretty(&output)
@@ -878,6 +1241,16 @@ async fn run_cycle(
                     Ok(IntentOutcome::ToolDenied { tool, reason }) => {
                         (format!("{} denied: {}", tool, reason), false)
                     }
+                    Ok(IntentOutcome::ToolRefusedUnsigned { tool, reason }) => {
+                        // Keep the call itself, not just the fact of refusal.
+                        if let Intent::Execute { tool: t, params } = &intent {
+                            refused_call = Some(crate::intent::Enactment {
+                                tool: t.clone(),
+                                params: params.clone(),
+                            });
+                        }
+                        (format!("{} refused: {}", tool, reason), false)
+                    }
                     Ok(_) => ("completed".to_string(), true),
                     Err(e) => {
                         warn!("tool execution failed: {}", e);
@@ -886,8 +1259,11 @@ async fn run_cycle(
                 };
                 let tool_ms = tool_t0.elapsed().as_millis() as u64;
 
-                emit(event_tx, CognitiveEvent::new(Phase::ToolComplete, tool_ms)
-                    .with_detail(format!("response_len={}", response.len())));
+                emit(
+                    event_tx,
+                    CognitiveEvent::new(Phase::ToolComplete, tool_ms)
+                        .with_detail(format!("response_len={}", response.len())),
+                );
 
                 // Feed result back for the next turn — the Regent will
                 // see it and can compose a narration or act again.
@@ -895,12 +1271,12 @@ async fn run_cycle(
                     tool: tool.clone(),
                     output: response,
                     succeeded,
+                    refused_call,
                 });
 
                 info!(
                     turn,
-                    tool_ms,
-                    "tool completed — continuing cycle for narration"
+                    tool_ms, "tool completed — continuing cycle for narration"
                 );
                 continue;
             }
@@ -909,8 +1285,11 @@ async fn run_cycle(
                 // The Regent wants another cycle. Return Continue with
                 // accumulated tool results so the arc loop re-enters.
                 let total_ms = cycle_t0.elapsed().as_millis() as u64;
-                emit(event_tx, CognitiveEvent::new(Phase::CycleEnd, total_ms)
-                    .with_detail(format!("continue: {}", progress)));
+                emit(
+                    event_tx,
+                    CognitiveEvent::new(Phase::CycleEnd, total_ms)
+                        .with_detail(format!("continue: {}", progress)),
+                );
                 info!(
                     turns = turn + 1,
                     total_ms,
@@ -921,7 +1300,7 @@ async fn run_cycle(
                 // COGNITIVE-MODE-AND-AGENCY-2026-07.md §3.1, each turn is
                 // one Deliberation; the flow spans them.
                 emit_cognitive_act_receipt(
-                    &audit_store,
+                    audit_store,
                     last_composition_hash.as_deref(),
                     last_composition_summary.as_ref(),
                     Some(intent.receipt_event()),
@@ -938,9 +1317,77 @@ async fn run_cycle(
                 let response = match &intent {
                     Intent::Respond { content, .. } => content.clone(),
                     Intent::Observe { observation } => observation.clone(),
-                    Intent::RequestApproval { proposed_action, reason } => {
-                        format!("[approval requested] {}: {}", proposed_action, reason)
+                    Intent::RequestApproval {
+                        kind,
+                        proposed_action,
+                        finding,
+                        failed_limb,
+                        expected_outcome,
+                        draft,
+                        enactment,
+                        ..
+                    } => {
+                        // Render the proposal the operator has to act on.
+                        // A bare "[approval requested] x: y" was the floor
+                        // EXECUTION-AUTHORITY-MODEL Phase 7 forbids — it
+                        // names a limitation without giving anything to
+                        // approve or reject.
+                        let header = match kind {
+                            crate::intent::ProposalKind::Action => "PROPOSAL (needs your approval)",
+                            crate::intent::ProposalKind::Mechanism => {
+                                "PROPOSAL (capability request)"
+                            }
+                        };
+                        let mut out = format!("{header}\n{proposed_action}");
+                        if let Some(f) = finding {
+                            out.push_str(&format!("\n\nWhy: {f}"));
+                        }
+                        if let Some(l) = failed_limb {
+                            out.push_str(&format!("\nBlocked by: {l}"));
+                        }
+                        if let Some(o) = expected_outcome {
+                            out.push_str(&format!("\nIf approved: {o}"));
+                        }
+                        if let Some(d) = draft {
+                            out.push_str(&format!(
+                                "\n\nDraft (unsigned — honoured this session only, \
+                                 will not survive a restart):\n{d}"
+                            ));
+                        }
+                        // The call itself, verbatim. A signature authorises an
+                        // act, not a description of one, and the operator
+                        // cannot weigh what they are not shown — least of all
+                        // when the prose and the call come from different
+                        // sources and can disagree.
+                        if let Some(e) = enactment {
+                            out.push_str(&format!(
+                                "\n\nWould run: {} {}",
+                                e.tool,
+                                serde_json::to_string(&e.params)
+                                    .unwrap_or_else(|_| "{}".to_string())
+                            ));
+                        }
+                        out
                     }
+                    // Rendered before execution, so it must not claim an
+                    // outcome execution can refuse. Observed 2026-08-04: a
+                    // routing turn produced `remember` with no content, the
+                    // executor correctly declined to record it, and this
+                    // still told the operator "Noted, under \"unnamed\"" —
+                    // a claim of an act that did not happen, in the same
+                    // shape the Class 5 verifier exists to catch.
+                    Intent::Remember { content, .. } if content.trim().is_empty() => {
+                        "I moved to record something and had nothing to record — no \
+                         content came through. Tell me what you would like me to keep."
+                            .to_string()
+                    }
+                    Intent::Remember { key, content } => format!(
+                        "Noted, under \"{key}\":\n{content}\n\n\
+                         Provisional — this is an Observed-stage memory. It \
+                         expires in 24 hours unless reinforced, and becomes \
+                         durable only through promotion, which reaches \
+                         identity-bearing on your signature."
+                    ),
                     _ => format!("{:?}", intent.receipt_event()),
                 };
                 if let Err(e) = executor.execute(&intent).await {
@@ -948,8 +1395,11 @@ async fn run_cycle(
                 }
                 let total_ms = cycle_t0.elapsed().as_millis() as u64;
 
-                emit(event_tx, CognitiveEvent::new(Phase::ResponseDelivered, 0)
-                    .with_detail(format!("len={}", response.len())));
+                emit(
+                    event_tx,
+                    CognitiveEvent::new(Phase::ResponseDelivered, 0)
+                        .with_detail(format!("len={}", response.len())),
+                );
 
                 // ── Cognitive Self-Observer (P2.2) ──────────────────────
                 // Post-emission verification of Regent's response against
@@ -957,22 +1407,48 @@ async fn run_cycle(
                 // bearing intents (Respond / Observe); skip for tool-dispatch
                 // envelope strings that aren't operator-facing content.
                 if matches!(&intent, Intent::Respond { .. } | Intent::Observe { .. }) {
-                    run_cognitive_observer(&audit_store, &response, &context.standing_corrections);
+                    // Ground truth for claim verification, taken from this
+                    // cycle directly — never re-derived from the chain.
+                    let enacted = crate::cognitive_observer::EnactedActs {
+                        intent: intent.receipt_event().to_string(),
+                        tools_run: tool_results.iter().map(|r| r.tool.clone()).collect(),
+                        proposal_emitted: matches!(&intent, Intent::RequestApproval { .. }),
+                    };
+                    run_cognitive_observer(
+                        audit_store,
+                        &response,
+                        &context.standing_corrections,
+                        &enacted,
+                    );
+
+                    // Emission-coherence hook (H1/H2/H3) per
+                    // REGENT-DOOM-LOOP-DETECTION-2026-07 §Part III. Same
+                    // post-emission slot as the cognitive observer. First-
+                    // shipping discipline: findings are chain-anchored;
+                    // response delivery is unaffected (log-and-continue
+                    // for all classes). R1 retry / R2 escalate wiring
+                    // lands after false-positive rates are measured.
+                    run_emission_coherence(
+                        audit_store,
+                        emission_analyzer,
+                        &response,
+                        served_this_cycle.as_ref(),
+                    );
                 }
 
-                emit(event_tx, CognitiveEvent::new(Phase::CycleEnd, total_ms)
-                    .with_detail(format!(
+                emit(
+                    event_tx,
+                    CognitiveEvent::new(Phase::CycleEnd, total_ms).with_detail(format!(
                         "turns={} perceive={}ms inference={}ms",
-                        turn + 1, perceive_ms, reason_ms
-                    )));
-
-                info!(
-                    turns = turn + 1,
-                    total_ms,
-                    "regent cycle complete"
+                        turn + 1,
+                        perceive_ms,
+                        reason_ms
+                    )),
                 );
+
+                info!(turns = turn + 1, total_ms, "regent cycle complete");
                 emit_cognitive_act_receipt(
-                    &audit_store,
+                    audit_store,
                     last_composition_hash.as_deref(),
                     last_composition_summary.as_ref(),
                     Some(intent.receipt_event()),
@@ -988,8 +1464,13 @@ async fn run_cycle(
     // otherwise the model kept executing tools without ever narrating.
     let total_ms = cycle_t0.elapsed().as_millis() as u64;
     let fallback = if let Some(last) = tool_results.last() {
-        emit(event_tx, CognitiveEvent::new(Phase::CycleEnd, total_ms)
-            .with_detail(format!("max_turns_reached tools_executed={}", tool_results.len())));
+        emit(
+            event_tx,
+            CognitiveEvent::new(Phase::CycleEnd, total_ms).with_detail(format!(
+                "max_turns_reached tools_executed={}",
+                tool_results.len()
+            )),
+        );
         info!(
             turns = MAX_TOOL_TURNS,
             tools = tool_results.len(),
@@ -998,12 +1479,13 @@ async fn run_cycle(
         );
         last.output.clone()
     } else {
-        emit(event_tx, CognitiveEvent::new(Phase::CycleEnd, total_ms)
-            .with_detail("max_tool_turns_reached"));
+        emit(
+            event_tx,
+            CognitiveEvent::new(Phase::CycleEnd, total_ms).with_detail("max_tool_turns_reached"),
+        );
         warn!(
             turns = MAX_TOOL_TURNS,
-            total_ms,
-            "regent hit max tool turns, forcing stop"
+            total_ms, "regent hit max tool turns, forcing stop"
         );
         "error: max tool turns reached".to_string()
     };
@@ -1012,7 +1494,7 @@ async fn run_cycle(
     // earlier in the loop — so the last intent produced before falling out
     // of the loop was always Execute.
     emit_cognitive_act_receipt(
-        &audit_store,
+        audit_store,
         last_composition_hash.as_deref(),
         last_composition_summary.as_ref(),
         Some("execute"),
@@ -1024,18 +1506,60 @@ async fn run_cycle(
 
 // ── Composition receipt emission (P2.1) ──────────────────────────────────────
 
-/// Emit a `cognitive:input:composed` chain receipt for a cycle's perception.
+/// Emit `cognitive:initiative:warranted` when the Regent wakes without being
+/// asked.
 ///
-/// Structural provenance only — matrix version, per-class source hashes, counts.
-/// The chain now has verifiable evidence of what Regent was given to reason with
-/// at time T, without the chain-bloat cost of storing every prompt.
+/// Per `CONVERSATIONAL-INFERENCE-BOUNDARY-2026-08` §"The initiative rule":
+/// the Regent does not initiate deepening of the operator relationship, and
+/// every unsolicited surfacing carries a warrant traceable to an
+/// operator-declared reason — an expiring delegation, a committed deadline,
+/// a substrate fault, an upgrade proposal, a declared crisis trigger.
+/// Relational maintenance is not a warrant.
 ///
-/// Per COGNITIVE-INPUT-PLANE-2026-07.md Step 6.
+/// The initiative point is the **wake**, not the send. This loop has three
+/// wake sources (see `start`'s docs) and two of them are unsolicited. The
+/// timer arm is the one with no operator-declared reason behind it at all:
+/// it fires because a duration elapsed. That is emitted honestly as
+/// `warrant=none resolvable=false` rather than suppressed.
 ///
-/// Returns the appended entry's chain hash on success (`None` on failure) so
-/// callers — namely the cognitive-act receipt (below) — can cite the
-/// composition they reasoned from, per
-/// COGNITIVE-ACT-ACCOUNTING-2026-07.md §6.
+/// Detectability before enforcement, per KEEL §III.19. An unresolvable
+/// warrant is not yet refused — it is made countable, so the ratio of
+/// warranted to unwarranted initiative is a chain query rather than an
+/// opinion. Refusal is a later decision that needs this evidence first.
+fn emit_initiative_warrant_receipt(
+    audit_store: &Arc<std::sync::Mutex<AuditStore>>,
+    source: &str,
+    warrant: &str,
+    resolvable: bool,
+) {
+    let event = format!(
+        "cognitive:initiative:warranted source={} warrant={} resolvable={}",
+        source, warrant, resolvable,
+    );
+
+    let entry = zp_audit::UnsealedEntry {
+        actor: zp_core::ActorId::System("regent".to_string()),
+        action: zp_core::AuditAction::SystemEvent { event },
+        conversation_id: zp_core::ConversationId(
+            uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap(),
+        ),
+        policy_decision: zp_core::PolicyDecision::Allow {
+            conditions: Vec::new(),
+        },
+        policy_module: "regent-initiative".to_string(),
+        receipt: None,
+    };
+
+    match audit_store.lock() {
+        Ok(mut store) => {
+            if let Err(e) = store.append(entry) {
+                warn!("initiative warrant receipt emission failed: {}", e);
+            }
+        }
+        Err(e) => warn!("initiative warrant: audit store lock poisoned: {}", e),
+    }
+}
+
 /// Emit `regent:awareness:session_profile` at shutdown.
 ///
 /// Phase 6's long window: each session's medium-window summary lands on
@@ -1086,15 +1610,38 @@ fn emit_session_profile_receipt(
     }
 }
 
+/// Emit a `cognitive:input:composed` chain receipt for a cycle's perception.
+///
+/// Structural provenance only — matrix version, per-class source hashes, counts.
+/// The chain now has verifiable evidence of what Regent was given to reason with
+/// at time T, without the chain-bloat cost of storing every prompt.
+///
+/// Per COGNITIVE-INPUT-PLANE-2026-07.md Step 6.
+///
+/// Returns the appended entry's chain hash on success (`None` on failure) so
+/// callers — namely the cognitive-act receipt (below) — can cite the
+/// composition they reasoned from, per
+/// COGNITIVE-ACT-ACCOUNTING-2026-07.md §6.
 fn emit_composition_receipt(
     audit_store: &Arc<std::sync::Mutex<AuditStore>>,
     summary: &crate::context::CompositionSummary,
 ) -> Option<String> {
     // Encode summary metadata inline in the event string (existing pattern for
     // chain-anchored regent events — see server::regent::emit_remediation_receipt).
+    // `ground=<count>/<violations>/<hash>` sits first among the input classes
+    // because it is Tier 1 above corrections — and because the distinction it
+    // records is the one that cannot be recovered later. `ground=0/0/` means
+    // no bedrock invariant reached this cycle at all, which is a substrate
+    // whose premises were never examined; `ground=5/0/<hash>` means they were
+    // examined and held. Without the count in the receipt those two are
+    // indistinguishable after the fact, and "Regent was reasoning over intact
+    // premises" stops being a checkable claim.
     let event = format!(
-        "cognitive:input:composed matrix={} corrections={}/{} findings={}/{} chain={} delegations={} reason={}",
+        "cognitive:input:composed matrix={} ground={}/{}/{} corrections={}/{} findings={}/{} chain={} delegations={} reason={}",
         summary.matrix_version,
+        summary.substrate_ground_count,
+        summary.substrate_ground_violations,
+        &summary.substrate_ground_hash[..summary.substrate_ground_hash.len().min(12)],
         summary.standing_correction_count,
         &summary.standing_corrections_hash[..summary.standing_corrections_hash.len().min(12)],
         summary.officer_finding_count,
@@ -1211,6 +1758,246 @@ fn emit_cognitive_act_receipt(
 
 // ── Cognitive Self-Observer runtime (P2.2) ───────────────────────────────────
 
+/// Chain-anchor an arc that went nowhere.
+///
+/// A stall is a real outcome and belongs on the chain next to the acts that
+/// succeeded. Without a receipt the only trace is a `warn` in a log that
+/// rotates, and the substrate's record shows an arc opening and then simply
+/// ceasing — indistinguishable from one that finished.
+fn emit_arc_stalled_receipt(
+    audit_store: &Arc<std::sync::Mutex<AuditStore>>,
+    progress: &str,
+    cycles: u32,
+) {
+    let event = format!(
+        "regent:arc:stalled cycles={} progress={}",
+        cycles,
+        crate::text::preview(progress, 160)
+    );
+    let entry = zp_audit::UnsealedEntry {
+        actor: zp_core::ActorId::System("regent".to_string()),
+        action: zp_core::AuditAction::SystemEvent { event },
+        conversation_id: zp_core::ConversationId(
+            uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap(),
+        ),
+        policy_decision: zp_core::PolicyDecision::Allow {
+            conditions: Vec::new(),
+        },
+        policy_module: "regent-work-arc".to_string(),
+        receipt: None,
+    };
+    match audit_store.lock() {
+        Ok(mut store) => {
+            if let Err(e) = store.append(entry) {
+                warn!("arc stall receipt emission failed: {}", e);
+            }
+        }
+        Err(e) => warn!("arc stall receipt: audit store lock poisoned: {}", e),
+    }
+}
+
+// ── Enactment of granted approvals ───────────────────────────────────────────
+
+/// Turn operator signatures into substrate acts.
+///
+/// # Why this exists
+///
+/// Observed 2026-07-31. A proposal was escalated, queued, rendered, granted,
+/// and chain-anchored — and the standing correction it proposed was never
+/// created. `ApprovalIndex` appeared in exactly two places outside its own
+/// module, both HTTP handlers, and `regent:approval:granted` was read only to
+/// stop resolved requests showing in the queue. Nothing consumed a grant.
+///
+/// The operator signed and the system did not act. That is the mirror of the
+/// defect that produced the proposal in the first place — a claimed act
+/// without authority, then authority without an act — and it is the worse
+/// half, because the first was caught by a verifier and this one presented as
+/// success at every visible surface: the queue emptied, the receipt anchored,
+/// the command printed a tick.
+///
+/// # Why it dispatches rather than reasons
+///
+/// The enactment carried on the request is dispatched verbatim. No model is
+/// consulted. The operator signed a specific call, and re-deriving that call
+/// from the proposal's prose at enactment time would reintroduce exactly the
+/// confabulation surface the Class 5 verifier exists to catch — with the
+/// operator's signature already attached to it.
+///
+/// # Runs on the idle tick
+///
+/// Called from the message loop, which ticks every ~60s with empty content,
+/// so an approval signed while nothing else is happening is honoured within
+/// the minute rather than waiting for the next conversation.
+async fn drain_enactable_approvals(
+    audit_store: &Arc<std::sync::Mutex<AuditStore>>,
+    executor: &Arc<dyn IntentExecutor>,
+) {
+    let work: Vec<(String, crate::intent::Enactment)> = {
+        let store = match audit_store.lock() {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("approval enactment: audit store lock poisoned: {}", e);
+                return;
+            }
+        };
+        let mut entries = Vec::new();
+        for prefix in [
+            crate::approvals::EVENT_PREFIX_REQUEST,
+            crate::approvals::EVENT_PREFIX_GRANTED,
+            crate::approvals::EVENT_PREFIX_DENIED,
+            crate::approvals::EVENT_PREFIX_ENACTED,
+        ] {
+            entries.extend(
+                store
+                    .search_chain_by_action_keyword(prefix, 1024)
+                    .unwrap_or_default(),
+            );
+        }
+        crate::approvals::ApprovalIndex::build(&entries)
+            .enactable()
+            .iter()
+            .filter_map(|r| r.enactment.clone().map(|e| (r.request_hash.clone(), e)))
+            .collect()
+    };
+
+    if work.is_empty() {
+        return;
+    }
+
+    for (request_hash, enactment) in work {
+        let short = &request_hash[..12.min(request_hash.len())];
+        info!(
+            tool = %enactment.tool,
+            request = short,
+            "enacting granted approval"
+        );
+
+        let intent = Intent::Execute {
+            tool: enactment.tool.clone(),
+            params: enactment.params.clone(),
+        };
+
+        // The gate still runs. An operator's signature authorises the act; it
+        // does not exempt it from policy, and a disagreement between the two
+        // is worth a receipt rather than a bypass.
+        let outcome = match executor.execute(&intent).await {
+            Ok(IntentOutcome::ToolCompleted { .. }) => "completed".to_string(),
+            Ok(IntentOutcome::ToolDenied { reason, .. }) => {
+                warn!(
+                    tool = %enactment.tool,
+                    request = short,
+                    reason = %reason,
+                    "granted approval denied at the gate — operator authority and \
+                     gate policy disagree about the same act"
+                );
+                format!("denied: {reason}")
+            }
+            Ok(_) => "unexpected_outcome".to_string(),
+            Err(e) => {
+                warn!(
+                    tool = %enactment.tool,
+                    request = short,
+                    "enactment failed: {}", e
+                );
+                format!("error: {e}")
+            }
+        };
+
+        // Receipt regardless of outcome. A failed enactment that leaves no
+        // trace would be retried on every tick forever, and an operator
+        // reading the chain would see a grant with nothing after it — the
+        // same silence this function was written to end.
+        let event =
+            crate::approvals::enacted_event_string(&request_hash, &enactment.tool, &outcome);
+        let entry = zp_audit::UnsealedEntry {
+            actor: zp_core::ActorId::System("regent".to_string()),
+            action: zp_core::AuditAction::SystemEvent { event },
+            conversation_id: zp_core::ConversationId(
+                uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap(),
+            ),
+            policy_decision: zp_core::PolicyDecision::Allow {
+                conditions: Vec::new(),
+            },
+            policy_module: "regent-approval-enactment".to_string(),
+            receipt: None,
+        };
+        match audit_store.lock() {
+            Ok(mut store) => {
+                if let Err(e) = store.append(entry) {
+                    warn!("enactment receipt emission failed: {}", e);
+                }
+            }
+            Err(e) => warn!("enactment receipt: audit store lock poisoned: {}", e),
+        }
+    }
+}
+
+/// Emit chain receipts for act claims the cycle's own record contradicts.
+///
+/// Runs on every content-bearing response, independent of the standing
+/// correction corpus, because its ground truth is the cycle rather than the
+/// corpus. Emits nothing when the response is clean — unlike the corrections
+/// observer, which anchors a summary every time. The asymmetry is deliberate:
+/// the corrections observer's summary proves *it ran* against a corpus that
+/// may be empty, whereas this check's inputs are always present, so a receipt
+/// here always means a real divergence.
+///
+/// Per `COGNITIVE-SELF-OBSERVER-2026-07.md` §"Class 5 — Commitment claims".
+/// Detection only in this slice: the finding is chain-anchored and logged, and
+/// the response still reaches the operator unaltered. Suppression, annotation,
+/// and escalation to the propose tier are the natural next moves and are
+/// deliberately not taken here — rewriting an emitted response is an authority
+/// decision (P9), not an observer's call to make on its own.
+fn emit_unbacked_claim_receipts(
+    audit_store: &Arc<std::sync::Mutex<AuditStore>>,
+    response: &str,
+    enacted: &crate::cognitive_observer::EnactedActs,
+) {
+    let claims = crate::cognitive_observer::verify_claims(response, enacted);
+    if claims.is_empty() {
+        return;
+    }
+
+    for c in &claims {
+        warn!(
+            kind = ?c.kind,
+            phrase = %c.matched_phrase,
+            intent = %c.intent,
+            tools_run = c.tools_run.len(),
+            severity = ?c.severity,
+            excerpt = %c.excerpt,
+            "regent claimed an act this cycle did not perform"
+        );
+    }
+
+    let mut store = match audit_store.lock() {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("unbacked claim receipt: audit store lock poisoned: {}", e);
+            return;
+        }
+    };
+    for c in &claims {
+        let entry = zp_audit::UnsealedEntry {
+            actor: zp_core::ActorId::System("regent".to_string()),
+            action: zp_core::AuditAction::SystemEvent {
+                event: crate::cognitive_observer::unbacked_claim_event_string(c),
+            },
+            conversation_id: zp_core::ConversationId(
+                uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap(),
+            ),
+            policy_decision: zp_core::PolicyDecision::Allow {
+                conditions: Vec::new(),
+            },
+            policy_module: "cognitive-self-observer".to_string(),
+            receipt: None,
+        };
+        if let Err(e) = store.append(entry) {
+            warn!("unbacked claim receipt emission failed: {}", e);
+        }
+    }
+}
+
 /// Run the Cognitive Self-Observer against Regent's response and chain-anchor
 /// findings.
 ///
@@ -1224,7 +2011,15 @@ fn run_cognitive_observer(
     audit_store: &Arc<std::sync::Mutex<AuditStore>>,
     response: &str,
     corrections: &[crate::corrections::ActiveStandingCorrection],
+    enacted: &crate::cognitive_observer::EnactedActs,
 ) {
+    // Class 5 (enactment subset) runs first and unconditionally. Its ground
+    // truth is the cycle's own record, not the correction corpus, so an empty
+    // corpus must not skip it — which is exactly what would have happened had
+    // this been folded in below the fast path. See
+    // `cognitive_observer.rs` §"Class 5 (enactment subset)".
+    emit_unbacked_claim_receipts(audit_store, response, enacted);
+
     // Fast path — no active corrections means nothing to verify. Skip the
     // summary receipt too to avoid chain bloat during pre-issuance operation.
     if corrections.is_empty() {
@@ -1289,5 +2084,168 @@ fn run_cognitive_observer(
     };
     if let Err(e) = store_guard.append(summary_entry) {
         warn!("observer summary receipt emission failed: {}", e);
+    }
+}
+
+/// Emission-coherence hook — runs H1/H2/H3 heuristics against Regent's
+/// response and chain-anchors the outcome per REGENT-DOOM-LOOP-DETECTION-
+/// 2026-07 §Part III (receipt shapes) and §Part IV (immediate shipping
+/// discipline: instrumentation before remediation).
+///
+/// Emits at most one summary receipt per cycle plus one per-finding receipt
+/// per fired heuristic. When no heuristic fires, no receipts are emitted
+/// (chain hygiene — silent-when-clean matches CSO's fast path).
+///
+/// Current shipping shape does NOT gate delivery on the outcome. R1 retry
+/// and R2 escalate wiring lands once the substrate has accumulated enough
+/// evidence to calibrate false-positive rates per DL6 in Part IX.
+///
+/// Token IDs and log-probs are unavailable at this integration site today:
+/// - `token_ids: &[]` — H1's token-level n-gram check silently skips
+///   (word-level check still runs against the response text).
+/// - `log_probs: None` — H3 silently skips regardless of baseline
+///   availability. **This is a protocol blocker, not an oversight.** The
+///   Regent's local path speaks Ollama's native `/api/chat`, which returns
+///   no per-token log-probabilities at all; surfacing them means the hot
+///   path speaks OpenAI-compat locally, which is a decision about the
+///   canonical inference layer rather than a field to fill in. See
+///   `MODEL-ADMISSION-PIPELINE-2026-08.md` §10.4.
+///
+/// Model identity **is** now threaded (2026-08-18), per
+/// INFERENCE-ROUTING-DISCIPLINE-2026-07 §Layer 1. This changes no behaviour
+/// on its own — H3 still skips on absent log-probs — and was landed
+/// separately for exactly that reason: it is owed by Layer 1 independently
+/// of H3, and folding it into a protocol migration would have hidden a
+/// correctness fix inside an architecture change.
+fn run_emission_coherence(
+    audit_store: &Arc<std::sync::Mutex<AuditStore>>,
+    analyzer: &Arc<std::sync::Mutex<zp_emission_coherence::EmissionAnalyzer>>,
+    response: &str,
+    served: Option<&crate::inference::ServedModel>,
+) {
+    // Before 2026-08-18 this was the literal string "unknown", which no
+    // dossier carries — so the H3 baseline lookup could not match even with
+    // a calibrated baseline present. That was a gate nobody had counted.
+    //
+    // `effective()` falls back to the requested model when the backend
+    // reports none; `None` here means no call completed this cycle, which is
+    // distinct from a call that declined to name its model.
+    let model = served.map(|s| s.effective()).unwrap_or("unknown");
+
+    let em_response = zp_emission_coherence::Response {
+        cycle_id: "regent",
+        model,
+        token_ids: &[],
+        text: response,
+        log_probs: None,
+        sampling_params: zp_emission_coherence::SamplingParams::default(),
+    };
+
+    let outcome = match analyzer.lock() {
+        Ok(mut guard) => guard.analyze(&em_response),
+        Err(e) => {
+            warn!("emission-coherence analyzer lock poisoned: {}", e);
+            return;
+        }
+    };
+
+    // Silent when clean.
+    if outcome.findings.is_empty() {
+        return;
+    }
+
+    info!(
+        findings = outcome.findings.len(),
+        response_class = ?outcome.response_class,
+        receipt_family = ?outcome.receipt_family,
+        "emission-coherence flagged"
+    );
+
+    let mut store_guard = match audit_store.lock() {
+        Ok(s) => s,
+        Err(e) => {
+            warn!(
+                "emission-coherence receipt: audit store lock poisoned: {}",
+                e
+            );
+            return;
+        }
+    };
+
+    // Per-finding receipts.
+    //
+    // `prefix + space + JSON`. These emitted bare JSON until 2026-08-06, so the
+    // receipt-type inventory bucketed them under their first serialized key —
+    // `{"class"`, serde sorting alphabetically — and no prefix-scoped query
+    // could reach them. Same defect the Layer 2 classifier receipts carried,
+    // found in the same posture check. `class` leaves the payload; the prefix
+    // now carries it.
+    for finding in &outcome.findings {
+        let payload = match serde_json::to_string(&serde_json::json!({
+            "heuristic": finding.name,
+            "severity": finding.severity,
+            "evidence": finding.evidence,
+        })) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("emission-coherence event serialization failed: {}", e);
+                continue;
+            }
+        };
+        let event = format!("emission_coherence:finding {}", payload);
+        let entry = zp_audit::UnsealedEntry {
+            actor: zp_core::ActorId::System("regent".to_string()),
+            action: zp_core::AuditAction::SystemEvent { event },
+            conversation_id: zp_core::ConversationId(
+                uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000002").unwrap(),
+            ),
+            policy_decision: zp_core::PolicyDecision::Allow {
+                conditions: Vec::new(),
+            },
+            policy_module: "regent-emission-coherence".to_string(),
+            receipt: None,
+        };
+        if let Err(e) = store_guard.append(entry) {
+            warn!("emission-coherence finding receipt emission failed: {}", e);
+        }
+    }
+
+    // Summary receipt — prefixed, per the note on the per-finding loop above.
+    //
+    // `receipt_family` / `receipt_type` stay in the payload: unlike the
+    // classifier case they describe the *emission being analysed*, not this
+    // receipt, so they are cargo rather than identity.
+    let summary_payload = match serde_json::to_string(&serde_json::json!({
+        "receipt_family": outcome.receipt_family,
+        "receipt_type": outcome.receipt_family.receipt_type(),
+        "response_class": outcome.response_class,
+        "cycle_id": outcome.cycle_id,
+        "model": outcome.model,
+        "finding_count": outcome.findings.len(),
+        "deliverable": outcome.deliverable,
+    })) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("emission-coherence summary serialization failed: {}", e);
+            return;
+        }
+    };
+    let summary_event = format!("emission_coherence:summary {}", summary_payload);
+    let summary_entry = zp_audit::UnsealedEntry {
+        actor: zp_core::ActorId::System("regent".to_string()),
+        action: zp_core::AuditAction::SystemEvent {
+            event: summary_event,
+        },
+        conversation_id: zp_core::ConversationId(
+            uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000002").unwrap(),
+        ),
+        policy_decision: zp_core::PolicyDecision::Allow {
+            conditions: Vec::new(),
+        },
+        policy_module: "regent-emission-coherence".to_string(),
+        receipt: None,
+    };
+    if let Err(e) = store_guard.append(summary_entry) {
+        warn!("emission-coherence summary receipt emission failed: {}", e);
     }
 }

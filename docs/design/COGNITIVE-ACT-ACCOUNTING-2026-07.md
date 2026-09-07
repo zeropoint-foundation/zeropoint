@@ -199,7 +199,7 @@ The constraint improves the design. Under §III.13 — *chain is truth; ontology
 
 **Corrected 2026-07-25 against the runtime.** An earlier draft of this section placed the emission *beside* `emit_composition_receipt`. That is wrong: `emit_composition_receipt` fires at `zp-regent/src/loop_runner.rs:719`, immediately after perception and **before** `reason()`, so `emitted`, `enacted` and `outcome` do not exist at that point. The composition receipt is a perception-time record; the act receipt is a cycle-completion record and cites it.
 
-The relationship is better this way — one cycle produces one composition and one act, and the act names the composition it reasoned from. But note the implementation consequence: `run_cycle` has **six exit paths**, four of them after the composition receipt. A single emission at the bottom of the function would silently drop the `reason failed` path at line 733, which is precisely the class of act this object exists to make visible. See `BRIEF-cognitive-act-v0-m0-2026-07.md` §2.
+The relationship is better this way — one cycle produces one composition and one act, and the act names the composition it reasoned from. But note the implementation consequence: `run_cycle` has **six exit paths**, four of them after the composition receipt. A single emission at the bottom of the function would silently drop the `reason failed` path at line 733, which is precisely the class of act this object exists to make visible. See `docs/handoffs/BRIEF-cognitive-act-v0-m0-2026-07.md` §2.
 
 Deliberation as an ontology object materializes later, when a Cartographer exists, from these receipts. Nothing about the object's schema changes — only which layer instantiates it first.
 

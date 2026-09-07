@@ -23,9 +23,7 @@ pub enum UpstreamBindingStatus {
 
     /// The delegation receipt exists but the pubkey field is empty or missing.
     /// This happens with pre-T3 delegation receipts or bootstrap hints.
-    Unbound {
-        upstream_addr: String,
-    },
+    Unbound { upstream_addr: String },
 
     /// The pubkey in the delegation receipt is malformed (not valid hex, wrong length).
     MalformedPubkey {
@@ -67,21 +65,45 @@ impl UpstreamBindingStatus {
     /// Human-readable summary for `zp doctor` output.
     pub fn summary(&self) -> String {
         match self {
-            Self::Verified { upstream_addr, genesis_pubkey } => {
+            Self::Verified {
+                upstream_addr,
+                genesis_pubkey,
+            } => {
                 let short_key = if genesis_pubkey.len() > 12 {
-                    format!("{}...{}", &genesis_pubkey[..6], &genesis_pubkey[genesis_pubkey.len()-6..])
+                    format!(
+                        "{}...{}",
+                        &genesis_pubkey[..6],
+                        &genesis_pubkey[genesis_pubkey.len() - 6..]
+                    )
                 } else {
                     genesis_pubkey.clone()
                 };
-                format!("Verified (upstream: {}, pubkey: ed25519:{})", upstream_addr, short_key)
+                format!(
+                    "Verified (upstream: {}, pubkey: ed25519:{})",
+                    upstream_addr, short_key
+                )
             }
             Self::Unbound { upstream_addr } => {
-                format!("Unbound — delegation receipt for {} has no pubkey recorded", upstream_addr)
+                format!(
+                    "Unbound — delegation receipt for {} has no pubkey recorded",
+                    upstream_addr
+                )
             }
-            Self::MalformedPubkey { upstream_addr, reason, .. } => {
-                format!("Malformed pubkey in delegation receipt for {}: {}", upstream_addr, reason)
+            Self::MalformedPubkey {
+                upstream_addr,
+                reason,
+                ..
+            } => {
+                format!(
+                    "Malformed pubkey in delegation receipt for {}: {}",
+                    upstream_addr, reason
+                )
             }
-            Self::PubkeyMismatch { expected, actual, upstream_addr } => {
+            Self::PubkeyMismatch {
+                expected,
+                actual,
+                upstream_addr,
+            } => {
                 format!(
                     "PUBKEY MISMATCH — receipt says ed25519:{} but upstream {} is serving ed25519:{}",
                     &expected[..12.min(expected.len())],
@@ -90,7 +112,11 @@ impl UpstreamBindingStatus {
                 )
             }
             Self::NotDelegate => "Not a delegate — no upstream binding to verify".into(),
-            Self::UpstreamUnreachable { upstream_addr, error, .. } => {
+            Self::UpstreamUnreachable {
+                upstream_addr,
+                error,
+                ..
+            } => {
                 format!("Upstream {} unreachable: {}", upstream_addr, error)
             }
         }
@@ -108,7 +134,10 @@ impl UpstreamBindingStatus {
 /// requires an online check against the upstream node.
 pub fn verify_upstream_binding_local(role: &NodeRole) -> UpstreamBindingStatus {
     match role {
-        NodeRole::Delegate { upstream_addr, upstream_genesis_pubkey } => {
+        NodeRole::Delegate {
+            upstream_addr,
+            upstream_genesis_pubkey,
+        } => {
             // Check for empty/placeholder pubkey
             if upstream_genesis_pubkey.is_empty() {
                 return UpstreamBindingStatus::Unbound {
@@ -160,11 +189,8 @@ pub fn verify_upstream_pubkey_match(
     actual_upstream_pubkey: &str,
 ) -> UpstreamBindingStatus {
     // Normalize both keys (strip optional prefix, lowercase)
-    let normalize = |key: &str| -> String {
-        key.strip_prefix("ed25519:")
-            .unwrap_or(key)
-            .to_lowercase()
-    };
+    let normalize =
+        |key: &str| -> String { key.strip_prefix("ed25519:").unwrap_or(key).to_lowercase() };
 
     let expected_norm = normalize(expected);
     let actual_norm = normalize(actual_upstream_pubkey);
@@ -215,7 +241,10 @@ mod tests {
             upstream_genesis_pubkey: "not-valid-hex".into(),
         };
         let status = verify_upstream_binding_local(&role);
-        assert!(matches!(status, UpstreamBindingStatus::MalformedPubkey { .. }));
+        assert!(matches!(
+            status,
+            UpstreamBindingStatus::MalformedPubkey { .. }
+        ));
     }
 
     #[test]
@@ -225,7 +254,9 @@ mod tests {
             upstream_genesis_pubkey: "abcdef".into(), // 3 bytes, not 32
         };
         let status = verify_upstream_binding_local(&role);
-        assert!(matches!(status, UpstreamBindingStatus::MalformedPubkey { reason, .. } if reason.contains("expected 32")));
+        assert!(
+            matches!(status, UpstreamBindingStatus::MalformedPubkey { reason, .. } if reason.contains("expected 32"))
+        );
     }
 
     #[test]
@@ -272,7 +303,10 @@ mod tests {
         let key_a = "a".repeat(64);
         let key_b = "b".repeat(64);
         let status = verify_upstream_pubkey_match(&key_a, &key_b);
-        assert!(matches!(status, UpstreamBindingStatus::PubkeyMismatch { .. }));
+        assert!(matches!(
+            status,
+            UpstreamBindingStatus::PubkeyMismatch { .. }
+        ));
         assert!(status.is_security_concern());
     }
 }

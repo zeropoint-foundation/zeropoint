@@ -74,7 +74,10 @@ impl Verdict {
                     .into()
             }
             Verdict::MalformedTranscript(why) => {
-                format!("Ceremony transcript unreadable ({}) — integrity unverifiable", why)
+                format!(
+                    "Ceremony transcript unreadable ({}) — integrity unverifiable",
+                    why
+                )
             }
             Verdict::SignatureInvalid => {
                 "Ceremony transcript signature failed verification — record may have been \
@@ -133,7 +136,10 @@ pub fn verify(zeropoint_home: &Path) -> Verdict {
     };
 
     // Signer is the Genesis key itself, embedded in the transcript.
-    let pk_hex = match transcript.get("genesis_public_key").and_then(|v| v.as_str()) {
+    let pk_hex = match transcript
+        .get("genesis_public_key")
+        .and_then(|v| v.as_str())
+    {
         Some(v) => v,
         None => return Verdict::MalformedTranscript("transcript missing genesis_public_key"),
     };
@@ -398,10 +404,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(
-            verify(tmp.path()),
-            Verdict::FieldMismatch("operator")
-        );
+        assert_eq!(verify(tmp.path()), Verdict::FieldMismatch("operator"));
     }
 
     #[test]

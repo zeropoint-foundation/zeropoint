@@ -7,7 +7,7 @@
 //!
 //! # Architecture
 //!
-//! Per the TurboVec integration brief (`docs/handoffs/turbovec-integration-2026-06.md`):
+//! Per the TurboVec integration brief (`docs/design/TURBOVEC-INTEGRATION-2026-06.md`):
 //!
 //! - **Cache-not-canon**: this index is derived state. The canonical audit
 //!   chain is the source of truth; the index is a projection. Any result

@@ -237,9 +237,7 @@ async fn handle_onboard_ws(socket: WebSocket, app_state: AppState, ui_mode: bool
                         );
                         for evt in &result_events {
                             // Set `event` to last event name (final result)
-                            if let Ok(serde_json::Value::Object(map)) =
-                                serde_json::to_value(evt)
-                            {
+                            if let Ok(serde_json::Value::Object(map)) = serde_json::to_value(evt) {
                                 for (k, v) in map {
                                     merged.insert(k, v);
                                 }
@@ -251,15 +249,9 @@ async fn handle_onboard_ws(socket: WebSocket, app_state: AppState, ui_mode: bool
                                 }
                             }
                         }
-                        let merged_json = serde_json::to_string(
-                            &serde_json::Value::Object(merged),
-                        )
-                        .unwrap_or_default();
-                        if sender
-                            .send(WsMessage::Text(merged_json))
-                            .await
-                            .is_err()
-                        {
+                        let merged_json = serde_json::to_string(&serde_json::Value::Object(merged))
+                            .unwrap_or_default();
+                        if sender.send(WsMessage::Text(merged_json)).await.is_err() {
                             return;
                         }
                     }
@@ -479,7 +471,7 @@ fn validate_scan_path(path: &str) -> Result<(), String> {
         ".docker",
         "id_rsa",
         "id_ed25519",
-        "ZeroPoint/keys",  // Keys directory (new canonical location)
+        "ZeroPoint/keys", // Keys directory (new canonical location)
     ];
 
     for prefix in blocked_prefixes {

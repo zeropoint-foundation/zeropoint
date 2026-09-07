@@ -252,7 +252,7 @@ Both carry equal weight at every step.
 
 ### 3.5 Genesis and the key hierarchy
 
-The Genesis ceremony generates a 32-byte Ed25519 seed from which all trust in the deployment derives. The ceremony is sequential and irreversible: generate keypair → validate sovereignty provider → enroll biometric or hardware confirmation → seal constitutional rules → write the immutable genesis record. Each step requires the prior step's success, enforced in `onboard/genesis.rs`.
+The Genesis ceremony generates a 32-byte Ed25519 seed from which all trust in the deployment derives. The ceremony is sequential and irreversible: generate keypair → validate sovereignty provider → enroll biometric or hardware confirmation → seal constitutional rules → write the immutable genesis record. Each step requires the prior step's success, enforced in `crates/zp-server/src/onboard/genesis.rs`.
 
 `zp-keys` implements a three-level certificate hierarchy:
 
@@ -833,7 +833,7 @@ The pattern is identical whether the caller is an agent, a human using the CLI, 
 | Constitutional rules enforced locally | PolicyEngine: fixed positions 1 and 2; no coordinator | Valid policy decision in receipt from compliant engine | Receipt attesting to blocked action rejected by peers |
 | Delegation monotonically narrows authority | `DelegationChain::verify()`: 8 invariants | All 8 satisfied | Any single violation dissolves the chain |
 | Genesis key at every trust decision | `zp-keys` hierarchy walks to Genesis root | Certificate chain reaches Genesis key | Non-Genesis root → reject |
-| Genesis ceremony is atomic | `onboard/genesis.rs`: each step requires prior | `genesis.json` written with all fields | Halt at first failure; no partial Genesis |
+| Genesis ceremony is atomic | `crates/zp-server/src/onboard/genesis.rs`: each step requires prior | `genesis.json` written with all fields | Halt at first failure; no partial Genesis |
 | Child grants cannot exceed parent scope | `CapabilityGrant` fields enforced per-dimension | Child scope ⊆ parent; child expiration ≤ parent; child depth = parent + 1 | Any widening |
 | Cognitive action requires operator authority | Regent's actions are gated; mandates delegate specific scope | Action within mandate scope executes; produces receipt | Action outside mandate blocks; requires new operator approval |
 | Cost cannot exceed operator mandate | Mandate carries budget ceiling; running cost tracked on chain | Spend within ceiling permitted | Attempt to exceed rejected until new mandate issued |

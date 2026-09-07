@@ -24,7 +24,7 @@
 
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, HeaderValue, StatusCode},
+    http::{HeaderMap, HeaderValue, Method, StatusCode},
     response::IntoResponse,
     Json,
 };
@@ -50,13 +50,12 @@ static REFRESHED_CATALOG: OnceLock<std::sync::RwLock<Option<Vec<ProviderProfile>
     OnceLock::new();
 
 fn get_catalog() -> &'static Vec<ProviderProfile> {
-    PROVIDER_CATALOG.get_or_init(|| zp_engine::providers::load_catalog())
+    PROVIDER_CATALOG.get_or_init(zp_engine::providers::load_catalog)
 }
 
 /// Return a snapshot of the current catalog, preferring the refreshed version.
 fn catalog_snapshot() -> Vec<ProviderProfile> {
-    let lock = REFRESHED_CATALOG
-        .get_or_init(|| std::sync::RwLock::new(None));
+    let lock = REFRESHED_CATALOG.get_or_init(|| std::sync::RwLock::new(None));
     if let Ok(guard) = lock.read() {
         if let Some(ref refreshed) = *guard {
             return refreshed.clone();
@@ -68,8 +67,7 @@ fn catalog_snapshot() -> Vec<ProviderProfile> {
 /// Replace the in-process catalog with a freshly-fetched snapshot.
 /// Called by the `POST /api/v1/pricing/refresh` handler after a successful fetch.
 pub fn reload_provider_catalog(updated: Vec<ProviderProfile>) {
-    let lock = REFRESHED_CATALOG
-        .get_or_init(|| std::sync::RwLock::new(None));
+    let lock = REFRESHED_CATALOG.get_or_init(|| std::sync::RwLock::new(None));
     if let Ok(mut guard) = lock.write() {
         *guard = Some(updated);
     }
@@ -83,6 +81,18 @@ fn catalog_lookup(proxy_provider: &str) -> Option<ProviderProfile> {
         other => other,
     };
     catalog_snapshot().into_iter().find(|p| p.id == catalog_id)
+}
+
+/// HARNESS-SEAM-2026-08 §4 S1 ("provider resolves"): is `proxy_provider` a
+/// name the proxy actually knows how to route? `"ollama"` is the local
+/// sentinel handled outside the pricing catalog entirely (see
+/// `zp-pipeline::Pipeline::init_providers`, which special-cases it before
+/// ever reaching this catalog) — everything else must be a real catalog
+/// entry. Exposed as a plain predicate rather than the profile itself so
+/// callers outside this module (the boot-time sensor in `zp-server::lib`)
+/// don't need `ProviderProfile` in scope for a yes/no question.
+pub(crate) fn provider_known(proxy_provider: &str) -> bool {
+    proxy_provider == "ollama" || catalog_lookup(proxy_provider).is_some()
 }
 
 /// Rates for a provider: (input_per_million_usd, output_per_million_usd).
@@ -139,7 +149,9 @@ pub struct PricingConfig {
     pub hosts: std::collections::HashMap<String, HostPricingConfig>,
 }
 
-fn default_stale_days() -> u64 { 30 }
+fn default_stale_days() -> u64 {
+    30
+}
 
 /// TOML wrapper for `[tiers.*]` and `[pricing]` table structure.
 #[derive(Debug, Deserialize, Default)]
@@ -169,10 +181,22 @@ fn get_routing_config() -> &'static RoutingConfig {
                 provider: "abacus".to_string(),
                 model: "kimi-2.6-thinking".to_string(),
             }),
-            local: Some(TierRoute {
-                provider: "ollama".to_string(),
-                model: "mistral".to_string(),
-            }),
+            // No compiled default for the local tier.
+            //
+            // HARNESS-SEAM-2026-08 C1: `zp-config`'s `llm.model` is the sole
+            // authority for local model election. A compiled route here was a
+            // second declarant — an inner mechanism carrying outer content,
+            // which §1 corollary 1 forbids — and it named `mistral`, a model
+            // not installed on this substrate, so the route was dead as well as
+            // duplicative.
+            //
+            // The *field* stays. Tier routing is a real mechanism for external
+            // callers that send `X-ZP-Tier`, and an operator may still declare
+            // a local route in `routing.toml`, which is the correct layer for
+            // it. With no route configured, `resolve_tier` returns None and the
+            // handler falls back to the provider named in the URL — which is
+            // the honest behaviour, and is already logged.
+            local: None,
             experimental: Some(TierRoute {
                 provider: "deepinfra".to_string(),
                 model: "Qwen/Qwen3-72B".to_string(),
@@ -250,9 +274,41 @@ pub fn resolve_tier(tier: &InferenceTier) -> Option<(&'static str, &'static str)
 // Provider Registry — maps provider names to real base URLs
 // ============================================================================
 
+/// Base URL for the local Ollama backend.
+///
+/// Resolved once per process from `ZP_OLLAMA_URL`, defaulting to the standard
+/// loopback port. Held in a `OnceLock` so `provider_base_url` can keep its
+/// `&'static str` return type.
+///
+/// SECURITY: this is the one entry in the registry that points at the local
+/// host, which is exactly the shape SSRF guards exist to prevent. It is safe
+/// only because the provider segment is matched against this fixed allowlist
+/// rather than taken from the request, and because `allowed_path_prefixes`
+/// below restricts it to two known inference paths. Do not relax either of
+/// those without revisiting this. Operators who set `ZP_OLLAMA_URL` to a
+/// non-loopback address are choosing to forward through the proxy to that
+/// host and own that decision.
+static OLLAMA_BASE_URL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+fn ollama_base_url() -> &'static str {
+    OLLAMA_BASE_URL
+        .get_or_init(|| {
+            std::env::var("ZP_OLLAMA_URL")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| zp_net::peer_url("localhost", 11434))
+        })
+        .as_str()
+}
+
 /// Known provider endpoints.
 pub fn provider_base_url(provider: &str) -> Option<&'static str> {
     match provider {
+        // Local Ollama backend. Serves the OpenAI-compatible surface under /v1,
+        // so the proxy path is the standard "v1/chat/completions". This is the
+        // `local` tier already declared in `get_routing_config()`, which could
+        // not resolve before this entry existed.
+        "ollama" => Some(ollama_base_url()),
         "openai" => Some("https://api.openai.com"),
         "anthropic" => Some("https://api.anthropic.com"),
         "groq" => Some("https://api.groq.com/openai"),
@@ -286,6 +342,11 @@ pub fn provider_base_url(provider: &str) -> Option<&'static str> {
 /// with one of these prefixes will be forwarded.
 fn allowed_path_prefixes(provider: &str) -> &'static [&'static str] {
     match provider {
+        // Ollama: OpenAI-compatible surface only. Deliberately excludes the
+        // native /api/* routes — /api/pull, /api/create and /api/delete can
+        // fetch arbitrary remote content and mutate local model state, which
+        // must not be reachable through a forwarding proxy.
+        "ollama" => &["v1/chat/completions", "v1/models"],
         "openai" => &[
             "v1/chat/completions",
             "v1/completions",
@@ -502,7 +563,13 @@ pub struct ProxyMeta {
 
 /// Main proxy handler.
 ///
-/// Route: `POST /api/v1/proxy/*proxy_path`
+/// Route: `GET|POST /api/v1/proxy/*proxy_path`
+///
+/// GET is accepted so signed liveness probes (`InferenceBackend::health_check`
+/// / `model_available` in `zp-regent`) can reach a provider's `v1/models`
+/// endpoint through this same governed, ZP-Sig-verified path instead of an
+/// unsigned direct call (W5 3c follow-up). The incoming method is preserved
+/// end-to-end when forwarding upstream -- never silently coerced to POST.
 ///
 /// The catch-all `proxy_path` is split into `{provider}/{remaining_path}`.
 /// Forwards the request to the real provider, extracts usage, generates receipt.
@@ -511,6 +578,7 @@ pub struct ProxyMeta {
 pub async fn proxy_handler(
     State(state): State<AppState>,
     Path(proxy_path): Path<String>,
+    method: Method,
     headers: HeaderMap,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
@@ -525,35 +593,33 @@ pub async fn proxy_handler(
     };
 
     // Tier routing: X-ZP-Tier header overrides the URL provider + injects model.
-    let (provider, tier_model) = if let Some(tier_val) = headers
-        .get("x-zp-tier")
-        .and_then(|v| v.to_str().ok())
-    {
-        let tier = match tier_val {
-            "high_stakes" => Some(InferenceTier::HighStakes),
-            "bulk" => Some(InferenceTier::Bulk),
-            "coding" => Some(InferenceTier::Coding),
-            "local" => Some(InferenceTier::Local),
-            "experimental" => Some(InferenceTier::Experimental),
-            _ => {
-                warn!(tier = %tier_val, "Unknown X-ZP-Tier value; ignoring");
-                None
-            }
-        };
-        if let Some(t) = tier {
-            if let Some((tp, tm)) = resolve_tier(&t) {
-                debug!(tier = %tier_val, provider = %tp, model = %tm, "Tier routing resolved");
-                (tp.to_string(), Some(tm))
+    let (provider, tier_model) =
+        if let Some(tier_val) = headers.get("x-zp-tier").and_then(|v| v.to_str().ok()) {
+            let tier = match tier_val {
+                "high_stakes" => Some(InferenceTier::HighStakes),
+                "bulk" => Some(InferenceTier::Bulk),
+                "coding" => Some(InferenceTier::Coding),
+                "local" => Some(InferenceTier::Local),
+                "experimental" => Some(InferenceTier::Experimental),
+                _ => {
+                    warn!(tier = %tier_val, "Unknown X-ZP-Tier value; ignoring");
+                    None
+                }
+            };
+            if let Some(t) = tier {
+                if let Some((tp, tm)) = resolve_tier(&t) {
+                    debug!(tier = %tier_val, provider = %tp, model = %tm, "Tier routing resolved");
+                    (tp.to_string(), Some(tm))
+                } else {
+                    warn!(tier = %tier_val, "No route configured for tier; using URL provider");
+                    (provider, None)
+                }
             } else {
-                warn!(tier = %tier_val, "No route configured for tier; using URL provider");
                 (provider, None)
             }
         } else {
             (provider, None)
-        }
-    } else {
-        (provider, None)
-    };
+        };
 
     // 1. Resolve provider base URL
     let base_url = match provider_base_url(&provider) {
@@ -563,9 +629,9 @@ pub async fn proxy_handler(
                 StatusCode::BAD_REQUEST,
                 Json(json!({
                     "error": format!("Unknown provider: {}", provider),
-                    "known_providers": ["openai", "anthropic", "groq", "mistral", "together",
-                                       "deepseek", "fireworks", "perplexity", "cohere",
-                                       "google", "openrouter", "siliconflow",
+                    "known_providers": ["ollama", "openai", "anthropic", "groq", "mistral",
+                                       "together", "deepseek", "fireworks", "perplexity",
+                                       "cohere", "google", "openrouter", "siliconflow",
                                        "deepinfra", "abacus"]
                 })),
             )
@@ -675,9 +741,30 @@ pub async fn proxy_handler(
         b
     };
 
+    // Preserve the incoming method rather than hardcoding POST. GET is used
+    // by the signed liveness probes (InferenceBackend::health_check /
+    // model_available in zp-regent) hitting v1/models through this same
+    // governed, ZP-Sig-verified path (W5 3c follow-up). Only GET and POST
+    // ever reach this handler today (the route above registers no other
+    // methods), but the match covers the full zp_host::HttpMethod surface --
+    // mirroring the conversion already established in tool_proxy.rs -- rather
+    // than assuming that invariant here as well. Matched by guard, not by
+    // arm, because `http::Method`'s associated consts aren't structural-match
+    // patterns (same reason tool_proxy.rs's conversion does it this way).
+    let forwarded_method = match &method {
+        m if m == Method::GET => zp_host::HttpMethod::Get,
+        m if m == Method::POST => zp_host::HttpMethod::Post,
+        m if m == Method::PUT => zp_host::HttpMethod::Put,
+        m if m == Method::DELETE => zp_host::HttpMethod::Delete,
+        m if m == Method::PATCH => zp_host::HttpMethod::Patch,
+        m if m == Method::HEAD => zp_host::HttpMethod::Head,
+        m if m == Method::OPTIONS => zp_host::HttpMethod::Options,
+        _ => zp_host::HttpMethod::Post,
+    };
+
     let http_req = zp_host::HttpRequest::new(
         &target_url,
-        zp_host::HttpMethod::Post,
+        forwarded_method,
         forward_headers,
         forwarded_body,
         "proxy",
@@ -725,17 +812,13 @@ pub async fn proxy_handler(
 
     // Collect pricing provenance for receipt extensions
     let provider_profile = catalog_lookup(&provider);
-    let pricing_age_days = provider_profile
-        .as_ref()
-        .and_then(|p| p.pricing_age_days());
-    let pricing_source_str = provider_profile.as_ref().map(|p| {
-        match &p.pricing_source {
-            zp_engine::providers::PricingSource::Fetch { source_url } => {
-                format!("fetch:{}", source_url)
-            }
-            zp_engine::providers::PricingSource::Manual => "manual".to_string(),
-            zp_engine::providers::PricingSource::Unknown => "unknown".to_string(),
+    let pricing_age_days = provider_profile.as_ref().and_then(|p| p.pricing_age_days());
+    let pricing_source_str = provider_profile.as_ref().map(|p| match &p.pricing_source {
+        zp_engine::providers::PricingSource::Fetch { source_url } => {
+            format!("fetch:{}", source_url)
         }
+        zp_engine::providers::PricingSource::Manual => "manual".to_string(),
+        zp_engine::providers::PricingSource::Unknown => "unknown".to_string(),
     });
 
     // 5. Generate receipt
@@ -774,23 +857,17 @@ pub async fn proxy_handler(
 
     // Pricing provenance extensions (Commit 5)
     if let Some(ref src) = pricing_source_str {
-        receipt_builder = receipt_builder.extension(
-            "zp.pricing.source",
-            serde_json::Value::String(src.clone()),
-        );
+        receipt_builder =
+            receipt_builder.extension("zp.pricing.source", serde_json::Value::String(src.clone()));
     }
     if let Some(age) = pricing_age_days {
-        receipt_builder = receipt_builder.extension(
-            "zp.pricing.age_days",
-            serde_json::Value::Number(age.into()),
-        );
+        receipt_builder =
+            receipt_builder.extension("zp.pricing.age_days", serde_json::Value::Number(age.into()));
         // Emit a staleness warning extension when pricing is stale
         let threshold = stale_threshold_days(&provider);
         if age > threshold {
-            receipt_builder = receipt_builder.extension(
-                "zp.pricing.stale",
-                serde_json::Value::Bool(true),
-            );
+            receipt_builder =
+                receipt_builder.extension("zp.pricing.stale", serde_json::Value::Bool(true));
         }
     }
 
@@ -947,6 +1024,48 @@ mod tests {
             Some("https://routellm.abacus.ai/v1")
         );
         assert_eq!(provider_base_url("unknown"), None);
+    }
+
+    /// HARNESS-SEAM-2026-08 S1 ("provider resolves"), W7. Prove the sensor
+    /// is not lying: a synthetic bad provider id must be caught, a real one
+    /// (and the local sentinel) must pass clean, in the same test.
+    #[test]
+    fn s1_provider_known_catches_synthetic_violation_and_clears_on_fix() {
+        // Synthetic violation: a provider id that exists nowhere.
+        assert!(
+            !provider_known("definitely-not-a-real-provider-xyz"),
+            "S1 must flag an unknown provider id"
+        );
+
+        // The local sentinel is always valid — it is handled outside the
+        // catalog entirely (see `init_providers`'s "ollama" special case).
+        assert!(provider_known("ollama"), "S1 must accept the local sentinel");
+
+        // A real catalog entry — "fix" the synthetic violation by using an
+        // actual configured id — must pass clean.
+        assert!(
+            provider_known("openai"),
+            "S1 must accept a real catalog provider"
+        );
+    }
+
+    #[test]
+    fn test_ollama_provider_registered() {
+        // The `local` tier in get_routing_config() targets provider "ollama";
+        // before this entry existed the proxy rejected it with 400.
+        assert!(provider_base_url("ollama").is_some());
+    }
+
+    #[test]
+    fn test_ollama_path_allowlist_excludes_native_api() {
+        // Only the OpenAI-compatible surface is reachable. The native /api/*
+        // routes must stay unreachable: /api/pull fetches arbitrary remote
+        // content and /api/delete mutates local model state.
+        assert!(validate_proxy_path("ollama", "v1/chat/completions").is_ok());
+        assert!(validate_proxy_path("ollama", "v1/models").is_ok());
+        assert!(validate_proxy_path("ollama", "api/pull").is_err());
+        assert!(validate_proxy_path("ollama", "api/delete").is_err());
+        assert!(validate_proxy_path("ollama", "api/generate").is_err());
     }
 
     #[test]

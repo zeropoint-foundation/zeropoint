@@ -1,4 +1,66 @@
 #!/bin/sh
+
+# Skip during rebase/merge/cherry-pick to avoid interfering with git's
+# multi-step operations. Same guards graphify uses below.
+GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
+[ -d "$GIT_DIR/rebase-merge" ] && exit 0
+[ -d "$GIT_DIR/rebase-apply" ] && exit 0
+[ -f "$GIT_DIR/MERGE_HEAD" ] && exit 0
+[ -f "$GIT_DIR/CHERRY_PICK_HEAD" ] && exit 0
+
+# zp-maps-refresh-start
+# Regenerate the four substrate maps that are derived-not-authored:
+#   - docs/ARCHITECTURE-MAP.md        (crate-level baseline)
+#   - docs/DISCIPLINE-PINS-MAP.md     (structural rule registry)
+#   - tools/connection-map/connections.json (declared-dependency inventory)
+#   - crates/zp-server/assets/ecosystem-state.js + dashboard/ecosystem-{graph.json,map.html}
+#
+# Why (2026-09-06): a derived map has to be re-derived after every commit
+# that changes the substrate, or it reports a substrate that no longer
+# exists. Running them by hand meant they went stale between sessions --
+# the same failure mode the discipline-pins registry hit on 2026-07-29
+# (empty intersection with reality). Under the "read state files must have
+# a writer" pin's spirit, a derived doc without an automatic writer is a
+# state file that lies whenever nobody remembered.
+#
+# Design choices:
+#   * Runs detached in the background — same shape as the graphify hook
+#     above, so `git commit` returns immediately.
+#   * Does NOT auto-commit the regenerated files. The regen writes into
+#     the working tree; the author sees the diff and folds it into their
+#     next commit (or a "regenerate maps" commit right after). Auto-
+#     committing would produce surprise commits the author did not write.
+#   * Does NOT block commits on regen failure. A broken generator logs
+#     and continues. A stale map is a lesser defect than a blocked commit
+#     while you debug the regen.
+#   * Runs the full set on every commit, not only commits that touch the
+#     inputs. The generators are fast (Python, <5s each). Tracking which
+#     changes matter would grow its own coverage-drift problem.
+
+_ZP_MAPS_LOG="${HOME}/.cache/zp-maps-refresh.log"
+mkdir -p "$(dirname "$_ZP_MAPS_LOG")"
+echo "[zp-maps refresh] launching background regeneration (log: $_ZP_MAPS_LOG)"
+
+nohup sh -c '
+    REPO="$(git rev-parse --show-toplevel)"
+    cd "$REPO" || exit 0
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "[zp-maps refresh] python3 not found -- maps not refreshed"
+        exit 0
+    fi
+    # Order matters: regenerate_source_manifest.py writes the manifest
+    # ecosystem-state.py reads.
+    for step in         "tools/architecture-map/architecture_map.py ."         "tools/discipline-pins/discipline_pins.py ."         "tools/connection-map/connection_map.py ."         "docs/lenses/regenerate_source_manifest.py"         "tools/ecosystem-state/ecosystem_state.py"     ; do
+        echo "-> python3 $step"
+        # shellcheck disable=SC2086
+        if ! python3 $step; then
+            echo "  [zp-maps refresh] failed: $step -- leaving map as-is"
+        fi
+    done
+' > "$_ZP_MAPS_LOG" 2>&1 < /dev/null &
+disown 2>/dev/null || true
+# zp-maps-refresh-end
+
 # graphify-hook-start
 # Auto-rebuilds the knowledge graph after each commit (code files only, no LLM needed).
 # Installed by: graphify hook install
@@ -76,3 +138,4 @@ except Exception as exc:
 " > "$_GRAPHIFY_LOG" 2>&1 < /dev/null &
 disown 2>/dev/null || true
 # graphify-hook-end
+

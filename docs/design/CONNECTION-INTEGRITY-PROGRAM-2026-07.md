@@ -6,7 +6,7 @@
 
 **Motivation:** Ten commits landed in one session. Every defect they closed was work that already existed and was not connected to the thing that would have made it count. Not one was a missing feature.
 
-**Composes with:** `SUBSTRATE-LOOP-CLOSURE-2026-07.md` (the seven-edge audit this generalizes, and whose §6 declined the survey this program must not become), `AUTHORING-DISCIPLINE-2026-07.md` (A11 — distinguish specified from shipped), `IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md` (Stage 1t tie-offs, the mechanism for declared absence), `ZEP-self-referential-authorship-2026-07.md` (III.27 — the class test that governs who may tie off), `EXECUTION-AUTHORITY-MODEL-2026-07.md` (Phase 6 nested observer windows, the drift detector), `SPEC-IMPLEMENTATION-COHERENCE-INVESTIGATION-2026-07.md` (§2, the audit method), `EMPIRICAL-PROGRAM-2026-07.md` (the four architectural claims this protects).
+**Composes with:** `SUBSTRATE-LOOP-CLOSURE-2026-07.md` (the seven-edge audit this generalizes, and whose §6 declined the survey this program must not become), `AUTHORING-DISCIPLINE-2026-07.md` (A11 — distinguish specified from shipped), `IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md` (Stage 1t tie-offs, the mechanism for declared absence), `docs/handoffs/ZEP-self-referential-authorship-2026-07.md` (III.27 — the class test that governs who may tie off), `EXECUTION-AUTHORITY-MODEL-2026-07.md` (Phase 6 nested observer windows, the drift detector), `SPEC-IMPLEMENTATION-COHERENCE-INVESTIGATION-2026-07.md` (§2, the audit method), `EMPIRICAL-PROGRAM-2026-07.md` (the four architectural claims this protects).
 
 ---
 
@@ -40,6 +40,14 @@ The corpus asserts a mechanism; no code implements it.
 *Evidence:* 778 receipt types across 103 namespaces documented with no implementing family in the code registry (`corpus-lint receipt-coverage`, 2026-07-26) — `regent:` 86, `lens:` 54, `delegation:` 32. Zero `lens:applied` or `lens:declared` occurrences anywhere in `crates/`, against a primitive with four specified receipt types and a KEEL axiom. `prompts/{model_family}/` resolution, assumed by the model-prompt coupling invariant, absent from the code.
 
 *Detector:* **Partial.** `corpus-lint receipt-coverage` catches this for receipt strings only, and reports it as a measurement rather than a defect — correctly, since the corpus is permitted to specify ahead of the code. What is missing is the *declaration*: a specified-not-built mechanism should say so in its own text, and nothing checks that it does.
+
+*Two findings from the first receipt-inventory sweep, 2026-07-26, both C1 and neither visible to any existing detector:*
+
+**`system:startup` and `system:shutdown`.** Declared in the receipt registry, handled by `zp_officers::narration`, fixtured in Aegis's tests — and emitted nowhere. Zero occurrences across 84,246 chain entries. The substrate held no record of its own session boundaries, which is why the Phase 6 long window had nothing to anchor "across sessions" to and why boot-to-ready (that phase's own worked example) was uncomputable. Emitters landed the same day.
+
+**The precedent system.** `crates/zp-server/src/regent.rs` describes `regent:remediation:` receipts as "the foundation for the precedent system — future cycles query these to determine whether Regent has precedent for autonomous action," and carries a comment naming the query filter. No query exists. Every occurrence of "precedent" in `crates/` is a comment describing a mechanism that was never built. So *act on precedent, escalate on novelty* — a canonical `CLAUDE.md` working principle with a specified three-part test, cited as the thing that prevents both over-cautious and over-confident autonomy — has no implementation. This is the sharpest form of the condition: a receipt emitted for a reader that does not exist, in service of a gate that does not exist, and the receipt itself has never fired.
+
+The second is the one worth generalizing from. It was invisible to `receipt-coverage` because the prefix *is* in the registry; invisible to `granted_tools_must_be_reachable` because the tools are reachable; invisible to `connection-map` because nobody declared the edge. It surfaced only from asking what the substrate has never done.
 
 ### C2 — Built, not wired
 An implementation exists and no path reaches it.
@@ -123,7 +131,7 @@ Stage 1t is load-bearing here and is reused rather than reinvented. The substrat
 
 A tie-off is two objects that read as one. The **observation** — *nothing checks this edge* — is witnessed: `connection-map` derives it from the tree and anyone can reproduce it. The **disposition** — *and that is acceptable* — is asserted. Only the second carries authority, and an earlier draft of this program asked for ceremony on the first, which is ceremony for a measurement.
 
-The asserted half is already governed. **A tie-off changes what counts as a defect, which is criteria rather than inputs, so a Regent-authored tie-off is Class 3 under `ZEP-self-referential-authorship-2026-07.md` §III.27 — "material that changes what counts as a violation, or what an act is recognized as."** Class 3 is non-delegable: no operator grant confers Regent authorship of the criteria by which her own outputs are verified. She may propose; adoption is an operator act.
+The asserted half is already governed. **A tie-off changes what counts as a defect, which is criteria rather than inputs, so a Regent-authored tie-off is Class 3 under `docs/handoffs/ZEP-self-referential-authorship-2026-07.md` §III.27 — "material that changes what counts as a violation, or what an act is recognized as."** Class 3 is non-delegable: no operator grant confers Regent authorship of the criteria by which her own outputs are verified. She may propose; adoption is an operator act.
 
 **Authoring criteria is Class 3; applying them is not.** That distinction is III.27's own test and it is what makes the volume tractable. The operator adopts a tie-off policy once — that adoption is the Class 3 act, chain-anchored and attributed. The Regent applying that policy to classify an edge is applying criteria, not changing them, and drops to Class 1 or 2. A tie-off that cannot be derived from the policy is by definition a criteria change, returns to Class 3, and escalates. That is *act on precedent, escalate on novelty* derived structurally rather than asserted as a new rule.
 

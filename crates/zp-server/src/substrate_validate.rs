@@ -86,14 +86,54 @@ const KNOWN_RECEIPT_PREFIXES: &[&str] = &[
     "cognitive:correction:standing",
     "cognitive:correction:revoked",
     "cognitive:correction:violated",
+    // Class 5 enactment verification — per COGNITIVE-SELF-OBSERVER-2026-07.md
+    // §"Class 5 — Commitment claims". Emitted only on divergence, so a long
+    // silence here is health rather than drift; it is declared because an
+    // undeclared family that fires leaves the inventory blind to it.
+    "cognitive:claim:unbacked",
     // Cognitive act accounting (v0) — per COGNITIVE-ACT-ACCOUNTING-2026-07.md §6
     "cognitive:act:recorded",
+    // Initiative warrants — CONVERSATIONAL-INFERENCE-BOUNDARY-2026-08
+    // §"The initiative rule". Emitted by zp-regent's loop when the Regent
+    // wakes without being asked: `source=timer` (no operator-declared
+    // reason, resolvable=false) or `source=finding` (severity floors are
+    // declared, resolvable=true). KNOWN rather than RESERVED because the
+    // emitter landed with the vocabulary — this family was never reserved,
+    // so it is a new registration, NOT the graduation ceremony.
+    "cognitive:initiative:warranted",
     // Tie-off watch (Stage 1t) — per IMPROVEMENT-LOOP-DISCIPLINE-2026-07.md
     // §"reopen_watch — the two tiers". Declared here ahead of the runtime
     // so a documented receipt does not surface as receipt-drift; the
     // canary cannot evaluate predicates yet.
     // Phase 6 long window — per EXECUTION-AUTHORITY-MODEL-2026-07.md
     "regent:awareness:session_profile",
+    // Approval resolution — the operator's answer to
+    // Intent::RequestApproval. Seeds the precedent corpus.
+    "regent:approval:granted",
+    // Enactment of a granted approval — the receipt that makes carrying one
+    // out idempotent, and the evidence that a signature became an act.
+    "regent:approval:enacted",
+    // A work arc that restated its plan without advancing. Silence here is
+    // health; a receipt means the Regent looped and said so.
+    "regent:arc:stalled",
+    // An approval-required capability reached for without a signature.
+    "regent:tool:refused:unsigned",
+    // Precedent — the autonomous envelope. `cited` is an act taken under a
+    // prior operator signature and naming it; `revoked` narrows the envelope
+    // back, and is itself a chain event per KEEL §III.10.
+    // A proposal suppressed because an identical call was already queued.
+    // Silence here means re-asking is rare; volume means the routing tier is
+    // reaching for the same thing repeatedly.
+    // A memory the Regent was deliberately told to keep, as distinct from
+    // one the observation pipeline distilled from receipts.
+    "regent:memory:recorded",
+    "regent:proposal:duplicate",
+    "regent:precedent:cited",
+    "regent:precedent:revoked",
+    "regent:approval:denied",
+    // Phase 7 terminal states — propose an action, propose a mechanism.
+    "regent:proposal:",
+    "improvement:proposed",
     "improvement:tieoff:declared",
     "improvement:reopen:eligible",
     "improvement:reopen:review_due",
@@ -103,6 +143,586 @@ const KNOWN_RECEIPT_PREFIXES: &[&str] = &[
     "substrate:validation:regent:",
     // Sentinel-specific benign classifications
     "unregistered_known_app",
+    // ── Path A registry additions (2026-08) ──────────────────────────
+    //
+    // Registered from the connection-map's `registry gap` breakdown —
+    // receipts that governed docs describe AND code emits, but this
+    // registry never declared. Adding them closes 32 corpus_to_chain
+    // defects mechanically without changing any emission behaviour.
+    //
+    // See tools/connection-map/connection_map.py::collect_emitted_receipts
+    // for the scan that surfaces this gap in future.
+    //
+    // Coherence receipts (crates/zp-server/src/coherence.rs).
+    "coherence:",
+    // Delegation renewal — the fourth lifecycle state alongside the
+    // granted/revoked/expired trio above.
+    "delegation:",
+    // Gate decisions — allow/deny with optional per-tool detail.
+    // Emitted by tool_chain, narration, anchor_pipeline.
+    "gate:",
+    // Improvement-loop family — narrow prefixes above cover the specific
+    // events; this bare-namespace prefix closes the `improvement:*`
+    // doc wildcard without superseding them (max-length-wins in the
+    // matcher below).
+    "improvement:",
+    // Port lifecycle (tool_ports).
+    "port:lifecycle",
+    // Preference family — model selection, LLM routing policy,
+    // capability preferences.
+    "preference:",
+    // Regent configuration — inference endpoint/model/key, model
+    // selection, vault migration. Distinct from `regent:config:model`
+    // which lands as a sub-event.
+    "regent:config:",
+    // Regent memory — cognitive-tier memory recall/store/review.
+    "regent:memory:",
+    // System-wide sweeps — officer health rollups.
+    "system:sweep",
+    // Tool lifecycle — the widest namespace, covering launch, run,
+    // completion, adaptation, capability probing, preflight, and
+    // provenance events across zp-server + zp-cli.
+    "tool:",
+    // Cartographer ontology materialization (per ONTOLOGY-AND-CARTOGRAPHER-2026-07
+    // + CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07 §Section 6). Emissions
+    // land as Cartographer processes chain into materialized ontology.
+    "ontology:",
+    // Layer 2 inference routing (INFERENCE-ROUTING-DISCIPLINE-2026-07).
+    // One decision receipt per inference call; the uuid suffix is the
+    // decision id. Declared 2026-08-06, when the emitter was corrected to
+    // put `ClassifierDecision::receipt_type()` in the prefix position — it
+    // had been serializing the whole event as bare JSON, so these landed
+    // under the unrecognized prefix `{"chosen_model"`.
+    "regent:inference:classifier_decision:",
+    // Emission-coherence findings and per-cycle summary. Distinct from the
+    // `coherence:` family above, which is a different subsystem — the prefix
+    // matcher is longest-wins and `emission_coherence:` does not start with
+    // `coherence:`, so both are needed. Declared 2026-08-06 alongside the
+    // classifier fix: these had the same bare-JSON defect and landed under
+    // the unrecognized prefix `{"class"`.
+    "emission_coherence:",
+    // ── Systematic sweep additions (2026-08-06) ──────────────────────
+    //
+    // The two bare-JSON emitters found earlier that day were found by
+    // *sampling* — a posture check happened to narrate the inventory and the
+    // numbers did not add up. This block is what a search rather than a sample
+    // returned: every `SystemEvent` construction in the workspace (88 sites),
+    // parsed for its prefix and diffed against this registry.
+    //
+    // All ten below are production emitters whose families this list never
+    // declared. None had fired inside the inventory window, which is why
+    // nothing flagged them — an undeclared family is invisible until the first
+    // time it fires, and then it reports as an unrecognized prefix and degrades
+    // posture for a receipt that was entirely legitimate. The gap is latent by
+    // construction, so it will not surface on its own; it has to be swept for.
+    //
+    // Verified production (not test fixtures) by locating the enclosing fn and
+    // the `#[cfg(test)]` boundary in each file. Four candidates were dropped as
+    // test helpers on that check: `background:noise:` and `bulk:`
+    // (canary.rs probe fixtures), plus assorted `evt-` / `roundtrip-` /
+    // `hardening:` strings in test modules.
+    //
+    // Artifact library — signed-artifact promotion (artifact_library.rs).
+    "artifact:signed",
+    // Slack channel ingress (channels.rs).
+    "channel:slack:inbound:",
+    // Per-tool model routing decision (tool_chain.rs). Distinct from
+    // `regent:inference:classifier_decision:`, which is the Layer 2 envelope
+    // choice; this one records which model a given tool call reached.
+    "cognition:model:routed:",
+    // Operator-authored ad-hoc receipts via `zp emit` (zp-cli/emit.rs).
+    "emit:",
+    // Foundation relay claim forwarding (foundation_relay.rs).
+    "foundation_relay:",
+    // Model registry lifecycle (zp-cli `model register` / `model update`).
+    "model:registered",
+    "model:capability:updated",
+    // Provider pricing refresh (zp-cli `pricing`).
+    "pricing:refresh:",
+    // Pipeline gate refusal and mesh forwarding (zp-pipeline). Both predate the
+    // `prefix + space + JSON` convention and carry a space-then-prose payload
+    // rather than JSON; the prefix is well-formed, so they categorise correctly
+    // and are left as-is rather than reshaped under a chain that already holds
+    // thousands of them.
+    "request_blocked:",
+    "receipt_forwarded:",
+    // ── Second pass, tool-driven (2026-08-06) ────────────────────────
+    //
+    // The block above came from a hand-rolled sweep that scanned only
+    // event-variable bindings. `connection_map.py::collect_undeclared_emissions`
+    // — written immediately after, to make the sweep repeatable — covers
+    // `emit_receipt(…)` call sites and `-> String` event constructors too, and
+    // returned six more families with zero overlap. The manual pass had missed
+    // an entire emission *shape*, which is the argument for the tool existing
+    // rather than the sweep being repeated by hand.
+    //
+    // Artifact-library candidate lifecycle (ARTIFACT-LIBRARY-2026-05).
+    "artifact:library:candidate",
+    // WASM policy module lifecycle (wasm_policy.rs).
+    "policy:wasm:",
+    // Bead-zero canonicalisation. The emitter is
+    // `format!("{}:canonicalized:{}", domain, id)`, so each domain is its own
+    // literal family: `system:` was declared, `provider:` and `node:` were not.
+    // Variable-prefix emitters are the one shape the tool cannot enumerate —
+    // there is no literal to match — so these need declaring by hand, and a
+    // new domain will need the same.
+    "provider:canonicalized:",
+    "node:canonicalized:",
+    // Vault operator surface (2026-08-06). Records the *fact* of a secret
+    // being stored, revealed or removed — key name only. The value never
+    // enters the chain, per the R1 privilege invariant the officers hold.
+    //
+    // `vault:secret:revealed` is the one worth reading: the vault's only
+    // value-emitting verb is auditable by the operator against their own
+    // access, which is what makes providing it defensible under §III.18
+    // delegable safety rather than a hole in the discipline.
+    //
+    // Declared in the same change that added the emitters, after
+    // `connection_map.py::collect_undeclared_emissions` flagged all three —
+    // the check written this morning catching code written this evening.
+    "vault:secret:",
+    // Bedrock invariants (2026-08-06). Emitted at the end of `AppState::init`,
+    // every boot, verified and violated alike — the healthy boots are what make
+    // "the vault was already empty three months ago" a question the chain can
+    // answer. See `bedrock.rs`; first slice of the ceremony specified in
+    // SUBSTRATE-BOOT-INVARIANT-CEREMONY-2026-07.
+    "invariant:",
+];
+
+/// Receipt vocabulary declared by governed documents (typically KEEL and
+/// Tier-2 elaborations) but with no code emitter yet.
+///
+/// The distinction from `KNOWN_RECEIPT_PREFIXES`:
+///
+/// - `KNOWN_RECEIPT_PREFIXES` names families the substrate emits at
+///   runtime. If code emits a receipt whose prefix isn't declared here,
+///   substrate_validate's receipt-type inventory flags the drift.
+/// - `RESERVED_RECEIPT_PREFIXES` names families the corpus has
+///   *committed to* but the substrate does not yet emit. Each entry is
+///   an outstanding implementation task, formally acknowledged so the
+///   connection-map tool can distinguish "reserved, deferred" from
+///   "aspirational, unclassified" — both look identical without this
+///   list.
+///
+/// # Semantics for the connection-map
+///
+/// A documented receipt matching an entry here reads as `tied_off` with
+/// note "reserved: vocabulary declared by canonical corpus; substrate
+/// emission deferred". Same rules the tool uses for tieoffs.toml
+/// declarations, applied at the family level rather than per-edge.
+///
+/// # Rules for adding here
+///
+/// 1. The receipt family must be declared in a Tier-1 or Tier-2 doc
+///    (not Tier-3 speculation). Tier-3 mentions stay aspirational
+///    because Tier-3 has no substrate commitment.
+/// 2. Every entry should carry a comment naming the source doc(s) and
+///    the phase or condition under which implementation lands. Reserved
+///    ≠ forgotten; it means "the corpus has this on the roadmap."
+/// 3. Moving an entry from here to `KNOWN_RECEIPT_PREFIXES` is the
+///    graduation ceremony when the emitter lands. The move is the
+///    receipt-of-record that the reservation was honoured.
+const RESERVED_RECEIPT_PREFIXES: &[&str] = &[
+    // Regent handoff protocol — declared in KEEL §II (handoff between
+    // Regent instances during operator device changes or Regent-role
+    // upgrades). No handoff mechanism ships yet; the vocabulary is
+    // reserved so any future implementation uses these exact names.
+    "regent:handoff:",
+    // Commitment primitives — declared in KEEL §II.18 and elaborated in
+    // CHAIN-WATCHER-AND-COMMITMENTS-2026-07 (three classes: notify-on,
+    // check-at, promised-action). Chain-anchored commitments that
+    // survive cognitive-cycle boots. The elaboration doc exists; the
+    // Rust implementation of the three primitive types is not landed.
+    "regent:commitment:",
+    // Hardware observer receipts — declared in KEEL §II.13 P6 and
+    // HARDWARE-OBSERVER-2026-07. TPM-signed attestations of hardware
+    // state, thermal envelope, tamper-evident sensors. The observer
+    // scaffold exists; the receipt-emitting integration does not.
+    "observation:hardware:",
+    // Boot generation — declared in KEEL bootstrap semantics. Each
+    // substrate boot advances a monotonic generation counter; the
+    // receipt records the transition. Boot machinery ships but does
+    // not yet emit this receipt.
+    "boot:generation",
+    // Config application — declared in KEEL config-lifecycle
+    // semantics. Distinct from `regent:config:*` (which is Regent's
+    // OWN configuration self-modifications); this is substrate-wide
+    // config-application events.
+    "config:apply",
+    // Officer action surfaces — declared in
+    // OFFICER-ACTION-SURFACES-2026-07 §"Per-officer action
+    // characterizations". Officers have two surfaces: passive
+    // observation (canonical, emits `officer:<abbrev>:*` findings)
+    // and ephemeral action (this reservation, per-officer verb sets
+    // for concrete work). The five namespaces below name the action
+    // vocabulary each officer commits to. None emit yet — action
+    // surfaces await the five-phase ceremony machinery (written,
+    // executed, tested, verified, signed) that composes with
+    // SUBSTRATE-SELF-CONSTRUCTION's builder-dispatch discipline.
+    "steward:action:",
+    "sentinel:action:",
+    "forge:action:",
+    "cleo:action:",
+    "aegis:action:",
+    // Blast-radius / circuit-breaker / recovery — declared in
+    // BLAST-RADIUS-AND-RECOVERY-2026-07 (companion to
+    // CIRCUIT-BREAKER-2026-07). Emergency-response and forward-only
+    // recovery discipline: termination semantics for in-flight
+    // actions, WASM modules, tokio tasks, HTTP requests; scope-of-
+    // arrest cascade; graduated escalation ladder; derived-state
+    // checkpoint model. The subsystem's Rust implementation ships in
+    // partial form (breaker primitives exist) but none of these
+    // receipt families emit yet — the ceremony vocabulary is reserved
+    // pending the full breaker+recovery machinery landing.
+    //
+    // Circuit-breaker lifecycle: tripped, escalation, reset.
+    "circuit:",
+    // Recovery lifecycle: progress, verified, verification_failed,
+    // derived_state_from_checkpoint.
+    "recovery:",
+    // Per-cache derived-state checkpoint receipts
+    // (delegation_cache, ontology, port_registry, vault_cache).
+    "checkpoint:derived_state:",
+    // In-flight action terminated by breaker trip.
+    "action:arrested_by_breaker",
+    // Action allowed to finish under arrest.
+    "action:completed_during_arrest",
+    // WASM module cooperative-then-forced termination.
+    "wasm:arrested:",
+    // In-flight HTTP request aborted by breaker.
+    "http:aborted_by_breaker:",
+    // Forcibly-released resource lock during arrest.
+    "lock:force_released",
+    // Lock released cleanly by arrest handoff.
+    "lock:released_by_arrest",
+    // Trajectory-map primitive — declared in canonical Tier-2
+    // elaboration TRAJECTORY-MAP-PRIMITIVE-2026-08. Extends WorkArc
+    // into a map when waypoints grow. Map lifecycle receipts
+    // (opened, proposed, priority_hint, destination_proposed/accepted/
+    // superseded, settled_with_destination, settled_without_destination,
+    // abandoned). Waypoint data structure landed in
+    // crates/zp-regent/src/context.rs (28 tests); MapReceipt returns
+    // are values today, wiring through emit_receipt is pending.
+    // Reserved so vocabulary is stable while emission integration
+    // lands.
+    "arc:map:",
+    // Waypoint lifecycle inside a trajectory map — opened, resolved,
+    // rejected, split. Each waypoint dispatches through builder
+    // machinery per SUBSTRATE-SELF-CONSTRUCTION; resolution closes
+    // the waypoint and may open new fog waypoints. Reserved alongside
+    // the map primitive.
+    "arc:waypoint:",
+    // Node-RED-orchestration receipts — declared in canonical Tier-2
+    // elaboration REGENT-ORCHESTRATION-ARTIFACTS-2026-08. Emitted by
+    // Node-RED runtime's pluggable message-routing seam (message:sent,
+    // subflow:completed) when Regent dispatches flow-shaped work.
+    // Regent-side dispatch/completion receipts use the already-
+    // registered `regent:tool:*` prefix. Runtime not yet integrated;
+    // reserved so vocabulary is stable pre-integration.
+    "flow:",
+    // Hardware profile lifecycle — declared in canonical Tier-2
+    // elaboration HARDWARE-DOSSIER-2026-08. Emitted by the Regent's
+    // layered-lookup hardware perception ceremony (declared, resolved,
+    // measured, drift_suspected). Distinct from observation:hardware:*
+    // (which is the HARDWARE-OBSERVER's TPM-signed attestation
+    // surface); the layered lookup produces fresh measurements and
+    // drift signals, the observer produces attestations. Layered-
+    // lookup implementation not yet landed.
+    "hardware:profile:",
+    // Hardware family catalog — declared in
+    // HARDWARE-DOSSIER-2026-08. Emitted by Layer 2 of the layered
+    // lookup when a hardware family is not yet characterized in
+    // hardware/catalog/. Invites operator (or community) contribution
+    // back to the shared catalog. Not yet emitted.
+    "hardware:catalog:",
+    // Regent hardware perception — declared in
+    // HARDWARE-DOSSIER-2026-08. Regent-side counterpart to
+    // hardware:profile:*; records the Regent's resolved view of its
+    // own hardware after the layered lookup completes. Perception
+    // ceremony not yet landed.
+    "regent:hardware:",
+    // Inference-routing fit denial — declared in
+    // HARDWARE-DOSSIER-2026-08. Emitted when a routing decision
+    // hard-blocks because the target model cannot fit on current
+    // hardware (weights + KV context exceeds effective memory).
+    // Carries the fit failure, provenance of the numbers, available
+    // alternatives, and an operator disposition request per
+    // EXECUTION-AUTHORITY-MODEL Phase 7. Strong-sovereignty ceremony
+    // — never auto-escalates. Routing integration not yet landed.
+    "regent:routing:fit_denied",
+    // Inference-routing fit projection — declared in
+    // HARDWARE-DOSSIER-2026-08. Optional per-decision receipt naming
+    // the FitPrediction the classifier consulted. Higher-volume than
+    // fit_denied; may be gated by an operator preference when
+    // integration lands. Not yet emitted.
+    "regent:routing:fit_predicted",
+    // Fleet-rally primitive — declared in HARDWARE-DOSSIER-2026-08
+    // as a reserved namespace for governed multi-node hardware
+    // rallying. The rally primitive itself is a deferred follow-up
+    // sketch; workload routing is the likely first shape. Reserved
+    // now so the fit-prediction API's HardwareSource abstraction and
+    // the Provenance enum's PeerChainMeasured / PeerCanonPublished
+    // variants (Rust-side reservations, not this list's concern) can
+    // compose without renaming. Composes with MULTI-DEVICE-OPERATION,
+    // SUBSTRATE-COORDINATION-DISCIPLINE, PEER-TRUST-ANCHOR,
+    // SOVEREIGN-KINSHIP-PRIMITIVES, HOUSEHOLD-COMPOSITION,
+    // COMMUNITY-COORDINATION-ON-ZEROPOINT.
+    "regent:rally:",
+    // ---- Added 2026-08-16 from connection-map run at eccc2a6 ----
+    // Nine documents whose declared receipt vocabulary has no emitter in
+    // crates/. Prefixes are deliberately narrow: every one below was tested
+    // against KNOWN_RECEIPT_PREFIXES, this array, and the 102 receipt names
+    // actually emitted from crates/, and none shadows a live family.
+
+    // Operator death and legacy — OPERATOR-DEATH-AND-LEGACY-2026-07.
+    // Executor ceremony, legacy access scopes, memorial preferences. No
+    // succession or beneficiary machinery exists; lands with the legacy
+    // ceremony work.
+    "legacy:",
+    "sovereign:death_declared",
+    // Hardware observer findings — HARDWARE-OBSERVER-2026-07, KEEL §II.13 P6.
+    // Companion to the `observation:hardware:` reservation above, which
+    // covers TPM attestation; these are the coprocessor's fault, thermal,
+    // rail, clock and radio findings. Lands with physical MCU hardware.
+    "hw:",
+    // Kinship coordination scopes — SOVEREIGN-KINSHIP-PRIMITIVES-2026-07,
+    // constrained by KEEL §III.23. Scope names are the design, not an
+    // implementation detail, so they are fixed before any code can widen
+    // them. Lands with cross-sovereign coordination.
+    "kinship:scope:",
+    // Dependent guardianship scopes — DEPENDENT-SOVEREIGNTY-2026-07.
+    // Lands with dependent-sovereign support.
+    "guardian:scope:",
+    // Household composition scopes — HOUSEHOLD-COMPOSITION-2026-07.
+    // Composes with kinship scopes. Lands with multi-sovereign dwellings.
+    "household:scope:",
+    // Embodiment state — EMBODIMENT-STATE-PROTOCOL-2026-07. No avatar,
+    // renderer or signature-action pipeline exists. `cycle:emitted` and
+    // `policy:committed` are that document's unqualified spellings of the
+    // `embodiment:`-prefixed forms; the duplication is a corpus defect to
+    // fix in the doc, reserved here so it does not read as two gaps.
+    "embodiment:",
+    "cycle:emitted",
+    "policy:committed",
+    // Face-tracking observation sources — same doc. `observation:` is live
+    // in zp-observation, but that crate implements chain-reflection claims,
+    // not an operator sensing tier; narrow prefixes keep the reservation
+    // clear of the built family.
+    "observation:operator:face:",
+    "observation:source:",
+    // Regent naming ceremony — REGENT-NAMING-CEREMONY-2026-07. Identity
+    // commitment as chain-anchored operator ceremony, plus renaming and
+    // retraction. `regent:` is heavily built, so only the naming-specific
+    // segments are reserved.
+    "regent:naming:",
+    "regent:named",
+    "regent:renamed:",
+    "regent:name_retracted:",
+    "identity:pre_named",
+    // Build and runtime lifecycle — BUILD-PROCESS-DESIGN-2026-07. The
+    // build/restart lifecycle runs through zp-dev.sh out-of-chain, which
+    // that document names as its own open gap. Each entry is a single
+    // receipt, not a family: `chain:`, `vault:`, `inference:`, `observer:`
+    // and `officer:` are live namespaces and are NOT reserved.
+    "build:",
+    "guard_state:",
+    "hygiene:",
+    "port_registry:",
+    "restart:preshutdown",
+    "officer:shutdown:",
+    "vault:healthy",
+    "chain:database_healthy",
+    "inference:healthy",
+    "inference:unhealthy",
+    "observer:healthy",
+    "boot:startup",
+    // Community coordination — COMMUNITY-COORDINATION-ON-ZEROPOINT-2026-07.
+    // The mesh and reputation substrate it composes with is built; this
+    // coordination layer is not. `foundation_relay:` is live and untouched.
+    "community:",
+    "foundation:proposal:",
+    "foundation:documentation:",
+    "foundation:security:",
+    // ---- Batch 2, 2026-08-16 — namespaces with no string literal anywhere
+    // in crates/**/*.rs. Broader check than the emit-site regex: matches any
+    // receipt-shaped literal, so it also catches match-arm returns the
+    // emit scanner misses. All six are Tier-2 declared. ----
+
+    // Lens primitive — LENS-DISCIPLINE-2026-07 (lens as a first-class
+    // scoped-attention discipline with a chain-anchored receipt lifecycle)
+    // and OFFICER-LENS-DECLARATIONS-2026-07. Lenses are currently an
+    // authoring convention only: documents declare them, nothing emits
+    // them. Largest single reserved family — 51 documented receipts across
+    // six documents. Lands when the lens lifecycle is implemented.
+    "lens:",
+    // Host-body observation tier — OBSERVATION-PLANE-2026-07, with
+    // CIRCUIT-BREAKER-2026-07 and COGNITIVE-SELF-OBSERVER-2026-07.
+    // Process, filesystem, network, app and credential-surface sensing.
+    // Note zp-observation exists but implements chain-reflection and
+    // cognitive self-observation claims — a different subsystem from this
+    // one, as OBSERVATION-PLANE itself states. Supersedes the narrower
+    // `observe:hardware:` entry from batch 1.
+    "observe:",
+    // Quarantine plane — QUARANTINE-PLANE-2026-07 and
+    // EXTENSION-SURFACE-2026-07. Default-deny admission for external
+    // composed artifacts. Lands with the admission ceremony.
+    "quarantine:",
+    // Discipline pins and composition matrix — declared in
+    // SUBSTRATE-BOOT-INVARIANT-CEREMONY-2026-07, with entries from
+    // SUBSTRATE-READINESS-CONTRACT and VAULT-KEY-SOVEREIGNTY-COMPOSITION.
+    // Pins are enforced by tooling under tools/discipline-pins today; the
+    // chain-anchored receipt half is not built.
+    "discipline:",
+    // Knowledge commons — DISTRIBUTED-KNOWLEDGE-COMMONS-2026-07.
+    // Cost, delegation, friction and security surfaces for shared corpora.
+    "commons:",
+    // Peer greeting and trust-anchor lifecycle — PEER-TRUST-ANCHOR-2026-07,
+    // PEER-DISCOVERY-AS-OUTREACH-2026-07, DISCOVERY-AND-BOOTSTRAP-2026-07.
+    // zp-mesh and zp-gossip are built and emit `foundation_relay:`; this is
+    // the outreach and trust-anchor vocabulary layered above them, unbuilt.
+    "peer:",
+    // Two-node co-sovereign ceremony — TWO-NODE-GENESIS-COORDINATION-2026-07.
+    // Narrow prefix: `ceremony:` is left open for other ceremony families.
+    "ceremony:cosovereign:",
+    // NOT RESERVED — `onboard:` (6 edges, SAGE-WIZARD-SCRIPT-2026-05).
+    //
+    // Status is THREE-WAY here, and the tool has vocabulary for only two of
+    // the three. These receipts are:
+    //   implemented  — the onboarding wizard exists, in the foundation
+    //                  worker (zeropointfoundation.org/onboard/) rather
+    //                  than in crates/, and
+    //                  scripts/verify-onboarding-receipts.sh checks for
+    //                  onboard:start / onboard:complete;
+    //   invisible    — connection_map scans crates/**/*.rs only, so it
+    //                  cannot see a non-Rust implementation and reports
+    //                  them as aspirational;
+    //   NOT DEPLOYED — as of 2026-08-16 the Foundation workspace is set
+    //                  aside by operator decision. It is to be re-established
+    //                  on Cloudflare and Hetzner once the substrate reaches
+    //                  deployable maturity. Until then nothing is serving
+    //                  these receipts, and the verify script has no live
+    //                  target.
+    //
+    // Do NOT read this entry as a claim that anything is running.
+    // Reserving them would be
+    // wrong in the other direction — it would record built work as deferred
+    // roadmap. They are left as defects deliberately: an unclassified edge
+    // is the honest state for code that exists but is not deployed and is
+    // not visible to the scanner.
+    //
+    // Three things would each resolve this independently: extending the
+    // scanner past crates/, the foundation-side receipt signing that
+    // verify-onboarding-receipts.sh names as open work, or redeployment of
+    // the workspace. Only the third is currently gated on anything.
+    // ---- Batch 3, 2026-08-16 — second-level segments inside LIVE
+    // namespaces. Each namespace below has emitting code, so the namespace
+    // itself must NOT be reserved; these are the specific sub-families with
+    // no string literal anywhere in crates/**/*.rs (scan excludes this file).
+    // This is the per-receipt granularity the SPLIT documents required. ----
+
+    // Regent orchestration layers — REGENT-ORCHESTRATION-ARCHITECTURE-2026-07
+    // (Phase 0 shipped; workflow/exec/artifact/route are the Layer 3-7
+    // extensions that document names as future evolution) and
+    // regent-gossip-and-evolution-2026-07. `regent:emission:` and
+    // `regent:precedent:` have code and are deliberately absent here.
+    // NOTE: `regent:commitment_fulfilled:` is a distinct string from the
+    // existing `regent:commitment:` reservation — the vocabulary
+    // inconsistency is a corpus defect worth fixing in the source docs.
+    "regent:artifact:",
+    "regent:build:",
+    "regent:claim_verifier:",
+    "regent:cognitive:",
+    "regent:commitment_fulfilled:",
+    "regent:confabulation_gap:",
+    // `regent:cycle:` subsumes the former `regent:cycle:arrested` entry
+    // (removed 2026-08-16 as redundant): the bare prefix already matches
+    // arrested and its sub-forms _after_inference, _mid_tool_dispatch,
+    // _urgent, and the wildcard :* — all declared in the doc.
+    "regent:cycle:",
+    "regent:directive:",
+    "regent:evolution:",
+    "regent:exec:",
+    "regent:gossip:",
+    "regent:mandate:",
+    "regent:plan:",
+    "regent:route:",
+    "regent:standing_correction:",
+    "regent:workflow:",
+    // Substrate ceremonies — SUBSTRATE-BOOT-INVARIANT-CEREMONY-2026-07,
+    // SUBSTRATE-HARDENING-CEREMONY-2026-07, SUBSTRATE-READINESS-CONTRACT-2026-07.
+    // zp-server/src/bedrock.rs implements the first slice of the boot
+    // ceremony and emits the registered `invariant:` family; these are the
+    // remaining ceremony receipts. `substrate:characterization:` has code.
+    "substrate:boot_ceremony:",
+    "substrate:degraded:",
+    "substrate:hardening:",
+    "substrate:invariant:",
+    "substrate:model:",
+    "substrate:readiness:",
+    // Chain export and access accounting — PORTABLE-CHAIN-EXPORT-CEREMONY-2026-07
+    // and TOOL-OPACITY-AND-CAPABILITY-CLASSES-2026-07. The `chain:canary:`
+    // family is already registered and is not touched.
+    "chain:portable:",
+    "chain:read:",
+    "chain:write:",
+    // Capability classes — TOOL-OPACITY-AND-CAPABILITY-CLASSES-2026-07,
+    // ECONOMIC-DLT-COMPOSITION-2026-07, SUBSTRATE-READINESS-CONTRACT-2026-07.
+    "capability:composition:",
+    "capability:dlt:",
+    "capability:media:",
+    "capability:sense:",
+    "capability:unavailable:",
+    // Host-surface observation findings — OBSERVATION-PLANE-2026-07 and
+    // CHAIN-WATCHER-AND-COMMITMENTS-2026-07. `observation:inference:` and
+    // `observation:hardware:` have code / an existing reservation.
+    // NOTE: `observation:process:` and `observation:processes:` are two
+    // spellings of one family in the corpus — a doc defect, reserved both
+    // so it does not present as two independent gaps.
+    "observation:filesystem:",
+    "observation:network:",
+    "observation:process:",
+    "observation:processes:",
+    "observation:sentinel:",
+    // Sentinel action surfaces — SENTINEL-V1-MVP-2026-07 and
+    // EXECUTION-AUTHORITY-MODEL-2026-07. Sentinel's passive observation
+    // findings ship as `officer:sen:*`; these are the action-surface verbs.
+    "sentinel:accounting:",
+    "sentinel:escalation:",
+    "sentinel:flow:",
+    "sentinel:placement:",
+    // Reserved-authority refusals and operator declarations —
+    // NON-DELEGABLE-AUTHORITY-2026-08 §5 (refusal) and §7 (declaration,
+    // withdrawal). Enumerated as exact names rather than reserved as a bare
+    // `authority:reserved:` prefix, on purpose: §5 states that no
+    // `authority:reserved:granted` receipt type exists, and that the absence
+    // of that receipt type in the schema is itself the statement. A bare
+    // prefix would silently reserve `granted` too and erase the statement.
+    // (No double quotes in this comment on purpose: both parsers here skip
+    // `//` lines, but `tools/connection-map/silent_families.py` records that
+    // a naive quote-extractor once read a phrase out of a doc comment as a
+    // receipt family, and this block is read back by tooling.)
+    //
+    // Not surfaced by the 2026-08-16 connection-map run at `eccc2a6` because
+    // that run enumerates documents in CANONICAL-CORPUS-INDEX and
+    // NON-DELEGABLE-AUTHORITY is deliberately outside it. Added by hand
+    // 2026-08-18 per `docs/handoffs/reserved-authority-consolidation-2026-08.md`
+    // §4 — every artifact derived from that run inherits the same blind spot.
+    //
+    // RESERVED and not KNOWN because only the enforcement half is built: the
+    // refusal path is live in zp-core (`reserved_class`,
+    // `RESERVED_CAPABILITY_NAMES`, refusal at `validate_issuance` and
+    // `delegate`) with an end-to-end test at
+    // crates/zp-cli/tests/delegate_refuses_reserved_capability.rs, while the
+    // receipt emission (§13.4) and all of Part II are unbuilt.
+    "authority:reserved:refused",
+    "authority:reserved:declared",
+    "authority:reserved:withdrawn",
+    // NOT RESERVED — 11 wildcard segments (`officer:*`, `capability:*`,
+    // `observation:*`, `genesis:*`, `classifier:*`, `foundation:*` and
+    // others). These are doc-side notation meaning "any member", not
+    // receipt names. A reservation containing `*` would match nothing.
+    // They are corpus-authoring defects: the documents should either name
+    // the members or mark the line as illustrative.
 ];
 
 /// Run the canonical substrate validation.
@@ -156,23 +776,53 @@ pub fn run_substrate_validation(
     let cognitive_sandwich = check_cognitive_sandwich(&recent_entries, one_hour_ago);
     let standing_corrections = check_standing_corrections(audit_store);
     let officer_heartbeats = check_officer_heartbeats(&recent_entries, one_hour_ago);
-    let receipt_inventory = check_receipt_inventory(&recent_entries);
+    let receipt_inventory = check_receipt_inventory(audit_store);
+
+    // Reconciliation invariants run last — they read the assembled results.
+    let invariants = check_invariants(
+        &chain_integrity,
+        &canary_discipline,
+        &cognitive_sandwich,
+        &receipt_inventory,
+    );
 
     // ── Roll-up posture ──────────────────────────────────────────────────
-    let posture = derive_posture(
+    let mut posture = derive_posture(
         &chain_integrity,
         &canary_discipline,
         &cognitive_sandwich,
         &officer_heartbeats,
     );
 
-    let notable_gaps = derive_notable_gaps(
+    // A strict-invariant violation means the report contradicts itself, which
+    // is at least degraded regardless of what the individual checks concluded
+    // — a surface whose own arithmetic does not close cannot be trusted to be
+    // reporting `ok` about anything else. Window-sensitive violations do not
+    // escalate; they are boundary artifacts until they persist.
+    if invariants["strict_violations"].as_u64().unwrap_or(0) > 0 && posture == "healthy" {
+        posture = "degraded".to_string();
+    }
+
+    let mut notable_gaps = derive_notable_gaps(
         &chain_integrity,
         &canary_discipline,
         &cognitive_sandwich,
         &officer_heartbeats,
         &receipt_inventory,
     );
+
+    for inv in invariants["invariants"].as_array().into_iter().flatten() {
+        if inv["holds"] == false && inv["class"] == "strict" {
+            notable_gaps.push(format!(
+                "Reconciliation invariant violated on {} — `{}` ({}). \
+                 The surface contradicts itself; treat its other fields as suspect \
+                 until this closes.",
+                inv["surface"].as_str().unwrap_or("?"),
+                inv["invariant"].as_str().unwrap_or("?"),
+                inv["detail"].as_str().unwrap_or(""),
+            ));
+        }
+    }
 
     // Assemble the full report.
     let report = serde_json::json!({
@@ -186,6 +836,7 @@ pub fn run_substrate_validation(
             "standing_corrections": standing_corrections,
             "officer_heartbeats": officer_heartbeats,
             "receipt_inventory": receipt_inventory,
+            "reconciliation_invariants": invariants,
         },
         "posture": posture,
         "notable_gaps": notable_gaps,
@@ -515,7 +1166,50 @@ fn check_officer_heartbeats(
 }
 
 /// Categorize recent receipts by prefix; flag unrecognized types.
-fn check_receipt_inventory(recent: &[zp_core::AuditEntry]) -> serde_json::Value {
+/// How far back the inventory looks.
+///
+/// The other checks share a 1024-entry window, which on an active chain
+/// is minutes. "Which families have never fired" is a different question
+/// and needs a different window: over minutes almost every event-driven
+/// family is legitimately silent, and the number would be noise.
+///
+/// Bounded rather than whole-chain — the answer should not require
+/// loading an unbounded history into memory. The window actually read is
+/// reported alongside the result so the number stays interpretable.
+const INVENTORY_WINDOW: usize = 25_000;
+
+fn check_receipt_inventory(audit_store: &Arc<std::sync::Mutex<AuditStore>>) -> serde_json::Value {
+    let recent: Vec<zp_core::AuditEntry> = match audit_store.lock() {
+        Ok(store) => match store.recent_entries(INVENTORY_WINDOW) {
+            Ok(e) => e,
+            Err(e) => {
+                return serde_json::json!({
+                    "status": "unavailable",
+                    "error": format!("inventory read failed: {}", e),
+                })
+            }
+        },
+        Err(e) => {
+            return serde_json::json!({
+                "status": "unavailable",
+                "error": format!("audit store lock poisoned: {}", e),
+            })
+        }
+    };
+    let recent = &recent[..];
+
+    let window_span = match (
+        recent.iter().map(|e| e.timestamp).min(),
+        recent.iter().map(|e| e.timestamp).max(),
+    ) {
+        (Some(a), Some(b)) => serde_json::json!({
+            "from": a.to_rfc3339(),
+            "to": b.to_rfc3339(),
+            "entries": recent.len(),
+        }),
+        _ => serde_json::json!({ "entries": 0 }),
+    };
+
     let mut counts_by_prefix: BTreeMap<String, u32> = BTreeMap::new();
     let mut unknown_samples: BTreeMap<String, u32> = BTreeMap::new();
 
@@ -523,7 +1217,9 @@ fn check_receipt_inventory(recent: &[zp_core::AuditEntry]) -> serde_json::Value 
         let event = match &e.action {
             AuditAction::SystemEvent { event } => event,
             _ => {
-                *counts_by_prefix.entry("<non-system-event>".to_string()).or_insert(0) += 1;
+                *counts_by_prefix
+                    .entry("<non-system-event>".to_string())
+                    .or_insert(0) += 1;
                 continue;
             }
         };
@@ -550,12 +1246,245 @@ fn check_receipt_inventory(recent: &[zp_core::AuditEntry]) -> serde_json::Value 
         }
     }
 
-    let status = if unknown_samples.is_empty() { "ok" } else { "unrecognized_present" };
+    // The inventory read from the other side.
+    //
+    // The histogram above answers "what fired, and was any of it
+    // unrecognized." It cannot answer the question that matters more for
+    // substrate maturity: **which declared mechanisms never fired at
+    // all.** A prefix in KNOWN_RECEIPT_PREFIXES that appears zero times
+    // is a family the substrate declares and, over this window, has never
+    // executed — built-not-invoked (C2/C3) in
+    // `docs/design/CONNECTION-INTEGRITY-PROGRAM-2026-07.md` §3.
+    //
+    // Absence over a short window is not a defect: most families are
+    // event-driven and legitimately quiet. The signal is absence over a
+    // *long* window, and the caller owns the window. Reported as an
+    // enumeration rather than a verdict for that reason — and because
+    // waiting for normal activity to exercise 100+ families is too slow
+    // to be a strategy, which is what the exercise sweep is for.
+    let silent: Vec<&str> = KNOWN_RECEIPT_PREFIXES
+        .iter()
+        .filter(|p| !counts_by_prefix.contains_key(**p))
+        .copied()
+        .collect();
+
+    // Counted over the declared set, not over `counts_by_prefix`.
+    //
+    // The histogram also carries the synthetic `<non-system-event>` bucket,
+    // which is neither declared nor a prefix. Reporting `counts_by_prefix.len()`
+    // as `observed_distinct` folded that bucket in, while `silent` filters the
+    // declared set — so the two were partitions of different universes and the
+    // three numbers did not reconcile. A 2026-08-06 posture check read
+    // "56 declared, 21 observed, 36 silent": 20 declared families had fired,
+    // plus the synthetic bucket, against 36 quiet ones.
+    //
+    // The identity `observed_distinct + silent_in_window == declared_total`
+    // holds now and is the point of the field. The synthetic bucket stays in
+    // `known_prefix_counts`, where it is useful and where nothing sums it.
+    let observed_declared = KNOWN_RECEIPT_PREFIXES
+        .iter()
+        .filter(|p| counts_by_prefix.contains_key(**p))
+        .count();
+    debug_assert_eq!(
+        observed_declared + silent.len(),
+        KNOWN_RECEIPT_PREFIXES.len(),
+        "receipt inventory must partition the declared set exactly"
+    );
+
+    let status = if unknown_samples.is_empty() {
+        "ok"
+    } else {
+        "unrecognized_present"
+    };
 
     serde_json::json!({
         "status": status,
         "known_prefix_counts": counts_by_prefix,
         "unrecognized_prefix_counts": unknown_samples,
+        "window": window_span,
+        "declared_total": KNOWN_RECEIPT_PREFIXES.len(),
+        "observed_distinct": observed_declared,
+        "silent_in_window": silent.len(),
+        "silent_prefixes": silent,
+        // Reserved vocabulary — receipt families the corpus committed to
+        // but that the substrate does not yet emit. Distinct from
+        // "silent" (which is `KNOWN_RECEIPT_PREFIXES` families that
+        // simply didn't fire in this window). Reserved is a formal
+        // acknowledgement of outstanding implementation work; silent is
+        // legitimate quiet.
+        "reserved_total": RESERVED_RECEIPT_PREFIXES.len(),
+        "reserved_prefixes": RESERVED_RECEIPT_PREFIXES.to_vec(),
+    })
+}
+
+// ── Reconciliation invariants ────────────────────────────────────────────
+//
+// Per `docs/design/METACOGNITIVE-FIDELITY-HARNESS-2026-08.md` §3. Each report
+// surface declares the arithmetic that must hold over its own fields, and a
+// violation becomes a finding rather than a wrong number rendered confidently.
+//
+// # Why these four and not more
+//
+// Most cross-field identities in this report are already implied by a `status`
+// field — `cognitive_sandwich` flags its own imbalance, `officer_heartbeats`
+// derives per-officer staleness. Restating those here would duplicate a check,
+// not add one. What follows is the residue: identities that are *assumed* by
+// surrounding logic or by a reader, and asserted nowhere.
+//
+// # Strict versus window-sensitive
+//
+// Every count here is taken over a bounded window, so an event whose partner
+// fell outside the window can make a true identity read false. That is a
+// boundary artifact, not a defect, and firing at Warning on it would produce
+// exactly the alarm fatigue §III.25 forbids.
+//
+// - **strict** — holds regardless of where the window falls. Violation is a
+//   real inconsistency and degrades posture.
+// - **window_sensitive** — can be violated by an event pair straddling the
+//   window edge. Reported at Info, never degrades posture. Sustained violation
+//   across many windows is the signal; a single one is noise.
+
+/// Outcome of one declared identity.
+fn invariant(
+    surface: &str,
+    name: &str,
+    strict: bool,
+    holds: bool,
+    detail: String,
+) -> serde_json::Value {
+    serde_json::json!({
+        "surface": surface,
+        "invariant": name,
+        "class": if strict { "strict" } else { "window_sensitive" },
+        "holds": holds,
+        "detail": detail,
+    })
+}
+
+/// Evaluate reconciliation invariants over the already-computed check results.
+///
+/// Deliberately a post-pass over the assembled JSON rather than assertions
+/// inside each check. Two reasons. The identities are *between* fields, so they
+/// read most clearly where all the fields are visible at once. And a post-pass
+/// runs in release: the seed instance of this idea was a `debug_assert_eq!`
+/// added to `check_receipt_inventory`, which is compiled out of the binary
+/// `./zp-dev.sh release` ships — an invariant that only holds in development
+/// is not an invariant, it is a test.
+fn check_invariants(
+    chain_integrity: &serde_json::Value,
+    canary: &serde_json::Value,
+    sandwich: &serde_json::Value,
+    inventory: &serde_json::Value,
+) -> serde_json::Value {
+    let g = |v: &serde_json::Value, k: &str| v[k].as_i64();
+    let mut out: Vec<serde_json::Value> = Vec::new();
+
+    // Receipt inventory partitions the declared set exactly. Every declared
+    // family either fired in the window or did not; there is no third state.
+    // Violated 2026-08-06 (56 declared, 21 observed, 36 silent) because the
+    // synthetic `<non-system-event>` bucket was counted as an observed family.
+    if let (Some(d), Some(o), Some(s)) = (
+        g(inventory, "declared_total"),
+        g(inventory, "observed_distinct"),
+        g(inventory, "silent_in_window"),
+    ) {
+        out.push(invariant(
+            "receipt_inventory",
+            "observed_distinct + silent_in_window == declared_total",
+            true,
+            o + s == d,
+            format!("{} + {} vs {}", o, s, d),
+        ));
+    }
+
+    // Chain integrity reports four counts and, before this, compared none of
+    // them against `entries_examined`.
+    //
+    // Only two of the four are identities. Hash validity and link validity are
+    // what `chain_valid` *means*, so "ok" with either count short of the total
+    // is a self-contradiction.
+    //
+    // `signatures_present` is deliberately excluded, and the exclusion is the
+    // interesting part. It looks like the same shape and is not: an unsigned
+    // entry is a health problem, not an arithmetic impossibility.
+    // `AuditStore::open_unsigned` is a supported mode, and production has
+    // carried unsigned entries before — Sentinel reported 12,893 of them at
+    // Critical, which is the mechanism that owns this question. Asserting it
+    // here would restate a Sentinel check as a reconciliation identity and fire
+    // on every unsigned store, which is what it did: it broke
+    // `posture_healthy_requires_all_disciplines_ok` against a fixture whose
+    // chain was entirely valid.
+    //
+    // The distinction this file turns on: an invariant is arithmetic that
+    // cannot fail without something being broken. A property that can be
+    // legitimately false belongs to whichever officer owns the policy.
+    if chain_integrity["status"].as_str() == Some("ok") {
+        if let Some(examined) = g(chain_integrity, "entries_examined") {
+            for field in ["hashes_valid", "chain_links_valid"] {
+                if let Some(v) = g(chain_integrity, field) {
+                    out.push(invariant(
+                        "chain_integrity",
+                        &format!("{} == entries_examined when status is ok", field),
+                        true,
+                        v == examined,
+                        format!("{} = {}, examined = {}", field, v, examined),
+                    ));
+                }
+            }
+        }
+    }
+
+    // A canary must be missed before it can be remediated. The status logic
+    // above relies on this (`missed > 0 && remediated == missed` reads as
+    // self-healed) without asserting it; if remediated exceeded missed the
+    // comparison would silently fail and the branch fall through.
+    if let (Some(m), Some(r), Some(rf)) = (
+        g(canary, "canaries_missed"),
+        g(canary, "canaries_remediated"),
+        g(canary, "canaries_remediation_failed"),
+    ) {
+        out.push(invariant(
+            "canary_discipline",
+            "remediated + remediation_failed <= missed",
+            false,
+            r + rf <= m,
+            format!("{} + {} vs {}", r, rf, m),
+        ));
+    }
+
+    // The observer runs after composition, so it trails and never leads.
+    // Window-sensitive: an observer receipt for a composition that happened
+    // before the window opens lands inside it.
+    if let (Some(c), Some(v)) = (
+        g(sandwich, "cognitive_input_composed_count"),
+        g(sandwich, "cognitive_observer_verified_count"),
+    ) {
+        out.push(invariant(
+            "cognitive_sandwich",
+            "observer_verified <= input_composed",
+            false,
+            v <= c,
+            format!("{} vs {}", v, c),
+        ));
+    }
+
+    let strict_violations = out
+        .iter()
+        .filter(|i| i["class"] == "strict" && i["holds"] == false)
+        .count();
+    let soft_violations = out
+        .iter()
+        .filter(|i| i["class"] == "window_sensitive" && i["holds"] == false)
+        .count();
+
+    serde_json::json!({
+        "status": if strict_violations > 0 { "violated" }
+                  else if soft_violations > 0 { "window_skew" }
+                  else { "ok" },
+        "checked": out.len(),
+        "strict_violations": strict_violations,
+        "window_sensitive_violations": soft_violations,
+        "invariants": out,
     })
 }
 
@@ -572,9 +1501,7 @@ fn derive_posture(
     let heartbeat_status = heartbeats["status"].as_str().unwrap_or("unknown");
 
     // Any single critical fault escalates the whole posture.
-    if integrity_status == "failed"
-        || canary_status == "critical"
-        || heartbeat_status == "critical"
+    if integrity_status == "failed" || canary_status == "critical" || heartbeat_status == "critical"
     {
         return "critical".to_string();
     }
@@ -602,15 +1529,21 @@ fn derive_notable_gaps(
 ) -> Vec<String> {
     let mut gaps = Vec::new();
     if chain_integrity["status"].as_str() == Some("failed") {
-        gaps.push("Chain integrity check failed — investigate hash-linkage or signature validity.".to_string());
+        gaps.push(
+            "Chain integrity check failed — investigate hash-linkage or signature validity."
+                .to_string(),
+        );
     }
     if canary["status"].as_str() == Some("critical") {
         gaps.push(
-            "Canary Tier 1 remediation insufficient — Tier 2 (Connection rebuild) may be required.".to_string(),
+            "Canary Tier 1 remediation insufficient — Tier 2 (Connection rebuild) may be required."
+                .to_string(),
         );
     }
     if canary["status"].as_str() == Some("inactive") {
-        gaps.push("No canary activity in the last hour — discipline may not be spawned.".to_string());
+        gaps.push(
+            "No canary activity in the last hour — discipline may not be spawned.".to_string(),
+        );
     }
     if sandwich["status"].as_str() == Some("imbalanced") {
         gaps.push(
@@ -621,7 +1554,10 @@ fn derive_notable_gaps(
         for (officer, data) in map {
             let status = data["status"].as_str().unwrap_or("unknown");
             if status == "missing" || status == "critical" {
-                gaps.push(format!("Officer {} heartbeat {} — expected cadence 900s.", officer, status));
+                gaps.push(format!(
+                    "Officer {} heartbeat {} — expected cadence 900s.",
+                    officer, status
+                ));
             }
         }
     }
@@ -631,6 +1567,27 @@ fn derive_notable_gaps(
             gaps.push(format!(
                 "Unrecognized receipt-type prefixes in recent chain: {}. Consider adding to known-prefix registry or investigating source.",
                 names.join(", ")
+            ));
+        }
+    }
+    // The inventory read from the other side. Not a fault — most families
+    // are event-driven and legitimately quiet — but the count is the
+    // substrate's honest answer to "how much of what I declare have I
+    // ever actually done," and it belongs in the roll-up rather than
+    // buried in the report body.
+    if let (Some(silent), Some(declared)) = (
+        inventory["silent_in_window"].as_u64(),
+        inventory["declared_total"].as_u64(),
+    ) {
+        if silent > 0 {
+            gaps.push(format!(
+                "{} of {} declared receipt families were silent across the inventory window \
+                 ({} entries). Silence is not a fault by itself; it is the set an exercise \
+                 sweep should drive, and whatever stays silent after one is either unreachable \
+                 or wants a declared tie-off.",
+                silent,
+                declared,
+                inventory["window"]["entries"].as_u64().unwrap_or(0),
             ));
         }
     }
@@ -747,8 +1704,14 @@ mod tests {
         write_event(&store, "chain:canary:written 0");
         write_event(&store, "chain:canary:verified chain_reader 0 probe_ms=5");
         write_event(&store, "chain:canary:written 1");
-        write_event(&store, "chain:canary:missed chain_reader 1 probe_ms=8 probed_entries=100");
-        write_event(&store, "chain:canary:remediated chain_reader 1 method=cache_flush");
+        write_event(
+            &store,
+            "chain:canary:missed chain_reader 1 probe_ms=8 probed_entries=100",
+        );
+        write_event(
+            &store,
+            "chain:canary:remediated chain_reader 1 method=cache_flush",
+        );
 
         let report = run_substrate_validation(&store);
         let canary = &report["checks"]["canary_discipline"];
@@ -775,7 +1738,10 @@ mod tests {
         let report = run_substrate_validation(&store);
         let sandwich = &report["checks"]["cognitive_sandwich"];
         assert_eq!(sandwich["cognitive_input_composed_count"].as_u64(), Some(1));
-        assert_eq!(sandwich["cognitive_observer_verified_count"].as_u64(), Some(1));
+        assert_eq!(
+            sandwich["cognitive_observer_verified_count"].as_u64(),
+            Some(1)
+        );
         assert_eq!(sandwich["violations_last_hour"].as_u64(), Some(0));
         assert_eq!(sandwich["status"].as_str(), Some("ok"));
     }
@@ -828,7 +1794,9 @@ mod tests {
         let report = run_substrate_validation(&store);
         let inv = &report["checks"]["receipt_inventory"];
         assert_eq!(inv["status"].as_str(), Some("unrecognized_present"));
-        assert!(inv["unrecognized_prefix_counts"]["some_new_thing"].as_u64().is_some());
+        assert!(inv["unrecognized_prefix_counts"]["some_new_thing"]
+            .as_u64()
+            .is_some());
     }
 
     #[test]
@@ -838,8 +1806,12 @@ mod tests {
         let report = run_substrate_validation(&store);
         let gaps = report["notable_gaps"].as_array().unwrap();
         // Should mention missing officers AND unknown prefixes.
-        assert!(gaps.iter().any(|g| g.as_str().unwrap_or("").contains("Officer")));
-        assert!(gaps.iter().any(|g| g.as_str().unwrap_or("").contains("Unrecognized")));
+        assert!(gaps
+            .iter()
+            .any(|g| g.as_str().unwrap_or("").contains("Officer")));
+        assert!(gaps
+            .iter()
+            .any(|g| g.as_str().unwrap_or("").contains("Unrecognized")));
     }
 
     #[test]

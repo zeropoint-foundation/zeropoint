@@ -29,6 +29,10 @@ Two existing designs approximate what ZP wants:
 
 ZP has more infrastructure than either — chain, gate, mandate model, Cartographer, Regent — so it can build a gathering layer that's structurally stronger than either.
 
+> **Posture revision, 2026-08-14 — scoped to transport, not to this document's conclusion.** The assessment of Nostr in §1.1 stands unchanged and is quoted verbatim in `NOSTR-TRANSPORT-CONFORMANCE-2026-08.md` §1. What that document reverses is the *response* to it, in the transport domain only: rather than building a structurally stronger equivalent, Nostr is targeted as a compatible transport and discovery backend — one implementation among several behind the existing `zp-mesh` traits, never the only path — with the substrate supplying from above the two things §1.1 diagnoses as missing (chain-of-authority and governance primitives). The reasoning is that the diagnosed weakness is precisely what the substrate already has, which makes supplying it cheaper than reproducing relays.
+>
+> **This does not settle the community surface.** That is a product question and the transport document explicitly declines to resolve it here (`NOSTR-TRANSPORT-CONFORMANCE-2026-08.md` §10, "Alternatives considered"). Whether the gathering layer described below is built on the same carrier, on LXMF, or on something else remains open. Operator ruling 2026-08-14 covers transport admission only.
+
 ### 1.2 What differentiates ZP's community surface
 
 - **Chain-anchored provenance for every message.** Every post is a signed receipt with cryptographic history.

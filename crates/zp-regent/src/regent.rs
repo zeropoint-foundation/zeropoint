@@ -15,12 +15,12 @@ const PROMPT_UNIFIED_NO_TOOLS: &str = include_str!("../prompts/unified_no_tools.
 const PROMPT_ROUTING_TOOLS: &str = include_str!("../prompts/routing_with_tools.md");
 const PROMPT_ROUTING_NO_TOOLS: &str = include_str!("../prompts/routing_no_tools.md");
 const PROMPT_COMPOSE: &str = include_str!("../prompts/compose.md");
+const PROMPT_PROPOSE: &str = include_str!("../prompts/propose.md");
 
 use crate::config::RegentConfig;
 use crate::context::{
-    ChainSnapshot, CognitiveContext, CockpitSource, DelegationSummary,
-    FindingSummary, MemoryFragment, OperatorInput, SovereignIdentity,
-    SystemAwareness,
+    ChainSnapshot, CockpitSource, CognitiveContext, DelegationSummary, FindingSummary,
+    MemoryFragment, OperatorInput, SovereignIdentity, SystemAwareness,
 };
 use crate::corrections::CorrectionIndex;
 use crate::error::RegentError;
@@ -47,6 +47,14 @@ const CORRECTION_SEARCH_LIMIT: usize = 1024;
 /// cycle. Set high enough to include realistic full active-correction sets while
 /// bounding the context-window impact under adversarial correction floods.
 const TIER1_CORRECTION_LIMIT: usize = 32;
+
+/// Chain-search bound for bedrock invariant receipts.
+///
+/// Every boot emits one per invariant, so this covers roughly the last hundred
+/// boots at the current set size — deep enough that the most recent observation
+/// of each is always present, bounded so a long-lived chain does not make the
+/// query unbounded.
+const GROUND_SEARCH_LIMIT: usize = 512;
 
 /// Cheap categorisation of what triggered this perception, for composition receipts.
 fn perception_invocation_reason(
@@ -119,7 +127,121 @@ fn build_standing_corrections_section(context: &CognitiveContext) -> String {
         }
         out.push('\n');
     }
-    out.push_str("These corrections are load-bearing; violating them contradicts operator authority.");
+    out.push_str(
+        "These corrections are load-bearing; violating them contradicts operator authority.",
+    );
+    out
+}
+
+/// Render the active trajectory — what thread of work this cycle is inside.
+///
+/// Returns an empty string when there is no trajectory, and the caller pushes
+/// nothing. The alternative, a line reading "no active trajectory", tells a
+/// small model that its own bookkeeping is a topic; the observed failure mode
+/// in this file's history is a model answering about its instrumentation
+/// instead of about the operator's question. Silence is the correct rendering
+/// of nothing.
+///
+/// Placed low in the prompt, below the operator request and below officer
+/// findings. This is orientation, not instruction: it says what the work has
+/// been about, and it must never outrank what the operator just asked. The
+/// idle time is stated because a trajectory last touched four days ago is a
+/// different claim from one touched four minutes ago, and the title alone
+/// cannot carry that difference.
+fn build_trajectory_section(context: &CognitiveContext) -> String {
+    let Some(t) = context.ontology_trajectory.as_ref() else {
+        return String::new();
+    };
+    let idle = if t.idle_secs < 90 {
+        "just now".to_string()
+    } else if t.idle_secs < 5400 {
+        format!("{} minutes ago", t.idle_secs / 60)
+    } else if t.idle_secs < 172_800 {
+        format!("{} hours ago", t.idle_secs / 3600)
+    } else {
+        format!("{} days ago", t.idle_secs / 86_400)
+    };
+    format!(
+        "CURRENT WORK THREAD (from the substrate's own record, not memory):\n  • {} — {}, \
+last activity {}, {} receipt{} attributed.\n  This is context for orientation. If the operator's \
+request is about something else, answer the request.",
+        t.title,
+        t.status,
+        idle,
+        t.receipt_count,
+        if t.receipt_count == 1 { "" } else { "s" },
+    )
+}
+
+/// Render bedrock invariants — whether the substrate she is standing on holds.
+///
+/// Placed above standing corrections in the composed prompt, which is the only
+/// thing in Tier 1 that outranks them. A correction tells her what is true about
+/// the world; a violated invariant tells her the floor is missing. Reasoning
+/// carefully within a corrected frame, on a substrate whose credential store has
+/// vanished, is worse than not reasoning at all — it produces confident output
+/// resting on premises that no longer hold.
+///
+/// Violations only. The verified ones are chain-anchored and counted in the
+/// composition record, and putting six lines of *everything is fine* at the top
+/// of every cycle would push the operator's directive further from the boundary
+/// where attention actually lands (§III.21). Silence here means intact, and the
+/// composition summary is where "the check ran and found nothing" is evidenced.
+///
+/// Returns an empty string when everything holds, so the template placeholder
+/// disappears cleanly — same convention as the corrections section.
+fn build_substrate_ground_section(context: &CognitiveContext) -> String {
+    let violations: Vec<_> = context
+        .substrate_ground
+        .iter()
+        .filter(|g| g.is_violation())
+        .collect();
+
+    // Logged before the early return, unconditionally.
+    //
+    // The first version of this sat below the `violations.is_empty()` branch,
+    // which made "never called" and "called, nothing to show" produce the same
+    // silence — an instrument that cannot observe the case it was added for.
+    // Distinguishing them is the whole question: no line means this path is not
+    // the one composing her prompt; `ground_total = 0` means the context
+    // reaching the composer is not the context the summary counted; and
+    // `violations = 1` with a section emitted means it is in the prompt and
+    // carries no weight. Three different fixes.
+    info!(
+        ground_total = context.substrate_ground.len(),
+        violations = violations.len(),
+        "substrate ground section evaluated"
+    );
+
+    if violations.is_empty() {
+        return String::new();
+    }
+
+    let mut out =
+        String::from("SUBSTRATE INTEGRITY — the following premises DO NOT currently hold:\n");
+    for g in violations {
+        // Age matters: bedrock evaluates at boot, so a violation may predate
+        // anything in this cycle. "The vault is missing" and "the vault was
+        // missing when this machine booted nine hours ago" are different
+        // claims, and the detail text is present-tense in both cases.
+        let age = if g.age_secs < 90 {
+            "just now".to_string()
+        } else if g.age_secs < 5400 {
+            format!("{} min ago", g.age_secs / 60)
+        } else {
+            format!("{} h ago", g.age_secs / 3600)
+        };
+        out.push_str(&format!(
+            "  • [{}] {} — {} (observed {})\n",
+            g.severity, g.invariant, g.detail, age
+        ));
+    }
+    out.push_str(
+        "These are facts about your own substrate, not findings about the world. \
+         Do not assert that an affected surface is working, and say plainly that \
+         the premise is broken if asked to act on it.",
+    );
+
     out
 }
 
@@ -128,9 +250,52 @@ fn build_standing_corrections_section(context: &CognitiveContext) -> String {
 /// Governs on behalf of the sovereign operator. Its authority is
 /// always delegated, never inherent. Every action is chain-anchored
 /// and officer-observed.
+/// Why a cycle deliberates, or that it does not.
+///
+/// Decided once per cycle in [`Regent::begin_cycle`] and reported on the chain,
+/// so the wake policy is legible from the record rather than inferable from a
+/// conjunction of early returns. That opacity is what let 25,335 consecutive
+/// cycles skip inference unnoticed (SEAM-006).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wake {
+    /// Nothing changed and no schedule fired. Short-circuit before inference.
+    Quiet,
+    /// The officer-finding set differs from the previous cycle — something
+    /// appeared, cleared, or changed severity.
+    Novelty,
+    /// Scheduled deliberation. The floor that stops a static substrate from
+    /// going indefinitely without a considered view.
+    Scheduled,
+}
+
+impl Wake {
+    /// Short marker for the chain event string.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Wake::Quiet => "quiet",
+            Wake::Novelty => "novelty",
+            Wake::Scheduled => "scheduled",
+        }
+    }
+
+    /// Whether this cycle should run inference.
+    pub fn deliberates(self) -> bool {
+        !matches!(self, Wake::Quiet)
+    }
+}
+
 pub struct Regent {
     /// Configuration.
     config: RegentConfig,
+
+    /// The ZpConfig-derived authority for `reasoning_model` / `routing_model`
+    /// (HARNESS-SEAM S4 unification, 2026-09-01), captured once at
+    /// construction. `clear_operator_pin()` and `reconfigure_inference()`'s
+    /// `"auto"` branches reset `config` back to these values rather than
+    /// calling a bare `RegentConfig::default()` (which no longer exists) --
+    /// this is what lets those `&mut self` methods reach the authority
+    /// without needing a `ZpConfig` in scope.
+    default_config: RegentConfig,
 
     /// The persona — shapes how the Regent communicates.
     persona: Persona,
@@ -148,6 +313,18 @@ pub struct Regent {
     /// How many cycles have run since startup.
     cycle_count: u64,
 
+    /// Fingerprint of the officer-finding set as of the previous cycle.
+    ///
+    /// Novelty, not severity, is what wakes the Regent — see `Wake`. `None`
+    /// before the first cycle, which makes the first cycle after every start
+    /// novel by definition and therefore deliberative. That is deliberate: a
+    /// restart is exactly when the standing picture should be re-read.
+    last_finding_fingerprint: Option<u64>,
+
+    /// Why this cycle is deliberating, or that it is not. Set by
+    /// [`Regent::begin_cycle`], read by `reason()`.
+    wake: Wake,
+
     /// Model dossier corpus — the router's evidence base.
     /// Loaded at startup from `models/*/model_dossier.toml`.
     /// None if no dossiers exist or the router is not yet active.
@@ -157,6 +334,22 @@ pub struct Regent {
     /// self_configure with model="auto". When set, the router respects this
     /// over dossier scoring. When None, the router scores freely.
     operator_pin: Option<OperatorModelPin>,
+
+    /// Read handle on the ontology the Cartographer writes.
+    ///
+    /// `None` until `attach_ontology` is called, and `None` is a working
+    /// state, not a degraded one: with the Cartographer disabled there is
+    /// nothing to read, and perceive() composes exactly as it did before.
+    /// That is the point of attaching it separately from construction — the
+    /// consumer is provably in place and exercised before the producer is
+    /// switched on, per the ordering in MODEL-ADMISSION-PIPELINE-2026-08
+    /// §10.6 and `docs/handoffs/substrate-sequencing-2026-08.md` §S2.
+    ///
+    /// Read-only by construction: nothing in zp-regent calls a mutating
+    /// method on it, and nothing should. The Cartographer owns the write
+    /// side. Two writers to one store is how a hash-linked chain and its
+    /// derived view drift apart without either one being wrong.
+    ontology: Option<std::sync::Arc<zp_ontology::store::OntologyStore>>,
 }
 
 /// An operator's explicit model selection — distinct from config defaults.
@@ -228,23 +421,38 @@ impl Regent {
     /// threaded through — the Regent never loads it independently.
     /// This eliminates the dual-load redundancy and ensures one
     /// sovereign identity for the entire process.
+    ///
+    /// `gate_signer` is threaded the same way and for the same reason: it is
+    /// derived once in `AppState::init`, beside the verifier's `expected_kid`
+    /// and from the same sovereign-root load, so signer and verifier cannot
+    /// drift. `None` pre-Genesis. It goes to the inference backend rather
+    /// than onto `RegentConfig` — it is a live capability, not configuration.
+    ///
+    /// `proxy_base` (W5 3c) is the substrate's own address — e.g.
+    /// `http://127.0.0.1:17010`, no path — threaded the same way as
+    /// `gate_signer` and for the same reason: it goes straight to the
+    /// inference backend, which is the only thing that needs it, rather than
+    /// onto `RegentConfig`. See `ServerRegentConfig::proxy_base` in
+    /// `zp-server` for where it is computed.
     pub fn new(
         config: RegentConfig,
+        default_config: RegentConfig,
         data_dir: &std::path::Path,
         sovereign: Option<SovereignIdentity>,
+        gate_signer: Option<std::sync::Arc<dyn zp_core::provider::RequestSigner>>,
+        proxy_base: String,
     ) -> Self {
-        let inference = InferenceBackend::new(&config);
+        let inference = InferenceBackend::new(&config, gate_signer, proxy_base);
         let memory = MemoryStore::new(data_dir);
         let persona = Persona {
             name: config.display_name.clone(),
             ..Persona::default()
         };
 
-        // If config models differ from compiled defaults, the operator
-        // set them in config.toml — treat as a startup pin.
-        let defaults = RegentConfig::default();
-        let has_reasoning_pin = config.reasoning_model != defaults.reasoning_model;
-        let has_routing_pin = config.routing_model != defaults.routing_model;
+        // If config models differ from the ZpConfig-derived authority, the
+        // operator set them explicitly — treat as a startup pin.
+        let has_reasoning_pin = config.reasoning_model != default_config.reasoning_model;
+        let has_routing_pin = config.routing_model != default_config.routing_model;
         let operator_pin = if has_reasoning_pin || has_routing_pin {
             Some(OperatorModelPin {
                 reasoning_model: if has_reasoning_pin {
@@ -266,13 +474,17 @@ impl Regent {
 
         Self {
             config,
+            default_config,
             persona,
             memory,
             inference,
             sovereign,
             cycle_count: 0,
+            last_finding_fingerprint: None,
+            wake: Wake::Quiet,
             dossier_corpus: None,
             operator_pin,
+            ontology: None,
         }
     }
 
@@ -281,14 +493,30 @@ impl Regent {
         self.dossier_corpus = Some(corpus);
     }
 
+    /// Attach a read handle on the ontology store.
+    ///
+    /// Safe to call whether or not the Cartographer is enabled: an empty
+    /// store yields `None` from every read and the composed prompt is
+    /// byte-identical to one composed without a store at all.
+    pub fn attach_ontology(&mut self, store: std::sync::Arc<zp_ontology::store::OntologyStore>) {
+        self.ontology = Some(store);
+    }
+
+    /// Whether an ontology handle is attached. Exists so the caller can
+    /// report the wiring without reaching into the field, and so a test can
+    /// assert the consumer is present independently of there being anything
+    /// to consume.
+    pub fn has_ontology(&self) -> bool {
+        self.ontology.is_some()
+    }
+
     /// Clear the operator pin — router scores freely from dossier corpus.
     /// Also resets config models to compiled defaults so route_from_config
     /// doesn't accidentally use a stale pinned model name.
     pub fn clear_operator_pin(&mut self) {
         self.operator_pin = None;
-        let defaults = RegentConfig::default();
-        self.config.reasoning_model = defaults.reasoning_model;
-        self.config.routing_model = defaults.routing_model;
+        self.config.reasoning_model = self.default_config.reasoning_model.clone();
+        self.config.routing_model = self.default_config.routing_model.clone();
     }
 
     /// Promote a shadow candidate to active — the validation battery passed.
@@ -299,7 +527,10 @@ impl Regent {
     pub fn promote_shadow_candidate(&mut self, model: &str) -> Option<String> {
         let pin = self.operator_pin.as_mut()?;
         match &pin.status {
-            PinStatus::Evaluating { candidates, active_model } => {
+            PinStatus::Evaluating {
+                candidates,
+                active_model,
+            } => {
                 if !candidates.iter().any(|c| c.model == model) {
                     return None;
                 }
@@ -325,20 +556,30 @@ impl Regent {
                 // Mark the specific candidate as failed.
                 for c in candidates.iter_mut() {
                     if c.model == model {
-                        c.state = ShadowCandidateState::Failed { reason: reason.clone() };
+                        c.state = ShadowCandidateState::Failed {
+                            reason: reason.clone(),
+                        };
                     }
                 }
                 // If all candidates have resolved (passed or failed), check if
                 // any passed. If none passed, transition to Rejected.
                 let all_resolved = candidates.iter().all(|c| {
-                    matches!(c.state, ShadowCandidateState::Passed | ShadowCandidateState::Failed { .. })
+                    matches!(
+                        c.state,
+                        ShadowCandidateState::Passed | ShadowCandidateState::Failed { .. }
+                    )
                 });
                 if all_resolved {
-                    let any_passed = candidates.iter().any(|c| matches!(c.state, ShadowCandidateState::Passed));
+                    let any_passed = candidates
+                        .iter()
+                        .any(|c| matches!(c.state, ShadowCandidateState::Passed));
                     if !any_passed {
-                        let summary = candidates.iter()
+                        let summary = candidates
+                            .iter()
                             .filter_map(|c| match &c.state {
-                                ShadowCandidateState::Failed { reason } => Some(format!("{}: {}", c.model, reason)),
+                                ShadowCandidateState::Failed { reason } => {
+                                    Some(format!("{}: {}", c.model, reason))
+                                }
                                 _ => None,
                             })
                             .collect::<Vec<_>>()
@@ -372,9 +613,10 @@ impl Regent {
     /// Get the list of candidates currently under shadow evaluation.
     pub fn shadow_candidates(&self) -> Vec<&ShadowCandidate> {
         match &self.operator_pin {
-            Some(OperatorModelPin { status: PinStatus::Evaluating { candidates, .. }, .. }) => {
-                candidates.iter().collect()
-            }
+            Some(OperatorModelPin {
+                status: PinStatus::Evaluating { candidates, .. },
+                ..
+            }) => candidates.iter().collect(),
             _ => vec![],
         }
     }
@@ -383,7 +625,10 @@ impl Regent {
     pub fn is_shadow_evaluating(&self) -> bool {
         matches!(
             &self.operator_pin,
-            Some(OperatorModelPin { status: PinStatus::Evaluating { .. }, .. })
+            Some(OperatorModelPin {
+                status: PinStatus::Evaluating { .. },
+                ..
+            })
         )
     }
 
@@ -457,22 +702,19 @@ impl Regent {
             // During shadow evaluation, serve the active (groomed) model.
             // The candidate is being validated; the operator isn't degraded.
             let effective_model = match &pin.status {
-                PinStatus::Evaluating { active_model, .. } => {
-                    Some(active_model.as_str())
-                }
+                PinStatus::Evaluating { active_model, .. } => Some(active_model.as_str()),
                 PinStatus::Rejected { .. } => {
                     // Rejected — fall through to router scoring.
                     // The pin records findings but doesn't direct inference.
                     None
                 }
-                PinStatus::Active => {
-                    match category {
-                        crate::routing::IntentCategory::Routing => {
-                            pin.routing_model.as_deref().or(pin.reasoning_model.as_deref())
-                        }
-                        _ => pin.reasoning_model.as_deref(),
-                    }
-                }
+                PinStatus::Active => match category {
+                    crate::routing::IntentCategory::Routing => pin
+                        .routing_model
+                        .as_deref()
+                        .or(pin.reasoning_model.as_deref()),
+                    _ => pin.reasoning_model.as_deref(),
+                },
             };
             if let Some(model) = effective_model {
                 // Derive tier from backend protocol, not model name.
@@ -488,8 +730,13 @@ impl Regent {
                 };
                 let rationale = match &pin.status {
                     PinStatus::Evaluating { candidates, .. } => {
-                        let names: Vec<&str> = candidates.iter().map(|c| c.model.as_str()).collect();
-                        format!("operator pin (evaluating [{}]): serving {}", names.join(", "), model)
+                        let names: Vec<&str> =
+                            candidates.iter().map(|c| c.model.as_str()).collect();
+                        format!(
+                            "operator pin (evaluating [{}]): serving {}",
+                            names.join(", "),
+                            model
+                        )
                     }
                     _ => format!("operator pin: {}", model),
                 };
@@ -514,7 +761,11 @@ impl Regent {
 
     /// Dispatch an inference request to the right backend based on tier.
     /// Local → Ollama directly. Cloud → cloud endpoint (with fallback).
-    async fn infer(&self, request: &InferenceRequest, tier: &crate::routing::InferenceTier) -> Result<String, RegentError> {
+    async fn infer(
+        &self,
+        request: &InferenceRequest,
+        tier: &crate::routing::InferenceTier,
+    ) -> Result<String, RegentError> {
         match tier {
             crate::routing::InferenceTier::Local => self.inference.chat_local(request).await,
             crate::routing::InferenceTier::Cloud { .. } => self.inference.chat(request).await,
@@ -526,7 +777,10 @@ impl Regent {
         if self.config.routing_model == self.config.reasoning_model {
             self.config.routing_model.clone()
         } else {
-            format!("{}/{}", self.config.routing_model, self.config.reasoning_model)
+            format!(
+                "{}/{}",
+                self.config.routing_model, self.config.reasoning_model
+            )
         }
     }
 
@@ -542,6 +796,86 @@ impl Regent {
     /// The caller (zp-server's loop runner) handles execution of the
     /// Intent: emitting receipts, dispatching to sub-agents, delivering
     /// responses through cockpit surfaces.
+    /// Cadence for scheduled deliberation: think every Nth cycle even when
+    /// nothing has changed.
+    ///
+    /// Novelty alone would let a genuinely static substrate go indefinitely
+    /// without the Regent forming a view — which is the state that produced
+    /// 25,335 consecutive un-thought cycles. The schedule is the floor, not
+    /// the mechanism. Conservative on purpose: each deliberation is a real
+    /// inference call, and the point is a heartbeat of judgement rather than
+    /// continuous reasoning.
+    ///
+    /// Should move to `RegentConfig` — it is a policy number living in code,
+    /// which is the shape of defect that produced SEAM-006.
+    pub const DELIBERATE_EVERY_N_CYCLES: u64 = 20;
+
+    /// Fingerprint the officer-finding set for novelty detection.
+    ///
+    /// Over `(event_key, severity)` only, sorted. Deliberately **excludes**:
+    ///
+    /// - `timestamp` — it changes every cycle, so including it would make
+    ///   every cycle novel and the gate would never close. The failure would
+    ///   look like the Regent working, which is worse than the current state.
+    /// - `summary` and `detail` — findings that carry counts ("50 chain
+    ///   entries, 7 findings") would churn their fingerprint on data that has
+    ///   not changed in kind.
+    ///
+    /// Severity *is* included: a finding escalating from Warning to Error is a
+    /// change worth waking for, even though its identity is the same.
+    fn fingerprint_findings(findings: &[Finding]) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut keys: Vec<String> = findings
+            .iter()
+            .map(|f| format!("{}|{:?}", f.event_key(), f.severity))
+            .collect();
+        keys.sort();
+
+        let mut h = DefaultHasher::new();
+        keys.hash(&mut h);
+        h.finish()
+    }
+
+    /// Advance the cycle counter and return the new value.
+    ///
+    /// `cycle()` increments this itself, but the production loop does not go
+    /// through `cycle()` — `loop_runner::run_cycle` calls `perceive()` and
+    /// `reason()` directly. So the counter never moved: all 25,335 autonomous
+    /// observations on the live chain as of 2026-08-09 read `cycle 0`, and the
+    /// chain could not order the Regent's own cycles or show where restarts
+    /// fell. Callers that drive the phases separately must call this once at
+    /// the top of each cycle.
+    pub fn begin_cycle(&mut self, findings: &[Finding]) -> u64 {
+        self.cycle_count += 1;
+
+        let fingerprint = Self::fingerprint_findings(findings);
+        let novel = self.last_finding_fingerprint != Some(fingerprint);
+        self.last_finding_fingerprint = Some(fingerprint);
+
+        // Novelty first: if the picture changed, that is the reason, and the
+        // schedule is irrelevant. Reporting the weaker reason when a stronger
+        // one applies would make the chain misleading about why she woke.
+        self.wake = if novel {
+            Wake::Novelty
+        } else if self
+            .cycle_count
+            .is_multiple_of(Self::DELIBERATE_EVERY_N_CYCLES)
+        {
+            Wake::Scheduled
+        } else {
+            Wake::Quiet
+        };
+
+        self.cycle_count
+    }
+
+    /// Why the current cycle is deliberating, or that it is not.
+    pub fn wake(&self) -> Wake {
+        self.wake
+    }
+
     pub async fn cycle(
         &mut self,
         chain: &ChainReader<'_>,
@@ -554,7 +888,17 @@ impl Regent {
         debug!(cycle = self.cycle_count, "regent cycle starting");
 
         // ── Phase 1: Perceive ──────────────────────────────────────────
-        let context = self.perceive(chain, findings, operator_input, delegations, system_awareness, Vec::new(), None, None)?;
+        let context = self.perceive(
+            chain,
+            findings,
+            operator_input,
+            delegations,
+            system_awareness,
+            Vec::new(),
+            None,
+            None,
+            None,
+        )?;
 
         // ── Phase 2: Reason ────────────────────────────────────────────
         let intent = self.reason(&context).await?;
@@ -578,6 +922,9 @@ impl Regent {
     /// Public within the crate so `run_cycle` can call perceive separately
     /// from reason — the sync/async split prevents holding a std::sync::Mutex
     /// guard across an await point.
+    // Ten parameters: perception's inputs are the substrate's observable
+    // surfaces, and each is separately optional at the call site.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn perceive(
         &mut self,
         chain: &ChainReader<'_>,
@@ -588,6 +935,7 @@ impl Regent {
         tool_results: Vec<crate::context::ToolResult>,
         work_arc: Option<crate::context::WorkArc>,
         prior_response: Option<crate::context::PriorResponse>,
+        cycle_directive: Option<String>,
     ) -> Result<CognitiveContext, RegentError> {
         // Read recent chain entries (compressed for context efficiency).
         let recent_entries = chain
@@ -599,10 +947,18 @@ impl Regent {
             .map(ChainSnapshot::from_entry)
             .collect();
 
-        // Compress officer findings.
+        // One clock read for the whole composition. Findings are stamped with
+        // their age against it and corrections are indexed against it, so every
+        // recency claim in a single context refers to the same instant rather
+        // than to whenever its own line happened to execute.
+        let now = chrono::Utc::now();
+
+        // Compress officer findings, carrying observation age — a finding's
+        // summary is present-tense, so delivering it without recency turns a
+        // stale observation into a false claim. See `FindingSummary`.
         let officer_findings: Vec<FindingSummary> = findings
             .iter()
-            .map(FindingSummary::from_finding)
+            .map(|f| FindingSummary::from_finding_at(f, now))
             .collect();
 
         // Retrieve relevant memories based on current context.
@@ -611,8 +967,8 @@ impl Regent {
         // ── Standing corrections (Tier 1 cognitive input) ────────────────
         // Query the full chain — corrections live indefinitely once issued
         // (until superseded / revoked / expired). Search by both event
-        // prefixes so revocations are included in the index build.
-        let now = chrono::Utc::now();
+        // prefixes so revocations are included in the index build. `now` is
+        // bound above, shared with the finding-recency stamps.
         let mut correction_entries = chain
             .search_by_keyword(
                 crate::corrections::EVENT_PREFIX_STANDING,
@@ -633,6 +989,50 @@ impl Regent {
             .into_iter()
             .cloned()
             .collect();
+
+        // ── Bedrock invariants (Tier 1 cognitive input) ──────────────────
+        //
+        // Whether the substrate she is running on is intact. Read from the
+        // chain rather than plumbed through from the server: `bedrock::check`
+        // anchors `invariant:<name>:verified|violated` at every boot, and the
+        // chain is already an input she has. No new channel, and she sees the
+        // same evidence the operator does.
+        //
+        // One entry per distinct invariant, most recent observation wins.
+        // Receipts accumulate across boots, so taking the latest per name gives
+        // current state without having to reconstruct boot batches — and a
+        // violation that was fixed reads as verified on the next boot, which is
+        // exactly the clearing behaviour an alarm needs to be worth having.
+        let substrate_ground: Vec<crate::context::GroundFinding> = {
+            let entries = chain
+                .search_by_keyword(crate::context::GROUND_EVENT_PREFIX, GROUND_SEARCH_LIMIT)
+                .unwrap_or_default();
+
+            let mut latest: std::collections::BTreeMap<String, crate::context::GroundFinding> =
+                std::collections::BTreeMap::new();
+            for e in &entries {
+                let zp_core::AuditAction::SystemEvent { event } = &e.action else {
+                    continue;
+                };
+                if let Some(g) = crate::context::GroundFinding::parse(event, e.timestamp, now) {
+                    // Keep the newest observation for each invariant. Chain
+                    // order is not relied on — compare timestamps directly.
+                    match latest.get(&g.invariant) {
+                        Some(prev) if prev.observed_at >= g.observed_at => {}
+                        _ => {
+                            latest.insert(g.invariant.clone(), g);
+                        }
+                    }
+                }
+            }
+
+            // Violations first. Per *context is a priority-weighted stream*,
+            // ordering is signal: a violation buried under six verified
+            // invariants is a violation she may not weigh.
+            let mut v: Vec<_> = latest.into_values().collect();
+            v.sort_by_key(|g| (g.holds, g.invariant.clone()));
+            v
+        };
 
         // ── Composition provenance ──────────────────────────────────────
         // Structural hashes only — no content bloat on chain per cycle.
@@ -656,12 +1056,22 @@ impl Regent {
         let composition_summary = Some(crate::context::CompositionSummary {
             matrix_version: COGNITIVE_INPUT_MATRIX_VERSION.to_string(),
             standing_correction_count: standing_corrections.len(),
-            standing_corrections_hash:
-                crate::context::CompositionSummary::hash_corrections(&standing_corrections),
+            standing_corrections_hash: crate::context::CompositionSummary::hash_corrections(
+                &standing_corrections,
+            ),
             standing_correction_authorship,
+            substrate_ground_count: substrate_ground.len(),
+            substrate_ground_violations: substrate_ground
+                .iter()
+                .filter(|g| g.is_violation())
+                .count(),
+            substrate_ground_hash: crate::context::CompositionSummary::hash_ground(
+                &substrate_ground,
+            ),
             officer_finding_count: officer_findings.len(),
-            officer_findings_hash:
-                crate::context::CompositionSummary::hash_findings(&officer_findings),
+            officer_findings_hash: crate::context::CompositionSummary::hash_findings(
+                &officer_findings,
+            ),
             officer_finding_authorship,
             recent_chain_count: recent_chain.len(),
             active_delegation_count: delegations.len(),
@@ -673,6 +1083,38 @@ impl Regent {
             self_authorship_ratio,
         });
 
+        // ── Ontology read ───────────────────────────────────────────────
+        //
+        // The one read the Regent makes of the Cartographer's output. It uses
+        // the same `now` as every other recency claim in this composition, so
+        // "idle 40 minutes" and a finding's age refer to the same instant.
+        //
+        // A read failure is swallowed to `None` on purpose, and this is the
+        // only place in perceive() that does so. Every other input here is
+        // load-bearing: a chain read that fails must fail the cycle, because
+        // reasoning over a chain you could not read is reasoning over nothing.
+        // The trajectory is the opposite — it is context about context. A
+        // locked or absent ontology.db should cost the Regent one optional
+        // line of a prompt, not the cycle. The failure is logged rather than
+        // silent, because "no trajectory" and "could not read the trajectory"
+        // are different facts and only one of them is normal.
+        let ontology_trajectory = self.ontology.as_ref().and_then(|store| {
+            match store.most_recently_active_trajectory() {
+                Ok(t) => t.map(|t| crate::context::TrajectorySummary {
+                    title: t.title,
+                    status: t.status.as_str().to_string(),
+                    created_at: t.created_at,
+                    last_active: t.last_active,
+                    idle_secs: (now - t.last_active).num_seconds().max(0),
+                    receipt_count: t.receipt_refs.len(),
+                }),
+                Err(e) => {
+                    warn!("perceive: ontology read failed, composing without it: {e}");
+                    None
+                }
+            }
+        });
+
         Ok(CognitiveContext {
             assembled_at: now,
             sovereign: self.sovereign.clone(),
@@ -682,11 +1124,27 @@ impl Regent {
             pending_input: operator_input,
             memory_fragments,
             standing_corrections,
-            active_delegations: delegations.to_vec(),
+            substrate_ground,
+            active_delegations: {
+                // The Regent's seeded floor per REGENT-ONBOARDING-CEREMONY-2026-09
+                // §3 — four capabilities every Regent has by KEEL default,
+                // non-refusable. Merged into whatever operator-issued delegations
+                // arrived at `perceive`, so downstream code sees a Regent whose
+                // action space is bounded by both the floor and the operator's
+                // explicit grants. Without this merge the Regent boots with
+                // zero delegations, hits the propose-only branch in
+                // `build_available_actions`, and answers every operator input
+                // with a PROPOSAL — the 2026-09-06 first-exercise finding.
+                let mut all = crate::onboarding::floor::seeded_floor(now);
+                all.extend_from_slice(delegations);
+                all
+            },
             system_awareness,
             tool_results,
             work_arc,
             prior_response,
+            cycle_directive,
+            ontology_trajectory,
             composition_summary,
         })
     }
@@ -705,22 +1163,69 @@ impl Regent {
     /// Public within the crate so `run_cycle` can call it after perceive,
     /// with the AuditStore lock already dropped.
     pub(crate) async fn reason(&self, context: &CognitiveContext) -> Result<Intent, RegentError> {
-        // If there's no operator input and no urgent findings, just observe.
+        // If there's no operator input and nothing demanding attention, just
+        // observe. `ATTENTION_FLOOR`, not `INTERRUPT_FLOOR` — this cycle is
+        // already running, so the question is whether to think, not whether to
+        // wake. See `Severity`'s type docs (DECIDED-004 MEANWHILE-3).
         let has_urgent = context
             .officer_findings
             .iter()
-            .any(|f| f.severity == "Error" || f.severity == "Critical");
+            .any(|f| f.demands_attention());
 
         // Skip inference only when there's genuinely nothing to do:
-        // no operator input, no urgent findings, and no tool results
-        // from a prior turn that need narration.
-        if context.pending_input.is_none() && !has_urgent && context.tool_results.is_empty() {
+        // no operator input, no urgent findings, no tool results from a
+        // prior turn that need narration — and no work arc.
+        //
+        // The arc clause was missing, and its absence was operator-visible.
+        // Observed 2026-08-01: the operator asked to compact the chain and
+        // be asked first. Routing returned `continue`, which opens an arc.
+        // The arc loop re-entered `run_cycle` with the input already
+        // consumed and no tool having run, so all three original conditions
+        // held and this returned `Observe` without inferring at all —
+        // `reason_ms=0`. The loop then handed the operator the observation
+        // string as their answer: "cycle 0: 50 chain entries, 0 findings,
+        // no input, no urgency."
+        //
+        // A cycle resuming an arc always has something to do; the arc's
+        // `progress` is a standing instruction from the cycle that opened
+        // it. Treating that as "no input" mistakes *who is speaking* for
+        // *whether anything was said*. `perception_invocation_reason`
+        // already tells these apart as `work_arc_continuation`; this guard
+        // simply never asked.
+        if context.pending_input.is_none()
+            && !has_urgent
+            && context.tool_results.is_empty()
+            && context.work_arc.is_none()
+            // Novelty and the scheduled floor (SEAM-006, QUESTION-004,
+            // decided 2026-08-09). The four conditions above are all
+            // *reactive* — she thinks when spoken to, when something is
+            // already broken, when a tool returned, or when mid-arc. Nothing
+            // let an accumulated picture cause her to form a view, so seven
+            // standing findings sat unread for 25,335 cycles. `Wake` is the
+            // declared policy; it is decided in `begin_cycle` and named on
+            // the chain rather than implied by this conjunction.
+            && !self.wake.deliberates()
+        {
+            // `gate=short_circuit` is the load-bearing part of this string.
+            // This return happens BEFORE any inference — no model call, no
+            // reasoning. A cycle that deliberated and *chose* to observe
+            // produces the same `regent:intent:observe` event, so without this
+            // marker the chain cannot tell "thought about it and stood down"
+            // from "never thought at all". On 2026-08-09 that was 25,335
+            // entries of the latter, indistinguishable from the former.
+            //
+            // Absence of the marker means inference ran. Keep it that way: if
+            // this guard grows another early exit, mark that one too.
             return Ok(Intent::Observe {
                 observation: format!(
-                    "cycle {}: {} chain entries, {} findings, no input, no urgency",
+                    "cycle {}: {} chain entries, {} findings, no input, no urgency \
+                     | gate=short_circuit reason_ms=0 urgent_threshold=Error|Critical \
+                     wake={} deliberate_every={}",
                     self.cycle_count,
                     context.recent_chain.len(),
                     context.officer_findings.len(),
+                    self.wake.as_str(),
+                    Self::DELIBERATE_EVERY_N_CYCLES,
                 ),
             });
         }
@@ -739,14 +1244,221 @@ impl Regent {
 
             Intent::Respond { .. } => {
                 let composed = self.compose(context).await?;
-                Ok(Intent::Respond {
-                    content: composed,
-                    target_surface: None,
-                })
+                Ok(self.escalate_if_unbacked(context, composed).await)
+            }
+
+            // A proposal is reasoning prose. Routing decided *that* it
+            // proposes; the composer writes *what* the proposal says. This
+            // arm previously fell through, which left the four fields the
+            // authority model requires being authored by the 1.7b
+            // classifier from a terse routing prompt.
+            Intent::RequestApproval {
+                kind,
+                proposed_action,
+                ..
+            } => {
+                let (kind, seed) = (*kind, proposed_action.clone());
+                match self.compose_proposal(context, kind, &seed).await {
+                    Ok(p) => Ok(p),
+                    Err(e) => {
+                        // A failed compose must not silently downgrade the
+                        // proposal into a bare refusal — that is the floor
+                        // Phase 7 forbids. Keep the router's seed and say
+                        // the body is missing.
+                        warn!("proposal compose failed, emitting seed only: {}", e);
+                        Ok(Intent::RequestApproval {
+                            kind,
+                            proposed_action: seed,
+                            reason: "proposal body could not be composed".to_string(),
+                            finding: None,
+                            failed_limb: None,
+                            expected_outcome: None,
+                            draft: None,
+                            enactment: None,
+                        })
+                    }
+                }
             }
 
             _ => Ok(intent),
         }
+    }
+
+    /// Write the body of a proposal at the compose tier.
+    ///
+    /// Per `docs/EXECUTION-AUTHORITY-MODEL-2026-07.md` §Phase 7 a proposal
+    /// carries the finding, the proposed action, which limb failed, and the
+    /// expected outcome — and, for an operator request where the mechanism
+    /// exists but authority does not, a draft of the artifact itself.
+    async fn compose_proposal(
+        &self,
+        context: &CognitiveContext,
+        kind: crate::intent::ProposalKind,
+        seed: &str,
+    ) -> Result<Intent, RegentError> {
+        use crate::intent::ProposalKind;
+
+        let persona_fragment = self.persona.system_prompt_fragment();
+        let user_prompt = self.build_user_prompt(context);
+
+        let sovereign_section = match &context.sovereign {
+            Some(sov) => format!(
+                "IDENTITY: You serve operator {} (genesis: {}…).",
+                sov.operator_name,
+                &sov.genesis_pubkey[..8.min(sov.genesis_pubkey.len())]
+            ),
+            None => "IDENTITY: No sovereign identity loaded.".to_string(),
+        };
+
+        let kind_guidance = match kind {
+            ProposalKind::Action => {
+                "A mechanism for this exists — you simply are not authorised to \
+                 invoke it. You are asking for authority, not for a capability. \
+                 failed_limb is one of: no authority | no precedent | novel context. \
+                 If the thing being asked for is an artifact the substrate stores, \
+                 draft it."
+            }
+            ProposalKind::Mechanism => {
+                "No mechanism for this exists anywhere in the substrate. You are \
+                 asking for a capability to be built, not for permission. \
+                 failed_limb is: no mechanism. Leave draft empty unless you can \
+                 describe the shape the mechanism would take. Do not propose a \
+                 workaround using a tool that does something adjacent — say what \
+                 is missing."
+            }
+        };
+
+        let system_prompt = PROMPT_PROPOSE
+            .replace("{persona}", &persona_fragment)
+            .replace("{sovereign_section}", &sovereign_section)
+            .replace(
+                "{substrate_ground_section}",
+                &build_substrate_ground_section(context),
+            )
+            .replace(
+                "{standing_corrections_section}",
+                &build_standing_corrections_section(context),
+            )
+            .replace(
+                "{available_actions}",
+                &Self::build_available_actions(context),
+            )
+            .replace(
+                "{proposal_kind}",
+                match kind {
+                    ProposalKind::Action => "propose an action (asking for authority)",
+                    ProposalKind::Mechanism => "propose a mechanism (asking for capability)",
+                },
+            )
+            .replace("{proposal_seed}", seed)
+            .replace("{kind_guidance}", kind_guidance);
+
+        let route = self.resolve_model(
+            &crate::routing::IntentCategory::Conversation,
+            context.system_awareness.as_ref(),
+        );
+
+        info!(
+            model = %route.model,
+            kind = ?kind,
+            seed = seed,
+            "regent PROPOSE tier"
+        );
+
+        let request = InferenceRequest {
+            model: route.model,
+            messages: vec![
+                ChatMessage {
+                    role: "system".to_string(),
+                    content: system_prompt,
+                },
+                ChatMessage {
+                    role: "user".to_string(),
+                    content: user_prompt,
+                },
+            ],
+            // Structured output: the four fields are a contract, not prose.
+            format: Some(serde_json::json!("json")),
+            temperature: 0.3,
+            stream: false,
+            options: Some(serde_json::json!({ "num_predict": 512 })),
+            keep_alive: Some(serde_json::json!(-1)),
+            think: Some(false),
+        };
+
+        let raw = self.infer(&request, &route.tier).await?;
+        let v: serde_json::Value = serde_json::from_str(strip_markdown_fences(&raw).trim())
+            .map_err(|e| RegentError::Inference(format!("proposal parse failed: {e} — {raw}")))?;
+
+        let field = |k: &str| {
+            v.get(k)
+                .and_then(|x| x.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+        };
+
+        let proposed_action = field("proposed_action").unwrap_or_else(|| seed.to_string());
+        let reason = field("failed_limb")
+            .map(|l| format!("{l}: {proposed_action}"))
+            .unwrap_or_else(|| "approval required".to_string());
+
+        // The dispatchable form, when the model named one. Validated against
+        // the delegation set the Regent actually holds: a proposal naming a
+        // tool it cannot call would produce a grant the substrate cannot
+        // honour, which is the same broken promise one layer further down.
+        let enactment = v.get("enactment").and_then(|e| {
+            let tool = e.get("tool")?.as_str()?.trim();
+            if tool.is_empty() || tool.eq_ignore_ascii_case("none") {
+                return None;
+            }
+            let Some(delegation) = context
+                .active_delegations
+                .iter()
+                .find(|d| d.capability == tool)
+            else {
+                warn!(
+                    tool,
+                    "proposal named a tool the Regent does not hold — enactment dropped, \
+                     proposal stands on its prose"
+                );
+                return None;
+            };
+
+            let params = e.get("params").cloned().unwrap_or(serde_json::Value::Null);
+
+            // Holding the tool is not enough. A proposal may only ask for a
+            // signature on a call the tool can actually perform — otherwise
+            // the operator signs something that reaches a no-op branch and
+            // reports success. Observed 2026-08-04: an enactment of
+            // `self_configure {"config": ...}` for a tool with no `config`
+            // parameter, carrying a corrupted value inside it.
+            if let Some(why) = delegation.params_violation(&params) {
+                warn!(
+                    tool,
+                    reason = %why,
+                    "proposal named parameters the tool cannot read — enactment dropped, \
+                     proposal stands on its prose"
+                );
+                return None;
+            }
+
+            Some(crate::intent::Enactment {
+                tool: tool.to_string(),
+                params,
+            })
+        });
+
+        Ok(Intent::RequestApproval {
+            kind,
+            proposed_action,
+            reason,
+            finding: field("finding"),
+            failed_limb: field("failed_limb"),
+            expected_outcome: field("expected_outcome"),
+            draft: field("draft"),
+            enactment,
+        })
     }
 
     /// Single-model fast path: one inference call handles both routing
@@ -772,9 +1484,11 @@ impl Regent {
         };
 
         let standing_corrections_section = build_standing_corrections_section(context);
+        let substrate_ground_section = build_substrate_ground_section(context);
 
         let system_prompt = PROMPT_UNIFIED_SYSTEM
             .replace("{sovereign_section}", &sovereign_section)
+            .replace("{substrate_ground_section}", &substrate_ground_section)
             .replace(
                 "{standing_corrections_section}",
                 &standing_corrections_section,
@@ -810,16 +1524,39 @@ impl Regent {
             // Constrained decoding — forces the model to produce valid JSON
             // matching this schema. Without this, small models output tool
             // names as plain text or produce malformed JSON with unescaped
-            // quotes. The schema covers both respond and execute intents.
+            // quotes.
+            //
+            // The enum is the reachable-intent set, not a hint: constrained
+            // decoding makes an absent variant literally unemittable.
+            // `remember` was missing while `parse_intent` had an arm for it
+            // and the executor had a handler — so `Intent::Remember` was
+            // unreachable by construction, and the substrate could not be
+            // told to keep anything. Adding a variant here is what makes the
+            // rest of that path load-bearing.
             format: Some(serde_json::json!({
                 "type": "object",
                 "properties": {
                     "intent": {
                         "type": "string",
-                        "enum": ["execute", "respond", "observe", "continue", "request_approval"]
+                        "enum": ["execute", "respond", "observe", "continue", "request_approval", "remember"]
                     },
                     "tool": { "type": "string" },
                     "params": { "type": "object" },
+                    // Fields the non-execute intents carry. Absent from
+                    // `properties`, constrained decoding gives the model no
+                    // slot to put them in — so 2026-08-04, with the larger
+                    // model finally selecting the right intents, `remember`
+                    // arrived with no `key` ("unnamed") and
+                    // `request_approval` with no `action` ("unspecified
+                    // action"). Both parsed, both defaulted, both useless.
+                    //
+                    // Same defect as the intent enum one layer down: the
+                    // schema is the reachable surface, not documentation of
+                    // it, and anything it omits cannot be emitted no matter
+                    // how well the prompt asks.
+                    "key": { "type": "string" },
+                    "action": { "type": "string" },
+                    "kind": { "type": "string", "enum": ["action", "mechanism"] },
                     "content": { "type": "string" },
                     "progress": { "type": "string" }
                 },
@@ -838,7 +1575,7 @@ impl Regent {
 
         info!(
             response_len = response.len(),
-            response_preview = %if response.len() > 200 { &response[..200] } else { &response },
+            response_preview = %crate::text::preview(&response, 200),
             "regent UNIFIED response"
         );
 
@@ -853,6 +1590,21 @@ impl Regent {
         // Try to parse as JSON intent first; if that fails, treat the
         // entire response as a natural-language answer.
         match parse_intent(&response) {
+            // Same Phase 7 guard as the two-tier path. Without this the
+            // escalation silently disappears whenever routing_model ==
+            // reasoning_model — a mechanism present in one path and absent in
+            // the other is the failure shape this whole subsystem exists to
+            // catch.
+            Ok(Intent::Respond {
+                content,
+                target_surface,
+            }) => Ok(match self.escalate_if_unbacked(context, content).await {
+                Intent::Respond { content, .. } => Intent::Respond {
+                    content,
+                    target_surface,
+                },
+                escalated => escalated,
+            }),
             Ok(intent) => Ok(intent),
             Err(_) => {
                 debug!(raw = %response, "unified response not valid JSON — treating as natural language");
@@ -860,6 +1612,218 @@ impl Regent {
                     content: response,
                     target_surface: None,
                 })
+            }
+        }
+    }
+
+    /// Phase 7 escalation — turn a false claim of having proposed into a real
+    /// proposal.
+    ///
+    /// Per `docs/EXECUTION-AUTHORITY-MODEL-2026-07.md` §Phase 7 a cycle has
+    /// three terminal states: act, propose an action, propose a mechanism.
+    /// When the composing tier writes *"it needs your signature to persist"*
+    /// it has chosen the second — it simply had no way to enact that choice,
+    /// because routing already decided this turn was a plain response and the
+    /// composer cannot dispatch.
+    ///
+    /// So the prose is not merely wrong; it is a correct terminal state
+    /// expressed by the only means available to a tier that can only write.
+    /// This reads that signal and honours it: re-run at the propose tier so
+    /// the sentence becomes true and the operator has something to sign.
+    ///
+    /// # Why the composer overrides the router here
+    ///
+    /// Routing is a 1.7b classifier working from a ~245-character prompt;
+    /// composition is the reasoning model with full context. When they
+    /// disagree about whether a turn is a proposal, the composer is the better
+    /// evidence. This is the one place that disagreement is detectable, since
+    /// it surfaces as a claim the cycle's own record contradicts.
+    ///
+    /// # Two triggers
+    ///
+    /// A `ToolRefusedUnsigned` in this cycle's results escalates
+    /// structurally, carrying the refused call into the proposal. Everything
+    /// else goes through the language check below, which escalates only on
+    /// `PendingArtifact` — a response that directs the
+    /// operator to sign or approve something. A bare enactment claim ("I have
+    /// configured the endpoint") is left to detection: it asserts a completed
+    /// act rather than a pending one, so there is no proposal to construct
+    /// from it, and manufacturing one would invent an intent the model never
+    /// expressed. Escalation happens at most once per cycle and never
+    /// recurses — `compose_proposal` yields `RequestApproval`, which is not a
+    /// content-bearing intent and is not re-checked.
+    ///
+    /// Falls back to the original prose on any failure. A proposal that cannot
+    /// be composed must not cost the operator the answer they asked for.
+    async fn escalate_if_unbacked(&self, context: &CognitiveContext, composed: String) -> Intent {
+        // ── Structural trigger, checked first ────────────────────────────
+        //
+        // A `ToolRefusedUnsigned` is the substrate saying: the capability is
+        // yours, this call is not, and a signature is the missing thing. That
+        // is not a matter of interpretation the way prose is, so it does not
+        // go through the marker list below.
+        //
+        // Observed 2026-08-01: asked to open a URL, the Regent was refused
+        // for want of a signature and answered "Would you like me to draft a
+        // request to open example.com?" — an offer to propose. Per
+        // EXECUTION-AUTHORITY-MODEL Phase 7 proposing *is* a terminal state,
+        // so offering to do it is the floor Phase 7 forbids: the operator has
+        // to say yes before anything signable exists, and `zp approval list`
+        // stays empty in the meantime.
+        //
+        // The proposal carries the refused call verbatim. The operator then
+        // signs the same tool and the same parameters that were actually
+        // attempted, rather than a second model's paraphrase of what the
+        // first one wanted — which is the difference between a signature that
+        // authorises an act and one that authorises a description.
+        if let Some(call) = context
+            .tool_results
+            .iter()
+            .rev()
+            .find_map(|r| r.refused_call.clone())
+        {
+            // Seed from the *call*, not the directive.
+            //
+            // Seeding from `cycle_directive` produced a proposal whose prose
+            // described the operator's request while its enactment carried
+            // whatever the router had reached for. Observed 2026-08-01: asked
+            // for the receipt chain, the router dispatched
+            // `browser_use goto_url example.com`; the refusal escalated; and
+            // the queued proposal read "Provide the receipt chain" with a
+            // browser navigation attached. Signing it would have authorised
+            // an act its own text did not describe — the exact failure this
+            // subsystem exists to prevent, one layer further in.
+            //
+            // The prose must be about the call, because the call is what a
+            // signature authorises. Where the router chose badly, that now
+            // shows up as a visibly absurd proposal the operator denies,
+            // rather than a plausible one that does something else.
+            // A degenerate call is not a proposal.
+            //
+            // Observed 2026-08-03: the operator said "hi"; routing reached for
+            // `browser_use` with no parameters; the guard refused it; and this
+            // escalation faithfully turned that into "PROPOSAL: Call
+            // browser_use with parameters {}". Saying "approved" produced a
+            // second one. The escalation was working exactly as written and
+            // the result was queue spam.
+            //
+            // There is nothing here for an operator to weigh — the call names
+            // no target and would fail its own parameter validation if it ran.
+            // Proposing it spends operator attention on router noise, and an
+            // operator who reads enough meaningless proposals stops reading
+            // them, which is the habit the whole approval surface depends on.
+            //
+            // Refusal still happened, is still logged, and still emitted
+            // `regent:tool:refused:unsigned`. What is suppressed is the
+            // *request for a signature*, not the record of the reach.
+            let degenerate = call
+                .params
+                .as_object()
+                .map(|o| o.is_empty())
+                .unwrap_or(call.params.is_null());
+            if degenerate {
+                warn!(
+                    tool = %call.tool,
+                    "refused call carries no parameters — not proposing a call the \
+                     operator cannot weigh"
+                );
+                return Intent::Respond {
+                    content: composed,
+                    target_surface: None,
+                };
+            }
+
+            let seed = format!(
+                "call {} with parameters {} — attempted in service of: {}",
+                call.tool,
+                serde_json::to_string(&call.params).unwrap_or_else(|_| "{}".to_string()),
+                context
+                    .cycle_directive
+                    .as_deref()
+                    .unwrap_or("(no operator directive this cycle)")
+            );
+            warn!(
+                tool = %call.tool,
+                "call refused for want of a signature — proposing it rather than offering to"
+            );
+            match self
+                .compose_proposal(context, crate::intent::ProposalKind::Action, &seed)
+                .await
+            {
+                Ok(Intent::RequestApproval {
+                    kind,
+                    proposed_action,
+                    reason,
+                    finding,
+                    failed_limb,
+                    expected_outcome,
+                    draft,
+                    ..
+                }) => {
+                    return Intent::RequestApproval {
+                        kind,
+                        proposed_action,
+                        reason,
+                        finding,
+                        failed_limb,
+                        expected_outcome,
+                        draft,
+                        enactment: Some(call),
+                    }
+                }
+                Ok(other) => return other,
+                Err(e) => {
+                    warn!("refusal escalation failed, falling back to prose: {}", e);
+                }
+            }
+        }
+
+        let enacted = crate::cognitive_observer::EnactedActs {
+            intent: "respond".to_string(),
+            tools_run: context
+                .tool_results
+                .iter()
+                .map(|r| r.tool.clone())
+                .collect(),
+            proposal_emitted: false,
+        };
+
+        let directs_operator_to_sign =
+            crate::cognitive_observer::verify_claims(&composed, &enacted)
+                .iter()
+                .any(|c| c.kind == crate::cognitive_observer::ClaimKind::PendingArtifact);
+
+        if !directs_operator_to_sign {
+            return Intent::Respond {
+                content: composed,
+                target_surface: None,
+            };
+        }
+
+        // Seed from the operator's own words where we have them. The composed
+        // prose describes an artifact that does not exist; the request does
+        // not, and it is what the proposal should be about.
+        let seed = match context.pending_input.as_ref() {
+            Some(input) => input.content.clone(),
+            None => composed.clone(),
+        };
+
+        warn!(
+            seed = %crate::text::preview(&seed, 120),
+            "response directed the operator to sign nothing — escalating to propose tier"
+        );
+
+        match self
+            .compose_proposal(context, crate::intent::ProposalKind::Action, &seed)
+            .await
+        {
+            Ok(proposal) => proposal,
+            Err(e) => {
+                warn!("escalation failed, returning composed prose: {}", e);
+                Intent::Respond {
+                    content: composed,
+                    target_surface: None,
+                }
             }
         }
     }
@@ -904,10 +1868,29 @@ impl Regent {
                 "properties": {
                     "intent": {
                         "type": "string",
-                        "enum": ["execute", "respond", "observe", "continue", "request_approval"]
+                        "enum": ["execute", "respond", "observe", "continue", "request_approval", "remember"]
                     },
                     "tool": { "type": "string" },
                     "params": { "type": "object" },
+                    // Fields the non-execute intents carry. Absent from
+                    // `properties`, constrained decoding gives the model no
+                    // slot to put them in — so 2026-08-04, with the larger
+                    // model finally selecting the right intents, `remember`
+                    // arrived with no `key` ("unnamed") and
+                    // `request_approval` with no `action` ("unspecified
+                    // action"). Both parsed, both defaulted, both useless.
+                    //
+                    // Same defect as the intent enum one layer down: the
+                    // schema is the reachable surface, not documentation of
+                    // it, and anything it omits cannot be emitted no matter
+                    // how well the prompt asks.
+                    "key": { "type": "string" },
+                    "action": { "type": "string" },
+                    "kind": { "type": "string", "enum": ["action", "mechanism"] },
+                    // Present in the unified schema and missing here, which
+                    // would silently drop the body of every `remember` if the
+                    // substrate returned to two-tier routing.
+                    "content": { "type": "string" },
                     "progress": { "type": "string" }
                 },
                 "required": ["intent"]
@@ -966,6 +1949,10 @@ impl Regent {
             .replace("{sovereign_section}", &sovereign_section)
             .replace("{available_actions}", &available_actions)
             .replace(
+                "{substrate_ground_section}",
+                &build_substrate_ground_section(context),
+            )
+            .replace(
                 "{standing_corrections_section}",
                 &standing_corrections_section,
             );
@@ -1009,7 +1996,7 @@ impl Regent {
 
         info!(
             response_len = response.len(),
-            response_preview = %if response.len() > 200 { &response[..200] } else { &response },
+            response_preview = %crate::text::preview(&response, 200),
             "regent COMPOSE response"
         );
 
@@ -1035,6 +2022,18 @@ impl Regent {
                 "browser_use(action:\"goto_url|page_info|js|list_tabs|wait_for_element\",url?,expression?,selector?)"
                     .to_string()
             }
+            "chart_generate" => {
+                "chart_generate(type:\"bar|line|pie\",title?,labels:[\"...\"],series:[{name,values:[...]}])"
+                    .to_string()
+            }
+            "report_assemble" => {
+                "report_assemble(fragments:[{heading?,body_html,chart_svg?}])"
+                    .to_string()
+            }
+            "save_to_artifacts" => {
+                "save_to_artifacts(name:\"filename.ext\",content:\"...\" OR content_base64:\"...\")"
+                    .to_string()
+            }
             other => format!("{other}()"),
         }
     }
@@ -1051,6 +2050,15 @@ impl Regent {
             ),
             "browser_use" => Some(
                 "- Operator asks you to open, visit, navigate to, or read a web page → {\"intent\":\"execute\",\"tool\":\"browser_use\",\"params\":{\"action\":\"goto_url\",\"url\":\"https://…\"}}",
+            ),
+            "chart_generate" => Some(
+                "- Operator asks you to visualize data as a chart / graph / plot → {\"intent\":\"execute\",\"tool\":\"chart_generate\",\"params\":{\"type\":\"bar\",\"title\":\"…\",\"labels\":[\"A\",\"B\"],\"series\":[{\"name\":\"…\",\"values\":[10,20]}]}}",
+            ),
+            "report_assemble" => Some(
+                "- Operator asks you to assemble a report / writeup / summary from findings → {\"intent\":\"execute\",\"tool\":\"report_assemble\",\"params\":{\"fragments\":[{\"heading\":\"…\",\"body_html\":\"<p>…</p>\"}]}}",
+            ),
+            "save_to_artifacts" => Some(
+                "- Operator asks you to save / persist / write out an artifact you have produced → {\"intent\":\"execute\",\"tool\":\"save_to_artifacts\",\"params\":{\"name\":\"report.html\",\"content\":\"<!DOCTYPE html>…\"}}",
             ),
             _ => None,
         }
@@ -1119,6 +2127,26 @@ impl Regent {
         caps.join(", ")
     }
 
+    /// Is this chain entry the Regent's own reasoning rather than evidence?
+    ///
+    /// Deliberately narrow. Only the receipts a cycle writes *about itself* are
+    /// filtered — the composition it reasoned from, the intent it chose, the act
+    /// it recorded, and the observer's verdict on it. Everything else the Regent
+    /// emits, including `regent:tool:completed:*` and gate decisions, is a fact
+    /// about the substrate and stays.
+    ///
+    /// The distinction that matters is not "did the Regent write it" but "is it
+    /// evidence, or is it an echo".
+    fn is_own_bookkeeping(action_summary: &str) -> bool {
+        const SELF_REFERENTIAL: &[&str] = &[
+            "cognitive:input:composed",
+            "cognitive:act:recorded",
+            "cognitive:observer:verified",
+            "regent:intent:",
+        ];
+        SELF_REFERENTIAL.iter().any(|p| action_summary.contains(p))
+    }
+
     /// Build the user prompt from cognitive context.
     fn build_user_prompt(&self, context: &CognitiveContext) -> String {
         let mut parts = Vec::new();
@@ -1155,7 +2183,25 @@ impl Regent {
         // (KEEL §II.17), which is implemented and running. Doing it here too
         // violates P8 (one canonical path per substrate concern) and the
         // prompt-side copy degrades cognition while the real one works.
-        // This block is now neutral continuity context.
+        //
+        // This comment described the block as "neutral continuity context"
+        // while the text it rendered read "If your previous turn offered to
+        // do something and the operator has now accepted, do that thing."
+        // That is not neutral, and it fired on messages that accepted
+        // nothing.
+        //
+        // Observed 2026-08-01: after an arc stalled on "compact the chain
+        // down to the last 1000 entries", the operator said "hi". The mirror
+        // presented the compaction request and the stall report as the
+        // conversation, with an instruction to act on acceptance. Routing
+        // opened a fresh arc on chain compaction, then dispatched
+        // `chain_compact` — off a greeting. The prior turn had not offered
+        // anything; it had reported a failure. The mirror could not tell the
+        // difference, and neither clause checked the message actually in
+        // front of it.
+        //
+        // The exchange is memory. The current message governs. That
+        // distinction is now in the text rather than only in this comment.
         if context.pending_input.is_some() {
             // Only mirror an actual conversational turn. `last_prior_response`
             // captures every non-error cycle response, including an autonomous
@@ -1176,18 +2222,20 @@ impl Regent {
                 let q = prior.operator_question.as_deref().unwrap_or_default();
                 // Truncate long responses to avoid burning context on the mirror.
                 let r = if prior.response_content.len() > 300 {
-                    format!("{}…", &prior.response_content[..300])
+                    format!("{}…", crate::text::preview(&prior.response_content, 300))
                 } else {
                     prior.response_content.clone()
                 };
                 parts.push(format!(
-                    "CONVERSATION SO FAR:\n\
+                    "CONVERSATION SO FAR — this is memory. The operator's current \
+                     message is at the top of this prompt and governs the turn.\n\
                      Operator: \"{}\"\n\
                      You: \"{}\"\n\
-                     Continue this conversation. If your previous turn offered to do \
-                     something and the operator has now accepted, do that thing — do \
-                     not offer again. Treat the exchange above as what you remember \
-                     saying, not as something to evaluate.",
+                     Treat that exchange as what you remember saying, not as something \
+                     to evaluate. If the operator's current message accepts something \
+                     you offered above, do that thing and do not offer again. If it \
+                     opens a different subject — or is only a greeting — follow the \
+                     current message and let the previous one go.",
                     q, r,
                 ));
             }
@@ -1196,11 +2244,45 @@ impl Regent {
         // Work arc context — if resuming a multi-cycle task.
         if let Some(ref arc) = context.work_arc {
             parts.push(format!(
-                "WORK ARC IN PROGRESS (cycle {}/{}): {}\n\
-                 You are mid-task. Use your tools to continue, then either:\n\
-                 - \"continue\" with updated progress if more work remains\n\
-                 - \"respond\" to tell the operator what you accomplished",
-                arc.cycles_completed + 1, arc.max_cycles, arc.progress
+                "{}WORK ARC IN PROGRESS (cycle {}/{}): {}\n{}\
+                 Do one concrete thing now:\n\
+                 - \"execute\" a tool, if a step remains that you can take\n\
+                 - \"request_approval\", if the next step needs the operator to sign\n\
+                 - \"respond\", to tell the operator what you accomplished\n\
+                 Repeating the plan is not progress. Answering \"continue\" with \
+                 the same text twice stops the arc.",
+                match context.cycle_directive.as_deref() {
+                    Some(q) => format!("THE OPERATOR ASKED: {q}\n"),
+                    None => String::new(),
+                },
+                arc.cycles_completed + 1,
+                arc.max_cycles,
+                arc.progress,
+                // One informed turn before the hard stop.
+                //
+                // The stall detector ends an arc that repeats itself, which
+                // is right, but it ended it *silently from the model's side*:
+                // nothing in the prompt ever said continuing was failing, so
+                // the model had no reason to try a different route. Observed
+                // 2026-08-01 — a router with `request_approval` available
+                // answered `continue` on every cycle of every attempt, and
+                // filled `progress` by copying the nearest salient string in
+                // its context. That is not a plan, it is a completion. Tell
+                // it plainly that this move is exhausted and name the ones
+                // that are not.
+                if arc.stall_count > 0 {
+                    format!(
+                        "You have already answered \"continue\" {} time(s) with this \
+                         same plan and dispatched no tool. Continuing again ends this \
+                         arc with nothing done. Do not answer \"continue\". If the \
+                         next step needs the operator to sign, answer \
+                         \"request_approval\" and name the tool. If you cannot \
+                         proceed at all, answer \"respond\" and say why.\n",
+                        arc.stall_count
+                    )
+                } else {
+                    String::new()
+                }
             ));
         }
 
@@ -1216,11 +2298,19 @@ impl Regent {
                     format!("[{}] {} → {}", status, r.tool, r.output)
                 })
                 .collect();
+            // Restate the question. Without it this block instructs the
+            // model to answer something it can no longer see, and the
+            // observed response to that is another tool call.
+            let asked = match context.cycle_directive.as_deref() {
+                Some(q) => format!("THE OPERATOR ASKED: {q}\n\n"),
+                None => String::new(),
+            };
             parts.push(format!(
-                "YOUR PRIOR ACTIONS THIS CYCLE:\n{}\n\
-                 Now tell the operator the SPECIFIC results from your tool calls above. \
+                "{asked}YOUR PRIOR ACTIONS THIS CYCLE:\n{}\n\
+                 Now answer using the SPECIFIC results above. \
                  Include actual data: URLs, titles, status codes, counts — whatever the tool returned. \
-                 Do NOT give a generic summary. Relay what you actually observed.",
+                 Do NOT give a generic summary. Relay what you actually observed. \
+                 Do NOT repeat a tool call you have already made above — you have its result.",
                 results.join("\n")
             ));
         }
@@ -1233,10 +2323,12 @@ impl Regent {
         if !context.officer_findings.is_empty() {
             let is_conversation = context.pending_input.is_some();
             if is_conversation {
+                // `INTERRUPT_FLOOR` — the operator is speaking, so only
+                // findings worth breaking into that survive compression.
                 let critical: Vec<String> = context
                     .officer_findings
                     .iter()
-                    .filter(|f| f.severity == "Critical")
+                    .filter(|f| f.interrupts())
                     .map(|f| format!("[{}] {}: {}", f.severity, f.officer, f.summary))
                     .collect();
                 let total = context.officer_findings.len();
@@ -1274,11 +2366,32 @@ impl Regent {
                     context.recent_chain.len()
                 ));
             } else {
-                // Stewardship mode — full chain context for autonomous reasoning.
+                // Stewardship mode — chain context for autonomous reasoning,
+                // minus the Regent's own cognitive bookkeeping.
+                //
+                // The chain is both the substrate's memory and the Regent's
+                // context, so anything written during a cycle is read back in
+                // the next one. For substrate events that is the point. For
+                // the Regent's own intent and composition receipts it is a
+                // mirror, and a mirror in a feedback path is an oscillator.
+                //
+                // Observed 2026-08-01: a stalled arc emitted three receipts a
+                // cycle — composed, intent:continue, act:recorded. Ten cycles
+                // filled the fifty-entry window, so the last ten entries
+                // rendered to the model were its own "continue" decisions.
+                // It continued. A greeting afterwards opened a fresh arc on
+                // the same subject, because that is what the chain said the
+                // Regent had been doing.
+                //
+                // Tool completions and gate decisions stay: those are
+                // evidence about the world. Intents and compositions are the
+                // Regent's own reasoning, and it does not need to read its
+                // own mind to know it.
                 let recent: Vec<String> = context
                     .recent_chain
                     .iter()
                     .rev()
+                    .filter(|e| !Self::is_own_bookkeeping(&e.action_summary))
                     .take(10)
                     .map(|e| {
                         format!(
@@ -1290,7 +2403,15 @@ impl Regent {
                         )
                     })
                     .collect();
-                parts.push(format!("Recent chain:\n{}", recent.join("\n")));
+                let omitted = context.recent_chain.len().saturating_sub(recent.len());
+                parts.push(format!(
+                    "Recent chain ({} of {} entries; {} of your own cognitive \
+                     bookkeeping omitted):\n{}",
+                    recent.len(),
+                    context.recent_chain.len(),
+                    omitted,
+                    recent.join("\n")
+                ));
             }
         }
 
@@ -1317,10 +2438,18 @@ impl Regent {
                 if t.memory_usage_delta.abs() >= 0.05 {
                     notes.push(format!(
                         "memory usage {} {:.0} points over {} cycles{}",
-                        if t.memory_usage_delta > 0.0 { "up" } else { "down" },
+                        if t.memory_usage_delta > 0.0 {
+                            "up"
+                        } else {
+                            "down"
+                        },
                         t.memory_usage_delta.abs() * 100.0,
                         t.samples,
-                        if t.memory_monotonic_rising { ", rising every cycle" } else { "" },
+                        if t.memory_monotonic_rising {
+                            ", rising every cycle"
+                        } else {
+                            ""
+                        },
                     ));
                 }
                 if t.loaded_model_delta != 0 {
@@ -1374,16 +2503,27 @@ impl Regent {
             parts.push(format!("Relevant memories:\n{}", mems.join("\n")));
         }
 
+        // Current work thread. Below memories and above the autonomous
+        // remediation prompt: it is the weakest input in this function, and
+        // it is deliberately the last thing that can be read as orientation
+        // before anything that can be read as instruction.
+        let trajectory_section = build_trajectory_section(context);
+        if !trajectory_section.is_empty() {
+            parts.push(trajectory_section);
+        }
+
         // Autonomous remediation prompt: when there are urgent findings
         // but no operator input, explicitly frame this as a remediation
         // cycle so the model knows to act rather than just describe.
         // Only fires on the first turn — once tool results exist, the
         // Regent has already acted and should now narrate.
         if context.pending_input.is_none() && context.tool_results.is_empty() {
+            // Same floor as `reason`'s guard above — if it was worth thinking
+            // about, it is worth being told to act on.
             let has_urgent = context
                 .officer_findings
                 .iter()
-                .any(|f| f.severity == "Error" || f.severity == "Critical");
+                .any(|f| f.demands_attention());
             if has_urgent {
                 parts.push(
                     "AUTONOMOUS CYCLE: No operator input. Officer findings above require your attention. \
@@ -1397,10 +2537,7 @@ impl Regent {
     }
 
     /// Retrieve memories relevant to the current context.
-    fn retrieve_relevant_memories(
-        &mut self,
-        input: &Option<OperatorInput>,
-    ) -> Vec<MemoryFragment> {
+    fn retrieve_relevant_memories(&mut self, input: &Option<OperatorInput>) -> Vec<MemoryFragment> {
         let mut fragments = Vec::new();
 
         // If there's operator input, search for keyword matches.
@@ -1434,7 +2571,11 @@ impl Regent {
         }
 
         // Deduplicate and limit.
-        fragments.sort_by(|a, b| b.relevance_score.partial_cmp(&a.relevance_score).unwrap_or(std::cmp::Ordering::Equal));
+        fragments.sort_by(|a, b| {
+            b.relevance_score
+                .partial_cmp(&a.relevance_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         fragments.truncate(10);
         fragments
     }
@@ -1526,24 +2667,23 @@ impl Regent {
         let auto_routing = routing_model.as_deref() == Some("auto");
 
         if auto_reasoning && auto_routing {
-            // Full auto — clear pin entirely, reset to defaults.
+            // Full auto — clear pin entirely, reset to the authority.
             self.operator_pin = None;
-            let defaults = RegentConfig::default();
-            self.config.reasoning_model = defaults.reasoning_model;
-            self.config.routing_model = defaults.routing_model;
+            self.config.reasoning_model = self.default_config.reasoning_model.clone();
+            self.config.routing_model = self.default_config.routing_model.clone();
             info!("operator pin cleared — router will score from dossier corpus");
         } else if auto_reasoning {
             // Clear just the reasoning pin.
             if let Some(ref mut pin) = self.operator_pin {
                 pin.reasoning_model = None;
             }
-            self.config.reasoning_model = RegentConfig::default().reasoning_model;
+            self.config.reasoning_model = self.default_config.reasoning_model.clone();
         } else if auto_routing {
             // Clear just the routing pin.
             if let Some(ref mut pin) = self.operator_pin {
                 pin.routing_model = None;
             }
-            self.config.routing_model = RegentConfig::default().routing_model;
+            self.config.routing_model = self.default_config.routing_model.clone();
         }
 
         if let Some(ref ep) = endpoint {
@@ -1564,8 +2704,7 @@ impl Regent {
         }
 
         // Set operator pin if models were explicitly changed (not auto).
-        if reasoning_model.is_some() && !auto_reasoning
-            || routing_model.is_some() && !auto_routing
+        if reasoning_model.is_some() && !auto_reasoning || routing_model.is_some() && !auto_routing
         {
             if force {
                 // Force-cut: pin immediately active, config updated above.
@@ -1591,7 +2730,8 @@ impl Regent {
             } else {
                 // Shadow-first: enter evaluating state. The groomed model
                 // stays active; the candidate will be validated before cut-over.
-                let candidate = reasoning_model.as_ref()
+                let candidate = reasoning_model
+                    .as_ref()
                     .filter(|_| !auto_reasoning)
                     .cloned()
                     .unwrap_or_else(|| self.config.reasoning_model.clone());
@@ -1604,9 +2744,7 @@ impl Regent {
 
                 self.operator_pin = Some(OperatorModelPin {
                     reasoning_model: Some(candidate.clone()),
-                    routing_model: routing_model.as_ref()
-                        .filter(|_| !auto_routing)
-                        .cloned(),
+                    routing_model: routing_model.as_ref().filter(|_| !auto_routing).cloned(),
                     pinned_at: chrono::Utc::now(),
                     status: PinStatus::Evaluating {
                         candidates: vec![ShadowCandidate {
@@ -1624,10 +2762,8 @@ impl Regent {
         }
 
         // Reconfigure the inference backend (endpoint change).
-        self.inference.reconfigure(
-            self.config.inference_endpoint.clone(),
-            None,
-        );
+        self.inference
+            .reconfigure(self.config.inference_endpoint.clone(), None);
 
         // If key source changed, update the backend.
         if let Some(source) = api_key_source {
@@ -1757,7 +2893,8 @@ pub fn parse_intent(response: &str) -> Result<Intent, RegentError> {
                 warn!("model returned raw cognitive context instead of intent — suppressing");
                 return Ok(Intent::Respond {
                     content: "I received your message but couldn't formulate a proper response. \
-                              Could you rephrase?".to_string(),
+                              Could you rephrase?"
+                        .to_string(),
                     target_surface: None,
                 });
             }
@@ -1785,12 +2922,9 @@ pub fn parse_intent(response: &str) -> Result<Intent, RegentError> {
 
     match intent_type {
         "execute" => {
-            let raw_tool = value
-                .get("tool")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| {
-                    RegentError::IntentParse("execute intent missing 'tool' field".to_string())
-                })?;
+            let raw_tool = value.get("tool").and_then(|v| v.as_str()).ok_or_else(|| {
+                RegentError::IntentParse("execute intent missing 'tool' field".to_string())
+            })?;
 
             // Sanitize tool name. qwen3:1.7b sometimes embeds params inside
             // the tool string with escaped quotes, producing values like:
@@ -1856,9 +2990,23 @@ pub fn parse_intent(response: &str) -> Result<Intent, RegentError> {
                 .and_then(|v| v.as_str())
                 .unwrap_or("no reason given")
                 .to_string();
+            // The router fills `kind` and `proposed_action`. Everything
+            // else is written by the compose tier — see `compose_proposal`.
+            let kind = crate::intent::ProposalKind::parse(
+                value
+                    .get("kind")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("action"),
+            );
             Ok(Intent::RequestApproval {
+                kind,
                 proposed_action,
                 reason,
+                finding: None,
+                failed_limb: None,
+                expected_outcome: None,
+                draft: None,
+                enactment: None,
             })
         }
 
@@ -1973,24 +3121,13 @@ fn recover_execute_intent(raw: &str) -> Option<Intent> {
     }
 
     // Known tool names — try to find one in the raw text.
-    const TOOLS: &[&str] = &[
-        "chain_query",
-        "system_status",
-        "governance_posture",
-        "model_evaluate",
-        "batch_sign",
-        "chain_compact",
-        "browser_use",
-        "self_configure",
-        "memory_list",
-        "memory_review",
-    ];
-
-    for tool in TOOLS {
+    // One declaration, in `crate::tools`. This was a private copy that
+    // silently disagreed with the granted set twice — see that module.
+    for tool in crate::tools::tool_names() {
         if raw.contains(tool) {
             warn!(
                 tool,
-                raw_preview = &raw[..raw.len().min(120)],
+                raw_preview = crate::text::preview(raw, 120),
                 "parse_intent: recovered execute intent from malformed JSON"
             );
             return Some(Intent::Execute {
@@ -2014,22 +3151,25 @@ fn recover_execute_intent(raw: &str) -> Option<Intent> {
 /// embedded params, it attempts to recover those too.
 ///
 /// Returns (sanitized_tool_name, optional_recovered_params).
+///
+/// # Drift
+///
+/// This is the *third* declaration of the granted tool set. `REGENT_TOOLS`
+/// in `zp-server` is the one that actually confers capability;
+/// `recover_execute_intent` above carries a second copy; this is the third.
+/// All three had already diverged the same way — `substrate_validate` was
+/// granted and missing from both copies here, so a malformed emission of it
+/// fell through unsanitized and dispatched as an unknown tool.
+///
+/// RESOLVED 2026-08-09. The claim that followed — that neither crate could
+/// see the other's const, so the duplication was structural — was false.
+/// `zp-server` depends on `zp-regent`, so the shared const was always
+/// possible. All three now read `crate::tools::REGENT_TOOLS`.
 fn sanitize_tool_name(raw: &str) -> (String, Option<serde_json::Value>) {
-    const TOOLS: &[&str] = &[
-        "chain_query",
-        "system_status",
-        "governance_posture",
-        "model_evaluate",
-        "batch_sign",
-        "chain_compact",
-        "browser_use",
-        "self_configure",
-        "memory_list",
-        "memory_review",
-    ];
-
-    for tool in TOOLS {
-        if raw.starts_with(tool) {
+    // One declaration, in `crate::tools`. Prefix-freedom of the names is
+    // asserted there, which is what makes `starts_with` safe here.
+    for tool in crate::tools::tool_names() {
+        if let Some(remainder) = raw.strip_prefix(tool) {
             if raw.len() == tool.len() {
                 // Exact match — no sanitization needed.
                 return (raw.to_string(), None);
@@ -2037,13 +3177,26 @@ fn sanitize_tool_name(raw: &str) -> (String, Option<serde_json::Value>) {
 
             // Tool name is a prefix of the raw value — there's garbage after it.
             // Try to extract params from the garbage.
-            let remainder = &raw[tool.len()..];
-
             // Common pattern: `","params":{"limit":5}}` or `", "params": ...`
             // Try to find a JSON object in the remainder.
             if let Some(brace_start) = remainder.find('{') {
                 let params_candidate = &remainder[brace_start..];
-                if let Ok(params) = serde_json::from_str::<serde_json::Value>(params_candidate) {
+                // qwen3 emits Python dict syntax about as often as JSON:
+                //   browser_use','params':{'action':'goto_url','url':'...'}
+                // Observed 2026-08-01 — the tool name recovered, the params
+                // did not, and the proposal that followed read
+                // "would run: browser_use {}". An enactment missing its
+                // parameters is not a smaller version of the act; it is a
+                // different one, and it is the one the operator would sign.
+                //
+                // Naive and deliberately so: an apostrophe inside a value
+                // defeats it, and the fallback is the same empty params we
+                // already had. Better to recover the common case than to
+                // drop every one of them.
+                let requoted = params_candidate.replace('\'', "\"");
+                if let Ok(params) = serde_json::from_str::<serde_json::Value>(params_candidate)
+                    .or_else(|_| serde_json::from_str::<serde_json::Value>(&requoted))
+                {
                     // Successfully recovered params from the tool string.
                     debug!(
                         tool,
@@ -2070,11 +3223,13 @@ fn sanitize_tool_name(raw: &str) -> (String, Option<serde_json::Value>) {
 pub fn strip_markdown_fences(s: &str) -> &str {
     let trimmed = s.trim();
 
-    // Check for ```json or ``` prefix.
-    let without_prefix = if trimmed.starts_with("```json") {
-        &trimmed[7..]
-    } else if trimmed.starts_with("```") {
-        &trimmed[3..]
+    // Check for ```json or ``` prefix. strip_prefix rather than a byte
+    // slice: `&trimmed[7..]` panics if byte 7 is not a char boundary, which
+    // a model emitting a non-ASCII fence would produce.
+    let without_prefix = if let Some(rest) = trimmed.strip_prefix("```json") {
+        rest
+    } else if let Some(rest) = trimmed.strip_prefix("```") {
+        rest
     } else {
         return trimmed;
     };
@@ -2093,6 +3248,162 @@ pub fn strip_markdown_fences(s: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── S2: the ontology consumer ────────────────────────────────────────
+    //
+    // These test the *read path*, not the Cartographer. The exit condition
+    // for S2 is that the Regent demonstrably consumes what the producer
+    // emits, and the ordering the producer-consumer rule asks for means that
+    // has to be provable while the producer is still switched off. So the
+    // fixtures write trajectories directly into an ontology store, which is
+    // the one place in this codebase that is allowed to do so outside the
+    // Cartographer, and it is allowed because a test that used the
+    // Cartographer would be testing the producer.
+
+    /// A Regent with nothing attached — no dossiers, no ontology, no pin.
+    /// Enough to exercise prompt composition, which is all these tests do.
+    /// The tempdir is leaked into the returned value's lifetime by keeping it
+    /// alive in the caller; MemoryStore only needs the path to exist.
+    fn test_regent() -> Regent {
+        let dir = std::env::temp_dir().join(format!(
+            "zp-regent-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        Regent::new(
+            RegentConfig::for_tests("qwen3:8b", "qwen3:1.7b"),
+            RegentConfig::for_tests("qwen3:8b", "qwen3:1.7b"),
+            &dir,
+            None,
+            None,
+            // Routed through zp_net rather than a raw literal --
+            // no_raw_peer_url_outside_zp_net applies to test fixtures too.
+            zp_net::peer_url("127.0.0.1", 17010),
+        )
+    }
+
+    fn traj(title: &str, idle_secs: i64, receipts: usize) -> crate::context::TrajectorySummary {
+        let now = chrono::Utc::now();
+        crate::context::TrajectorySummary {
+            title: title.to_string(),
+            status: "active".to_string(),
+            created_at: now - chrono::Duration::seconds(idle_secs + 600),
+            last_active: now - chrono::Duration::seconds(idle_secs),
+            idle_secs,
+            receipt_count: receipts,
+        }
+    }
+
+    fn ctx_with(t: Option<crate::context::TrajectorySummary>) -> CognitiveContext {
+        CognitiveContext {
+            assembled_at: chrono::Utc::now(),
+            sovereign: None,
+            recent_chain: Vec::new(),
+            officer_findings: Vec::new(),
+            posture_summary: None,
+            pending_input: None,
+            memory_fragments: Vec::new(),
+            standing_corrections: Vec::new(),
+            substrate_ground: Vec::new(),
+            active_delegations: Vec::new(),
+            system_awareness: None,
+            tool_results: Vec::new(),
+            work_arc: None,
+            prior_response: None,
+            cycle_directive: None,
+            ontology_trajectory: t,
+            composition_summary: None,
+        }
+    }
+
+    #[test]
+    fn no_trajectory_renders_nothing_at_all() {
+        // Not "no active trajectory" — nothing. A prompt that narrates the
+        // absence of its own instrumentation invites the model to reason
+        // about the instrumentation. Asserting emptiness rather than
+        // asserting some phrase is the point of the test.
+        assert_eq!(build_trajectory_section(&ctx_with(None)), "");
+    }
+
+    #[test]
+    fn a_trajectory_renders_its_title_and_its_age() {
+        let s = build_trajectory_section(&ctx_with(Some(traj("chain compaction", 7200, 12))));
+        assert!(s.contains("chain compaction"), "title must survive: {s}");
+        assert!(s.contains("2 hours ago"), "idle time must be stated: {s}");
+        assert!(
+            s.contains("12 receipts"),
+            "evidence count must be stated: {s}"
+        );
+        // Orientation, not instruction. The operator's request outranks it and
+        // the text has to say so, because position alone has not been enough
+        // in this file's history.
+        assert!(
+            s.contains("answer the request"),
+            "must yield to the operator: {s}"
+        );
+    }
+
+    #[test]
+    fn one_receipt_is_not_pluralised() {
+        let s = build_trajectory_section(&ctx_with(Some(traj("t", 0, 1))));
+        assert!(s.contains("1 receipt attributed"), "{s}");
+    }
+
+    #[test]
+    fn idle_time_reads_as_a_human_would_say_it() {
+        for (secs, want) in [
+            (0i64, "just now"),
+            (89, "just now"),
+            (600, "10 minutes ago"),
+            (7200, "2 hours ago"),
+            (259_200, "3 days ago"),
+        ] {
+            let s = build_trajectory_section(&ctx_with(Some(traj("t", secs, 1))));
+            assert!(
+                s.contains(want),
+                "idle {secs}s should read {want:?}, got: {s}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_prompt_carries_the_trajectory_and_never_above_the_operator() {
+        // The regression this guards is ordering, not presence. Officer
+        // findings above operator input caused observed confabulation (see
+        // build_user_prompt); a work-thread banner above it would do the same
+        // thing for the same reason.
+        let mut ctx = ctx_with(Some(traj("receipt chain audit", 300, 4)));
+        ctx.pending_input = Some(crate::context::OperatorInput {
+            content: "what is the start of the chain".to_string(),
+            source: CockpitSource::Cli,
+            received_at: chrono::Utc::now(),
+        });
+        let regent = test_regent();
+        let prompt = regent.build_user_prompt(&ctx);
+        let thread = prompt
+            .find("CURRENT WORK THREAD")
+            .expect("thread section present");
+        let request = prompt
+            .find("OPERATOR REQUEST")
+            .expect("operator request present");
+        assert!(
+            request < thread,
+            "operator request must precede the work thread"
+        );
+    }
+
+    #[test]
+    fn an_unattached_ontology_is_a_working_state() {
+        // `None` is not degraded. A Regent with no ontology handle must
+        // compose exactly what it composed before the field existed.
+        let regent = test_regent();
+        assert!(!regent.has_ontology());
+        let with = regent.build_user_prompt(&ctx_with(None));
+        assert!(!with.contains("CURRENT WORK THREAD"));
+    }
 
     #[test]
     fn parse_execute_intent() {
@@ -2153,10 +3464,7 @@ mod tests {
 
     #[test]
     fn strip_fences_plain() {
-        assert_eq!(
-            strip_markdown_fences("```\n{\"a\": 1}\n```"),
-            "{\"a\": 1}"
-        );
+        assert_eq!(strip_markdown_fences("```\n{\"a\": 1}\n```"), "{\"a\": 1}");
     }
 
     #[test]

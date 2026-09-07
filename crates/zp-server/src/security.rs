@@ -805,9 +805,12 @@ pub async fn reconstitute_handler(
 ) -> Result<AxumJson<ReconstitutionResponse>, (StatusCode, String)> {
     let audit_store = state.0.audit_store.lock().unwrap();
 
-    let chain = audit_store
-        .export_chain(100_000)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Chain export failed: {}", e)))?;
+    let chain = audit_store.export_chain(100_000).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Chain export failed: {}", e),
+        )
+    })?;
 
     let config = ReconstitutionConfig::default();
     let mut engine = ReconstitutionEngine::new(config);
@@ -884,9 +887,11 @@ pub struct PolicyVersionResponse {
 pub async fn policy_version_handler(
     State(state): State<AppState>,
 ) -> Result<AxumJson<PolicyVersionResponse>, StatusCode> {
-    let guard = state.0.downgrade_guard.lock().map_err(|_| {
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let guard = state
+        .0
+        .downgrade_guard
+        .lock()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let history: Vec<serde_json::Value> = guard
         .history()

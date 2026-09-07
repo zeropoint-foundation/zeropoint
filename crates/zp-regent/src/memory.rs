@@ -75,15 +75,18 @@ impl MemoryStore {
     /// Store or update a memory entry.
     pub fn remember(&mut self, key: String, content: String, tags: Vec<String>) {
         let now = Utc::now();
-        let entry = self.entries.entry(key.clone()).or_insert_with(|| MemoryEntry {
-            key: key.clone(),
-            content: String::new(),
-            created_at: now,
-            updated_at: now,
-            access_count: 0,
-            source_receipts: Vec::new(),
-            tags: Vec::new(),
-        });
+        let entry = self
+            .entries
+            .entry(key.clone())
+            .or_insert_with(|| MemoryEntry {
+                key: key.clone(),
+                content: String::new(),
+                created_at: now,
+                updated_at: now,
+                access_count: 0,
+                source_receipts: Vec::new(),
+                tags: Vec::new(),
+            });
         entry.content = content;
         entry.updated_at = now;
         entry.tags = tags;
@@ -112,7 +115,9 @@ impl MemoryStore {
         let kw = keyword.to_lowercase();
         self.entries
             .values()
-            .filter(|e| e.content.to_lowercase().contains(&kw) || e.key.to_lowercase().contains(&kw))
+            .filter(|e| {
+                e.content.to_lowercase().contains(&kw) || e.key.to_lowercase().contains(&kw)
+            })
             .collect()
     }
 
@@ -132,8 +137,7 @@ impl MemoryStore {
         if let Some(parent) = self.data_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let json = serde_json::to_string_pretty(&self.entries)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let json = serde_json::to_string_pretty(&self.entries).map_err(std::io::Error::other)?;
         std::fs::write(&self.data_path, json)?;
         self.dirty = false;
         Ok(())

@@ -1,0 +1,270 @@
+{
+  "generated": "2026-08-18 (rev 2)",
+  "commit": "c756728",
+  "tree": "working tree with 36 staged paths",
+  "note": "Regenerated from tools/connection-map/connection_map.py against the working tree. Baseline figures from CONNECTION-INTEGRITY-PROGRAM-2026-07.md:211-215.",
+  "connections": {
+    "now": {
+      "date": "2026-08-18",
+      "total": 1298,
+      "live": 584,
+      "tied_off": 433,
+      "defect": 281,
+      "governed_docs": 176,
+      "live_only": 0.4499,
+      "tied_off_share": 0.3336,
+      "maturity": 0.7835
+    },
+    "baseline": {
+      "date": "2026-07-26",
+      "total": 969,
+      "live": 285,
+      "tied_off": 41,
+      "defect": 643,
+      "governed_docs": null
+    }
+  },
+  "defect_breakdown": {
+    "corpus_to_chain_registry_gap": 5,
+    "corpus_to_chain_aspirational": 144,
+    "code_to_artifact": 129,
+    "derived_artifact": 3
+  },
+  "sources": {
+    "total": 327,
+    "zero_live": 97,
+    "frozen_dropped": 11
+  },
+  "zero_live_top": [
+    [
+      "OFFICER-ACTION-SURFACES-2026-07",
+      27
+    ],
+    [
+      "BLAST-RADIUS-AND-RECOVERY-2026-07",
+      22
+    ],
+    [
+      "OPERATOR-DEATH-AND-LEGACY-2026-07",
+      18
+    ],
+    [
+      "HARDWARE-OBSERVER-2026-07",
+      16
+    ],
+    [
+      "BUILD-PROCESS-DESIGN-2026-07",
+      14
+    ],
+    [
+      "EMBODIMENT-STATE-PROTOCOL-2026-07",
+      13
+    ],
+    [
+      "SOVEREIGN-KINSHIP-PRIMITIVES-2026-07",
+      12
+    ],
+    [
+      "SAGE-WIZARD-SCRIPT-2026-05",
+      11
+    ],
+    [
+      "HARDWARE-DOSSIER-2026-08",
+      11
+    ],
+    [
+      "DEPENDENT-SOVEREIGNTY-2026-07",
+      10
+    ],
+    [
+      "PEER-DISCOVERY-AS-OUTREACH-2026-07",
+      9
+    ],
+    [
+      "HOUSEHOLD-COMPOSITION-2026-07",
+      9
+    ]
+  ],
+  "loops": [
+    {
+      "id": "L1",
+      "name": "Perception",
+      "state": "closed",
+      "chain": "officer sweep \u2192 finding \u2192 send_findings \u2192 CognitiveContext \u2192 prompt",
+      "detail": "Closed for the 900s sweep path. spawn_sensor_forge_task is pinned in KNOWN_UNFORWARDED \u2014 ~394 unclearable findings per window would make has_urgent true nearly every cycle. Review 2026-09-09.",
+      "cite": "officers.rs:525,809-816 \u00b7 loop_runner.rs:135-140 \u00b7 context.rs:71"
+    },
+    {
+      "id": "L2",
+      "name": "Cognition",
+      "state": "closed",
+      "chain": "context \u2192 composition receipt \u2192 prompt \u2192 intent \u2192 gate \u2192 chain",
+      "detail": "The composition receipt and the prompt are two views of one CognitiveContext from a single perceive call. No separate prompt-assembly path exists.",
+      "cite": "loop_runner.rs:1626 \u00b7 regent.rs:2014,2038"
+    },
+    {
+      "id": "L3",
+      "name": "Authority",
+      "state": "closed",
+      "chain": "escalation \u2192 approval \u2192 precedent \u2192 autonomous act",
+      "detail": "Closed for exact-parameter repeats only (PRECEDENT_SCOPE is empty). Rests on an unsigned chain \u2014 0 of 10,018 entries signed as of 2026-08-01.",
+      "cite": "regent.rs:354-385,2071 \u00b7 precedent.rs:118,190"
+    },
+    {
+      "id": "L4",
+      "name": "Understanding",
+      "state": "broken",
+      "chain": "chain \u2192 Cartographer \u2192 ontology \u2192 \u2717 cognition",
+      "detail": "Write side real (3,575 lines across two crates), off by default. Read side does not exist: zp-regent does not depend on zp-ontology at all, and CognitiveContext has no ontology-sourced field.",
+      "cite": "cartographer.rs \u00b7 zp-ontology/ \u00b7 zp-regent/Cargo.toml"
+    },
+    {
+      "id": "L5",
+      "name": "Verification",
+      "state": "partial",
+      "chain": "claim \u2192 check \u2192 evidence \u2192 \u2717 correction",
+      "detail": "Runs every cycle and chain-anchors proof it ran. Only substrate_validate.rs reads the receipts \u2014 a diagnostic, not a corrective. A violated standing correction changes nothing, deliberately.",
+      "cite": "loop_runner.rs:1953,2011-2085"
+    },
+    {
+      "id": "L6",
+      "name": "Improvement",
+      "state": "broken",
+      "chain": "proposed \u2192 \u2717 evaluated \u2192 landed \u2192 verified \u2192 regressed",
+      "detail": "Stage 1 emits. Grepping crates/ for the other four returns zero emission sites; they appear only as recognised prefixes in a validator checking for receipts nothing emits.",
+      "cite": "regent.rs:2294 \u00b7 substrate_validate.rs:136-139"
+    }
+  ],
+  "subsystems": [
+    {
+      "name": "Officer sweep",
+      "cadence": "900s",
+      "default": false,
+      "cite": "lib.rs:160"
+    },
+    {
+      "name": "Cartographer",
+      "cadence": "chain-append",
+      "default": false,
+      "cite": "lib.rs:167"
+    },
+    {
+      "name": "Regent loop",
+      "cadence": "60s",
+      "default": false,
+      "cite": "lib.rs:169"
+    }
+  ],
+  "orphaned_crates": [
+    {
+      "name": "zp-memory-index",
+      "severity": "defect",
+      "why": "declared as backing the memory:retrieve gated tool \u2014 a live surface naming a crate nothing imports"
+    },
+    {
+      "name": "zp-gossip",
+      "severity": "decide",
+      "why": "Regent-to-Regent collective intelligence; keep or evict"
+    },
+    {
+      "name": "zp-cloudflare",
+      "severity": "decide",
+      "why": "sole permitted Cloudflare surface; not imported by zp-server"
+    }
+  ],
+  "sequence": [
+    {
+      "id": "S0",
+      "name": "Turn the three subsystems on and watch 72h",
+      "kind": "information",
+      "exit": "72h continuous run; emission counts by receipt family"
+    },
+    {
+      "id": "S1",
+      "name": "Make the maturity number mean what it says",
+      "kind": "instrument",
+      "exit": "two numbers reported; tie-off age visible"
+    },
+    {
+      "id": "S2",
+      "name": "Give the ontology a consumer, then its producer",
+      "kind": "connect",
+      "exit": "composition receipt with non-empty ontology hash, used in a response"
+    },
+    {
+      "id": "S3",
+      "name": "Put a signature under the loop that closed",
+      "kind": "connect",
+      "exit": "precedent entry verifies to a key; unsigned refused"
+    },
+    {
+      "id": "S4",
+      "name": "Give verification a consumer",
+      "kind": "decide",
+      "exit": "a violation changes a later cycle \u2014 or canon says it never will"
+    },
+    {
+      "id": "S5",
+      "name": "Widen precedent's discriminating input",
+      "kind": "connect",
+      "exit": "a model change escalates once, chain-visibly"
+    },
+    {
+      "id": "S6",
+      "name": "Close the improvement arc",
+      "kind": "build",
+      "exit": "an arc reaches improvement:verified without a human moving it"
+    },
+    {
+      "id": "S7",
+      "name": "Grant bounded build-execution authority",
+      "kind": "gate",
+      "exit": "blocked on the \u00a76.1 operator decision"
+    }
+  ],
+  "build_states": {
+    "source": "docs/lenses/manifest.json, regenerated 2026-08-18 (165 commits stale before this session)",
+    "total_docs": 397,
+    "all": [
+      [
+        "built",
+        138
+      ],
+      [
+        "partial",
+        96
+      ],
+      [
+        "unknown",
+        79
+      ],
+      [
+        "candidate",
+        49
+      ],
+      [
+        "scaffolded",
+        34
+      ],
+      [
+        "keel",
+        1
+      ]
+    ],
+    "tier2": {
+      "total": 283,
+      "built": 95,
+      "partial": 63,
+      "unknown": 69,
+      "candidate": 32,
+      "scaffolded": 24
+    }
+  },
+  "session_changes": [
+    "connection_map.py \u2014 the derived_artifact detector's wall-clock branch sat below an unconditional continue and had never executed; hoisted so an artifact with no commit provenance says so instead of being judged by a proxy that reports 165 commits of drift on a file regenerated seconds ago",
+    "connection_map.py \u2014 EMIT_FORMAT_RE counted format!(\"mail:read:{}\", mb) in zp-cli's capability-list builder as receipt emission. Registry-gap defects 5 -> 1; the advertised mechanical fix would have registered a capability vocabulary as a receipt vocabulary",
+    "connection_map.py \u2014 live-only and tied-off share now reported beside maturity, in the same output and in totals",
+    "regenerate_manifest.py + regenerate_source_manifest.py \u2014 now stamp generated_from_commit, so the two lens manifests can clear their own freshness check once committed",
+    "docs/lenses/manifest.json + source-manifest.json \u2014 regenerated; 165 and 154 commits stale respectively"
+  ]
+}

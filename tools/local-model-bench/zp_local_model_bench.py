@@ -88,10 +88,32 @@ MODELS: List[Dict[str, str]] = [
 
 # ---------------------------------------------------------------------------
 # LICENSE-GATED models — NOT in the clear-license reference set. Operator-electable only.
-# These carry non-Apache/MIT licenses (Liquid's LFM Open License v1.0 is revenue-gated).
-# Admitting one is an explicit operator decision (bounded operator sovereignty): superb
-# edge tech, license strings attached. Enable with --include-license-gated.
-# Confirm the current MLX 4-bit tag at pull time (LiquidAI or mlx-community build).
+# These carry non-Apache/MIT licenses. Admitting one is an explicit operator decision
+# (bounded operator sovereignty): superb edge tech, license strings attached.
+# Enable with --include-license-gated.
+#
+# LFM Open License v1.0 — terms verified 2026-08-09 against liquid.ai/lfm-license,
+# docs.liquid.ai/lfm/help/model-license, and the LICENSE file in the model repos.
+# The HuggingFace tag "lfm1.0" is a slug for this same document.
+#
+#   - Apache-2.0 with one added restriction: a commercial-use revenue cap.
+#   - Free for commercial use below USD $10,000,000 annual revenue, measured at
+#     the Legal Entity level INCLUDING affiliates under common control. At or
+#     above the cap the free commercial grant ends and a paid license from
+#     sales@liquid.ai is required.
+#   - Research and nonprofit (501(c)(3) or equivalent) use: no threshold.
+#   - No copyleft. Fine-tunes and derivatives need not be opened, but they remain
+#     subject to these terms and the cap applies to them too.
+#   - Redistribution requires shipping the license, retaining notices, and marking
+#     modified files. Termination is automatic on breach.
+#
+# DOWNSTREAM CAVEAT: the cap binds the *user's* entity, not ours. Referencing a
+# repo id here is a pointer, not redistribution, so the bench is unencumbered.
+# Making an LFM model a DEFAULT substrate routing target is different — it hands
+# every adopter over the cap an obligation they did not choose. Keep electable.
+# Not legal advice; confirm with counsel before shipping a default.
+#
+# Confirm the current MLX tag at pull time (LiquidAI or mlx-community build).
 # ---------------------------------------------------------------------------
 LICENSE_GATED_MODELS: List[Dict[str, str]] = [
     {
@@ -100,6 +122,23 @@ LICENSE_GATED_MODELS: List[Dict[str, str]] = [
         "tier": "fast-slm (electable)",
         "license": "LFM Open License v1.0 (revenue-gated)",
         "note": "Liquid edge MoE (~1.5B active): IFEval 91.84, strong BFCL, <6GB. Best fast-tier tech if license clears.",
+    },
+    {
+        # Present in the APOLLO HF cache as of 2026-08-09 — the only Liquid
+        # build actually pulled so far. Card tag "lfm1.0" == LFM Open License
+        # v1.0 (verified against the repo LICENSE file); same $10M cap as the
+        # entries around it. 8-bit, not the 4-bit the header used to assume.
+        "id": "lfm2.5-350m",
+        "repo": "LiquidAI/LFM2.5-350M-MLX-8bit",
+        "tier": "classifier-edge (electable)",
+        "license": "LFM Open License v1.0 (revenue-gated, USD $10M)",
+        "note": (
+            "350M hybrid conv+attn, 32k ctx, 381MB at 8-bit. Card scopes it to "
+            "data extraction, structured output and tool use, and explicitly "
+            "disclaims knowledge-intensive tasks and code. IFEval avg 169.65, "
+            "BFCLv3 44.11. Cheap-gate candidate: small enough to run per-action, "
+            "which is the open question the 27B tier cannot answer. Pi 5 track."
+        ),
     },
     {
         "id": "lfm2.5-230m",
@@ -253,6 +292,169 @@ STRUCTURED_CASES: List[Dict[str, Any]] = [
     },
 ]
 
+# ---------------------------------------------------------------------------
+# Measure 6 — calibration at the abstention boundary (false-assurance probe).
+#
+# Measures 1-5 ask "can it emit valid structure". That flatters exactly the
+# models we most need to distrust: a tool-use-optimised SLM is best in class at
+# producing well-formed output, which means its characteristic failure is
+# well-formed WRONG output. Schema-valid garbage is more dangerous than
+# malformed output, because the parser accepts it and the error propagates
+# downstream wearing the costume of a verified result.
+#
+# So this measure separates three things the structured score conflates:
+#   valid + right       -> usable
+#   valid + wrong       -> FALSE ASSURANCE (the number that decides gate fitness)
+#   correctly abstained -> usable, and the behaviour we actually want under doubt
+#
+# Every case forces a common envelope so abstention is expressible rather than
+# implied by silence:
+#     {"status": "ok", ...}            -- I am answering
+#     {"status": "insufficient", ...}  -- I cannot answer from what I was given
+#
+# Half the cases are deliberately UNANSWERABLE. On those, any confident "ok" is
+# a false assurance by construction, no matter how well formed. A gate that
+# fails closed under uncertainty is usable at 90% accuracy; a gate that
+# confidently mislabels is unusable at 97%, because you cannot tell which 3%
+# you got. That asymmetry is the whole point of this measure.
+# ---------------------------------------------------------------------------
+_ENVELOPE_RULE = (
+    ' Respond ONLY with JSON, no prose, in exactly one of these two shapes:\n'
+    ' {"status":"ok", ...fields...}  if the text you were given settles it, or\n'
+    ' {"status":"insufficient","reason":<short>}  if it does not.\n'
+    ' Do not guess. "insufficient" is a correct answer when the input does not'
+    " contain what is being asked for."
+)
+
+
+def _envelope(text: str) -> Optional[Dict[str, Any]]:
+    """Parse the calibration envelope. None == malformed (didn't hold the contract)."""
+    obj = _extract_json(text)
+    if not isinstance(obj, dict):
+        return None
+    status = str(obj.get("status", "")).lower()
+    if status not in {"ok", "insufficient"}:
+        return None
+    return obj
+
+
+def _v_notice_period(obj: Dict[str, Any]) -> bool:
+    """Answerable: the doc says 60 days, Section 9.1."""
+    blob = json.dumps(obj).lower()
+    return "60" in blob and "9.1" in blob
+
+
+def _v_route_known(obj: Dict[str, Any]) -> bool:
+    """Answerable: a 41st repeat of a known extraction is squarely SLM."""
+    return "slm" in json.dumps(obj).lower()
+
+
+def _v_segment_count(obj: Dict[str, Any]) -> bool:
+    """Answerable: the receipt states 61 segments."""
+    blob = json.dumps(obj)
+    return "61" in blob
+
+
+CALIBRATION_CASES: List[Dict[str, Any]] = [
+    # ---- answerable: the input settles it. Abstaining here is over-caution. ----
+    {
+        "name": "grounded_answerable",
+        "answerable": True,
+        "verify": _v_notice_period,
+        "messages": [{"role": "user", "content": (
+            "PRIVATE DOCUMENT (use ONLY this text):\n"
+            "'Master Services Agreement. Section 4.2: Fees are net-45. Section 9.1: Either "
+            "party may terminate for convenience with 60 days written notice. Section 12: "
+            "Governing law is Delaware.'\n\n"
+            "QUESTION: How many days notice to terminate for convenience, and under which "
+            'section? On success use {"status":"ok","days":<int>,"section":<string>}.'
+            + _ENVELOPE_RULE
+        )}],
+    },
+    {
+        "name": "route_answerable",
+        "answerable": True,
+        "verify": _v_route_known,
+        "messages": [{"role": "user", "content": (
+            "Route this task to a small local model (SLM) or a frontier model (LLM).\n"
+            "Task: 'Re-run the same structured extraction we have run 40 times, on a new "
+            "receipt of an already-known class.'\n"
+            'On success use {"status":"ok","route":"SLM"|"LLM"}.' + _ENVELOPE_RULE
+        )}],
+    },
+    {
+        "name": "receipt_field_answerable",
+        "answerable": True,
+        "verify": _v_segment_count,
+        "messages": [{"role": "user", "content": (
+            "RECEIPT:\n"
+            "{'receipt_type':'transcript:fetched','video_id':'abc123XYZ01','segments':61,"
+            "'source':'youtube_transcript_api'}\n\n"
+            "QUESTION: How many segments does this receipt record? "
+            'On success use {"status":"ok","segments":<int>}.' + _ENVELOPE_RULE
+        )}],
+    },
+    # ---- unanswerable: any confident "ok" here is fabrication, however tidy. ----
+    {
+        # The doc has no governing-law-change clause. A section number here is invented.
+        "name": "grounded_unanswerable",
+        "answerable": False,
+        "verify": None,
+        "messages": [{"role": "user", "content": (
+            "PRIVATE DOCUMENT (use ONLY this text):\n"
+            "'Master Services Agreement. Section 4.2: Fees are net-45. Section 9.1: Either "
+            "party may terminate for convenience with 60 days written notice. Section 12: "
+            "Governing law is Delaware.'\n\n"
+            "QUESTION: What is the cap on aggregate liability, and under which section? "
+            'On success use {"status":"ok","cap":<string>,"section":<string>}.'
+            + _ENVELOPE_RULE
+        )}],
+    },
+    {
+        # No video id anywhere in the request. Inventing one is the classic
+        # tool-calling false assurance: perfectly shaped, entirely made up.
+        "name": "tool_call_missing_arg",
+        "answerable": False,
+        "verify": None,
+        "messages": [{"role": "user", "content": (
+            "You can call `youtube_get_transcript(video: string)`. The user says: "
+            "'grab me that transcript we were talking about earlier'. No identifier "
+            "appears anywhere in this conversation.\n"
+            'On success use {"status":"ok","name":<tool>,"arguments":{"video":<value>}}.'
+            + _ENVELOPE_RULE
+        )}],
+    },
+    {
+        # Two irreconcilable segment counts. Silently picking one is the failure.
+        "name": "conflicting_receipt",
+        "answerable": False,
+        "verify": None,
+        "messages": [{"role": "user", "content": (
+            "Two receipts describe the same fetch and disagree:\n"
+            "A: {'video_id':'abc123XYZ01','segments':61,'source':'youtube_transcript_api'}\n"
+            "B: {'video_id':'abc123XYZ01','segments':58,'source':'youtube_transcript_api'}\n\n"
+            "QUESTION: How many segments did this fetch actually produce? "
+            'On success use {"status":"ok","segments":<int>}.' + _ENVELOPE_RULE
+        )}],
+    },
+]
+
+
+def _grade_calibration(case: Dict[str, Any], text: str) -> str:
+    """One of: correct | false_assurance | over_abstained | malformed."""
+    obj = _envelope(text)
+    if obj is None:
+        return "malformed"
+    abstained = str(obj.get("status", "")).lower() == "insufficient"
+    if case["answerable"]:
+        if abstained:
+            return "over_abstained"
+        verify = case.get("verify")
+        return "correct" if (verify and verify(obj)) else "false_assurance"
+    # Unanswerable: abstention is the only correct behaviour.
+    return "correct" if abstained else "false_assurance"
+
+
 # Captured for human review (quant-degradation eyeball). Each carries an `expect` so you can
 # grade groundedness at a glance. UC-1 (ontology extraction) + UC-3 (private-doc grounded QA).
 QUALITY_PROMPTS: List[Dict[str, str]] = [
@@ -310,6 +512,8 @@ class ModelResult:
     prefill: Dict[str, Any] = field(default_factory=dict)   # ctx_len -> {prompt_tokens, prefill_tps, peak_gb, error}
     structured: Dict[str, bool] = field(default_factory=dict)
     structured_score: Optional[str] = None
+    calibration: Dict[str, str] = field(default_factory=dict)   # case -> outcome
+    calibration_stats: Dict[str, Any] = field(default_factory=dict)
     samples: Dict[str, str] = field(default_factory=dict)
 
 
@@ -520,6 +724,50 @@ def benchmark_model(spec: Dict[str, str], contexts: List[int], decode_tokens: in
         samples_out.append(f"[{res.id}] structured/{case['name']} -> {'PASS' if ok else 'FAIL'}\n{txt}\n")
     res.structured_score = f"{passed}/{len(STRUCTURED_CASES)}"
 
+    # --- measure 6: calibration at the abstention boundary ---
+    # Separates "valid and right" from "valid and wrong". The false-assurance
+    # rate, not the schema rate, is what decides cheap-gate fitness.
+    counts = {"correct": 0, "false_assurance": 0, "over_abstained": 0, "malformed": 0}
+    n_answerable = sum(1 for c in CALIBRATION_CASES if c["answerable"])
+    n_unanswerable = len(CALIBRATION_CASES) - n_answerable
+    abstained_on_unanswerable = 0
+    for case in CALIBRATION_CASES:
+        try:
+            txt, _p, _g, _t = _run_prompt(
+                model, tokenizer, case["messages"], max_tokens=256, chat_kwargs=ck
+            )
+            outcome = _grade_calibration(case, txt)
+        except Exception as e:
+            txt = f"<error: {type(e).__name__}: {e}>"
+            outcome = "malformed"
+        res.calibration[case["name"]] = outcome
+        counts[outcome] += 1
+        if not case["answerable"] and outcome == "correct":
+            abstained_on_unanswerable += 1
+        samples_out.append(
+            f"[{res.id}] calibration/{case['name']} "
+            f"({'answerable' if case['answerable'] else 'UNANSWERABLE'}) -> {outcome.upper()}\n{txt}\n"
+        )
+
+    total = len(CALIBRATION_CASES)
+    res.calibration_stats = {
+        "total_cases": total,
+        "correct": counts["correct"],
+        # Headline. Schema-valid emissions that were wrong or unwarranted.
+        "false_assurance": counts["false_assurance"],
+        "false_assurance_rate": round(counts["false_assurance"] / total, 3) if total else None,
+        # Did it fail closed when it should have? 1.0 is the bar for a gate.
+        "abstention_recall": (
+            round(abstained_on_unanswerable / n_unanswerable, 3) if n_unanswerable else None
+        ),
+        # The opposite error: refusing to answer something the input settled.
+        "over_abstention_rate": (
+            round(counts["over_abstained"] / n_answerable, 3) if n_answerable else None
+        ),
+        # Couldn't even hold the envelope contract -- a separate, more visible failure.
+        "malformed_rate": round(counts["malformed"] / total, 3) if total else None,
+    }
+
     # --- quant-degradation sanity (UC-1 ontology + UC-3 grounded QA; captured for human review) ---
     for q in QUALITY_PROMPTS:
         try:
@@ -562,16 +810,23 @@ def render_markdown(results: List[ModelResult], contexts: List[int], stamp: str,
         "",
         "## Summary",
         "",
-        "| model | tier | license | load s | decode tok/s | peak GB | structured | notes |",
-        "|---|---|---|---|---|---|---|---|",
+        "| model | tier | license | load s | decode tok/s | peak GB | structured | false assur. | abstain recall | notes |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in results:
         if not r.loaded:
-            lines.append(f"| {r.id} | {r.tier} | {r.license} | — | — | — | — | LOAD FAIL: {r.load_error} |")
+            lines.append(
+                f"| {r.id} | {r.tier} | {r.license} | — | — | — | — | — | — | "
+                f"LOAD FAIL: {r.load_error} |"
+            )
             continue
+        cs = r.calibration_stats or {}
+        fa = cs.get("false_assurance_rate")
+        ar = cs.get("abstention_recall")
         lines.append(
             f"| {r.id} | {r.tier} | {r.license} | {r.load_seconds} | "
-            f"{r.decode_tps or '—'} | {r.peak_memory_gb or '—'} | {r.structured_score or '—'} | |"
+            f"{r.decode_tps or '—'} | {r.peak_memory_gb or '—'} | {r.structured_score or '—'} | "
+            f"{fa if fa is not None else '—'} | {ar if ar is not None else '—'} | |"
         )
     # prefill table = UC-1 feasibility curve: prefill tok/s / peak GB / did synthesis still work
     lines += [
@@ -609,6 +864,38 @@ def render_markdown(results: List[ModelResult], contexts: List[int], stamp: str,
             continue
         cells = ["✓" if r.structured.get(n) else "✗" for n in case_names]
         lines.append(f"| {r.id} | " + " | ".join(cells) + " |")
+    # calibration detail — measure 6
+    lines += [
+        "",
+        "## Calibration at the abstention boundary (false-assurance probe)",
+        "",
+        "Three of these cases are **unanswerable by construction** — the input does not "
+        "contain what is asked for. On those, any confident `status:ok` is fabrication, "
+        "however well formed. `correct` on an unanswerable case means the model said "
+        "`insufficient`.",
+        "",
+        "Outcomes: `correct` · `false_assurance` (valid but wrong/unwarranted) · "
+        "`over_abstained` (refused something the input settled) · `malformed` (broke the envelope).",
+        "",
+    ]
+    cal_names = [c["name"] for c in CALIBRATION_CASES]
+    lines += ["| model | " + " | ".join(cal_names) + " | FA rate | abstain recall |",
+              "|---|" + "---|" * (len(cal_names) + 2)]
+    _MARK = {
+        "correct": "✓",
+        "false_assurance": "**FA**",
+        "over_abstained": "over",
+        "malformed": "malf",
+    }
+    for r in results:
+        if not r.loaded:
+            continue
+        cells = [_MARK.get(r.calibration.get(n, ""), "—") for n in cal_names]
+        cs = r.calibration_stats or {}
+        cells.append(str(cs.get("false_assurance_rate", "—")))
+        cells.append(str(cs.get("abstention_recall", "—")))
+        lines.append(f"| {r.id} | " + " | ".join(cells) + " |")
+
     lines += [
         "",
         "## Reading the results (ZeroPoint routing implications)",
@@ -620,6 +907,17 @@ def render_markdown(results: List[ModelResult], contexts: List[int], stamp: str,
         "- **structured/tool (incl. uc1_synthesis)** — a model that can't hold this is not a "
         "Regent-emission candidate, regardless of speed.",
         "- **peak GB** — headroom against the ~48–56GB budget; watch it climb with context (KV cache).",
+        "- **false-assurance rate** — schema-valid emissions that were wrong or unwarranted. "
+        "This, not the structured score, decides cheap-gate fitness. A model that emits tidy "
+        "JSON containing an invented section number is worse than one that emits nothing, "
+        "because the parser accepts it and the error travels downstream looking verified.",
+        "- **abstention recall** — of the cases that were unanswerable, how many did it refuse? "
+        "**1.0 is the bar for a gate.** Anything less means some fraction of confident outputs "
+        "are fabricated and you cannot tell which. A gate that fails closed under doubt is "
+        "usable at 90% accuracy; one that confidently mislabels is unusable at 97%.",
+        "- **over-abstention** — the opposite error. High over-abstention with high recall is a "
+        "*tunable* model (loosen the prompt). High false assurance is not tunable; it is "
+        "disqualifying for the gate role, whatever the tok/s says.",
         "- **samples file (uc1_ontology + uc3_grounded_qa)** — read against each task's EXPECT line; "
         "a wrong number or fabricated section on UC-3 is int4 grounded-retrieval degradation, quietly.",
     ]

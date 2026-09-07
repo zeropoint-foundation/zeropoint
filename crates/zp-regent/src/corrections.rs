@@ -144,8 +144,8 @@ impl StandingCorrection {
     /// Format: `cognitive:correction:standing {json}` (single space separator).
     pub fn to_event_string(&self) -> String {
         // Unwrap is fine — the struct only contains serializable primitives.
-        let json = serde_json::to_string(self)
-            .expect("StandingCorrection JSON serialization cannot fail");
+        let json =
+            serde_json::to_string(self).expect("StandingCorrection JSON serialization cannot fail");
         format!("{} {}", EVENT_PREFIX_STANDING, json)
     }
 
@@ -276,8 +276,7 @@ impl CorrectionIndex {
         }
 
         // Convert revocations into a set for O(1) lookup.
-        let revoked_set: std::collections::HashSet<String> =
-            revocations.into_iter().collect();
+        let revoked_set: std::collections::HashSet<String> = revocations.into_iter().collect();
 
         // Apply supersession, revocation, and expiry filters.
         let mut active: Vec<ActiveStandingCorrection> = Vec::new();
@@ -341,7 +340,11 @@ impl CorrectionIndex {
 
     /// Corrections matching the given cognitive-context class and output surface.
     /// Empty-scope corrections match all contexts (wildcard semantics).
-    pub fn matching_scope(&self, applies_to: &str, surface: &str) -> Vec<&ActiveStandingCorrection> {
+    pub fn matching_scope(
+        &self,
+        applies_to: &str,
+        surface: &str,
+    ) -> Vec<&ActiveStandingCorrection> {
         self.active
             .iter()
             .filter(|c| c.correction.scope.matches(applies_to, surface))
@@ -477,7 +480,10 @@ mod tests {
             mock_entry(&revocation_event, now - chrono::Duration::minutes(30)),
         ];
         let index = CorrectionIndex::build(&entries, now);
-        assert!(index.is_empty(), "revoked correction must not appear in index");
+        assert!(
+            index.is_empty(),
+            "revoked correction must not appear in index"
+        );
     }
 
     #[test]
@@ -488,7 +494,10 @@ mod tests {
 
         let entries = vec![mock_entry(&c1.to_event_string(), c1.issued_at)];
         let index = CorrectionIndex::build(&entries, now);
-        assert!(index.is_empty(), "expired correction must not appear in index");
+        assert!(
+            index.is_empty(),
+            "expired correction must not appear in index"
+        );
     }
 
     #[test]
@@ -548,8 +557,7 @@ mod tests {
         let index = CorrectionIndex::build(&entries, now);
 
         // Both should match the specific scope the narrow correction targets.
-        let matches_narrow_scope =
-            index.matching_scope("regent.narration.operator_facing", "chat");
+        let matches_narrow_scope = index.matching_scope("regent.narration.operator_facing", "chat");
         assert_eq!(matches_narrow_scope.len(), 2);
 
         // Only the broad correction should match a different specific scope.
@@ -587,8 +595,14 @@ mod tests {
     fn non_correction_entries_are_ignored() {
         let now = Utc::now();
         let entries = vec![
-            mock_entry("regent:tool:completed:something", now - chrono::Duration::hours(1)),
-            mock_entry("officer:std:integrity:chain_link_broken", now - chrono::Duration::hours(1)),
+            mock_entry(
+                "regent:tool:completed:something",
+                now - chrono::Duration::hours(1),
+            ),
+            mock_entry(
+                "officer:std:integrity:chain_link_broken",
+                now - chrono::Duration::hours(1),
+            ),
         ];
         let index = CorrectionIndex::build(&entries, now);
         assert!(index.is_empty());

@@ -86,7 +86,9 @@ fn prereq(store: &Arc<Mutex<AuditStore>>, agent_id: &str, tool_name: &str) -> Op
         return Some("no_valid_delegation");
     }
 
-    let tool_action = ActionType::ToolCall { name: tool_name.to_string() };
+    let tool_action = ActionType::ToolCall {
+        name: tool_name.to_string(),
+    };
     if live.iter().any(|g| g.matches_action(&tool_action)) {
         None
     } else {
@@ -115,9 +117,21 @@ fn claim4_wildcard_grant_allows_any_tool() {
 
     emit_grant(&store, "artemis", &grant);
 
-    assert_eq!(prereq(&store, "artemis", "bash"), None, "wildcard: bash allowed");
-    assert_eq!(prereq(&store, "artemis", "read"), None, "wildcard: read allowed");
-    assert_eq!(prereq(&store, "artemis", "slack.send_message"), None, "wildcard: slack allowed");
+    assert_eq!(
+        prereq(&store, "artemis", "bash"),
+        None,
+        "wildcard: bash allowed"
+    );
+    assert_eq!(
+        prereq(&store, "artemis", "read"),
+        None,
+        "wildcard: read allowed"
+    );
+    assert_eq!(
+        prereq(&store, "artemis", "slack.send_message"),
+        None,
+        "wildcard: slack allowed"
+    );
 }
 
 /// Narrow grant (`tools: ["read"]`) allows only the listed tool.
@@ -197,6 +211,12 @@ fn claim4_multi_tool_grant_enforces_exact_set() {
 
     assert_eq!(prereq(&store, "artemis", "read"), None);
     assert_eq!(prereq(&store, "artemis", "write"), None);
-    assert_eq!(prereq(&store, "artemis", "bash"), Some("capability_scope_exceeded"));
-    assert_eq!(prereq(&store, "artemis", "computer"), Some("capability_scope_exceeded"));
+    assert_eq!(
+        prereq(&store, "artemis", "bash"),
+        Some("capability_scope_exceeded")
+    );
+    assert_eq!(
+        prereq(&store, "artemis", "computer"),
+        Some("capability_scope_exceeded")
+    );
 }

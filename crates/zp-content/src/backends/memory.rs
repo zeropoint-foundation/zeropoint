@@ -28,9 +28,9 @@ impl ContentStore for MemoryBackend {
     async fn put(&self, content: &[u8], meta: ContentMeta) -> Result<ContentId, ContentError> {
         let id = ContentId::from_bytes(content);
         let mut store = self.inner.write().await;
-        store.entry(id.clone()).or_insert_with(|| {
-            (Bytes::copy_from_slice(content), meta)
-        });
+        store
+            .entry(id.clone())
+            .or_insert_with(|| (Bytes::copy_from_slice(content), meta));
         Ok(id)
     }
 

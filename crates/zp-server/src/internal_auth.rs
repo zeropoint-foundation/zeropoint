@@ -47,10 +47,18 @@ impl fmt::Display for InternalAuthError {
             InternalAuthError::Expired => write!(f, "Internal token expired"),
             InternalAuthError::NonceReused => write!(f, "Internal token nonce reused (replay)"),
             InternalAuthError::ActionMismatch { expected, got } => {
-                write!(f, "Token action mismatch: expected '{}', got '{}'", expected, got)
+                write!(
+                    f,
+                    "Token action mismatch: expected '{}', got '{}'",
+                    expected, got
+                )
             }
             InternalAuthError::TargetMismatch { expected, got } => {
-                write!(f, "Token target mismatch: expected '{}', got '{}'", expected, got)
+                write!(
+                    f,
+                    "Token target mismatch: expected '{}', got '{}'",
+                    expected, got
+                )
             }
             InternalAuthError::BadSignature => write!(f, "Internal token signature invalid"),
             InternalAuthError::MalformedToken(e) => write!(f, "Malformed internal token: {}", e),
@@ -221,8 +229,11 @@ impl InternalAuthority {
 
 impl fmt::Debug for InternalAuthority {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "InternalAuthority {{ nonces_tracked: {} }}",
-            self.seen_nonces.lock().map(|s| s.len()).unwrap_or(0))
+        write!(
+            f,
+            "InternalAuthority {{ nonces_tracked: {} }}",
+            self.seen_nonces.lock().map(|s| s.len()).unwrap_or(0)
+        )
     }
 }
 

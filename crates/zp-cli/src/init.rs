@@ -298,7 +298,7 @@ port = 17010
 operator = "{}"
 
 [llm]
-# Enable LLM pipeline integration (IronClaw and other AI tools).
+# Enable LLM pipeline integration for governed AI tools.
 enabled = false
 
 [node]

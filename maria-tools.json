@@ -1,0 +1,64 @@
+[
+  {
+    "name": "corpus_search",
+    "description": "Search the ZeroPoint repository — the governed documents under docs/ and the Rust sources under crates/ — and return matching lines with file paths and line numbers. Use this whenever a claim about ZeroPoint could be checked instead of recalled: what a principle actually says, whether a mechanism exists, what a receipt family is named, whether a document contradicts what was just said. Prefer this over answering from the knowledge base when the question is about what the code or spec currently says, because the knowledge base is a snapshot and the repository is the present state. Quote the file and line when you report what you found.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Literal text to search for, e.g. 'context_signature' or 'the trust corpus grows from precedent'. Case-insensitive unless the query contains capitals."
+        },
+        "max_results": {
+          "type": "integer",
+          "description": "Maximum matches to return. Default 12, maximum 40."
+        },
+        "regex": {
+          "type": "boolean",
+          "description": "Treat the query as a regular expression rather than literal text. Default false."
+        }
+      },
+      "required": ["query"]
+    },
+    "origin": "llm",
+    "trigger_type": "in_call",
+    "on_call": "generate_filler",
+    "on_resolve": "generate_response",
+    "delivery": { "app_message": true },
+    "static_filler": null
+  },
+  {
+    "name": "chain_tail",
+    "description": "Read the most recent entries from ZeroPoint's audit chain, newest first, optionally filtered by event text. Use this when the question is about what the system has actually done rather than what it is designed to do: whether a mechanism has ever fired, what happened in the last session, whether a receipt family has any emitter behind it. Each entry reports its actor, policy decision, and whether it is signed. The response also reports the total live and archived entry counts and which database file was read — say so if that count looks implausibly small, because a stale development database will answer confidently and wrongly.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "description": "How many entries to return, newest first. Default 20, maximum 100."
+        },
+        "event_type": {
+          "type": "string",
+          "description": "Optional substring filter on the event text, e.g. 'precedent', 'approval', 'officer:sen', 'cognitive:'. Omit to see everything."
+        }
+      }
+    },
+    "origin": "llm",
+    "trigger_type": "in_call",
+    "on_call": "generate_filler",
+    "on_resolve": "generate_response",
+    "delivery": { "app_message": true },
+    "static_filler": null
+  },
+  {
+    "name": "precedent_list",
+    "description": "List the Regent's current autonomous envelope: every call it may now make without asking, established by operator-signed precedent per KEEL section III.10. Takes no arguments. Use this when the conversation turns to what the system is presently allowed to do on its own, or before suggesting a change to that boundary — the envelope is a live fact, and it narrows as well as widens.",
+    "parameters": { "type": "object", "properties": {} },
+    "origin": "llm",
+    "trigger_type": "in_call",
+    "on_call": "generate_filler",
+    "on_resolve": "generate_response",
+    "delivery": { "app_message": true },
+    "static_filler": null
+  }
+]

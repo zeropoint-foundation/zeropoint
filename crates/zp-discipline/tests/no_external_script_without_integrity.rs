@@ -94,8 +94,7 @@ fn external_resources_must_carry_integrity_attribute() {
     );
 
     // External <script src="https://..."> — captures any quoting style.
-    let script_re =
-        Regex::new(r#"<script\b[^>]*\bsrc\s*=\s*["'](https?://[^"']+)["']"#).unwrap();
+    let script_re = Regex::new(r#"<script\b[^>]*\bsrc\s*=\s*["'](https?://[^"']+)["']"#).unwrap();
 
     // External <link ... href="https://..."> — we'll filter for
     // rel="stylesheet" inside the loop because rel and href can

@@ -416,32 +416,91 @@ fn metadata_variant_name(cm: &ClaimMetadata) -> &'static str {
 fn metadata_matches_type(rt: ReceiptType, cm: &ClaimMetadata) -> bool {
     matches!(
         (rt, cm),
-        (ReceiptType::ObservationClaim, ClaimMetadata::Observation { .. })
-            | (ReceiptType::PolicyClaim, ClaimMetadata::Policy { .. })
-            | (ReceiptType::AuthorizationClaim, ClaimMetadata::Authorization { .. })
-            | (ReceiptType::MemoryPromotionClaim, ClaimMetadata::MemoryPromotion { .. })
-            | (ReceiptType::DelegationClaim, ClaimMetadata::Delegation { .. })
+        (
+            ReceiptType::ObservationClaim,
+            ClaimMetadata::Observation { .. }
+        ) | (ReceiptType::PolicyClaim, ClaimMetadata::Policy { .. })
+            | (
+                ReceiptType::AuthorizationClaim,
+                ClaimMetadata::Authorization { .. }
+            )
+            | (
+                ReceiptType::MemoryPromotionClaim,
+                ClaimMetadata::MemoryPromotion { .. }
+            )
+            | (
+                ReceiptType::DelegationClaim,
+                ClaimMetadata::Delegation { .. }
+            )
             | (
                 ReceiptType::NarrativeSynthesisClaim,
                 ClaimMetadata::NarrativeSynthesis { .. }
             )
-            | (ReceiptType::RevocationClaim, ClaimMetadata::Revocation { .. })
-            | (ReceiptType::ReflectionClaim, ClaimMetadata::Reflection { .. })
-            | (ReceiptType::ConfigurationClaim, ClaimMetadata::Configuration { .. })
-            | (ReceiptType::CanonicalizedClaim, ClaimMetadata::Canonicalization { .. })
+            | (
+                ReceiptType::RevocationClaim,
+                ClaimMetadata::Revocation { .. }
+            )
+            | (
+                ReceiptType::ReflectionClaim,
+                ClaimMetadata::Reflection { .. }
+            )
+            | (
+                ReceiptType::ConfigurationClaim,
+                ClaimMetadata::Configuration { .. }
+            )
+            | (
+                ReceiptType::CanonicalizedClaim,
+                ClaimMetadata::Canonicalization { .. }
+            )
             | (ReceiptType::Execution, ClaimMetadata::Lifecycle { .. })
-            | (ReceiptType::NodeDelegationAccepted, ClaimMetadata::NodeDelegationAccepted { .. })
-            | (ReceiptType::NodeDelegationGranted, ClaimMetadata::NodeDelegationGranted { .. })
-            | (ReceiptType::NodeRoleTransition, ClaimMetadata::NodeRoleTransition { .. })
-            | (ReceiptType::FleetMembershipGranted, ClaimMetadata::FleetMembershipGranted { .. })
-            | (ReceiptType::FleetMembershipAccepted, ClaimMetadata::FleetMembershipAccepted { .. })
-            | (ReceiptType::FinancialCapabilityGrant, ClaimMetadata::FinancialCapability { .. })
-            | (ReceiptType::ExternalAnchor, ClaimMetadata::ExternalAnchor { .. })
-            | (ReceiptType::PricingRefreshClaim, ClaimMetadata::PricingRefresh { .. })
-            | (ReceiptType::ArtifactSignedClaim, ClaimMetadata::ArtifactSigned { .. })
-            | (ReceiptType::MemoryIndexed, ClaimMetadata::MemoryIndexed { .. })
-            | (ReceiptType::MemoryRetrievedByAgent, ClaimMetadata::MemoryRetrievedByAgent { .. })
-            | (ReceiptType::MemoryRevokedFromIndex, ClaimMetadata::MemoryRevokedFromIndex { .. })
+            | (
+                ReceiptType::NodeDelegationAccepted,
+                ClaimMetadata::NodeDelegationAccepted { .. }
+            )
+            | (
+                ReceiptType::NodeDelegationGranted,
+                ClaimMetadata::NodeDelegationGranted { .. }
+            )
+            | (
+                ReceiptType::NodeRoleTransition,
+                ClaimMetadata::NodeRoleTransition { .. }
+            )
+            | (
+                ReceiptType::FleetMembershipGranted,
+                ClaimMetadata::FleetMembershipGranted { .. }
+            )
+            | (
+                ReceiptType::FleetMembershipAccepted,
+                ClaimMetadata::FleetMembershipAccepted { .. }
+            )
+            | (
+                ReceiptType::FinancialCapabilityGrant,
+                ClaimMetadata::FinancialCapability { .. }
+            )
+            | (
+                ReceiptType::ExternalAnchor,
+                ClaimMetadata::ExternalAnchor { .. }
+            )
+            | (
+                ReceiptType::PricingRefreshClaim,
+                ClaimMetadata::PricingRefresh { .. }
+            )
+            | (
+                ReceiptType::ArtifactSignedClaim,
+                ClaimMetadata::ArtifactSigned { .. }
+            )
+            | (
+                ReceiptType::MemoryIndexed,
+                ClaimMetadata::MemoryIndexed { .. }
+            )
+            | (
+                ReceiptType::MemoryRetrievedByAgent,
+                ClaimMetadata::MemoryRetrievedByAgent { .. }
+            )
+            | (
+                ReceiptType::MemoryRevokedFromIndex,
+                ClaimMetadata::MemoryRevokedFromIndex { .. }
+            )
             | (
                 ReceiptType::ModelPreferenceSelected,
                 ClaimMetadata::ModelPreferenceSelected { .. },
@@ -455,12 +514,30 @@ fn metadata_matches_type(rt: ReceiptType, cm: &ClaimMetadata) -> bool {
                 ReceiptType::PreferenceLlmPolicySet,
                 ClaimMetadata::PreferenceLlmPolicySet { .. },
             )
-            | (ReceiptType::InferenceDispatched, ClaimMetadata::InferenceDispatched { .. })
-            | (ReceiptType::InferenceCompleted, ClaimMetadata::InferenceCompleted { .. })
-            | (ReceiptType::InferenceFailed, ClaimMetadata::InferenceFailed { .. })
-            | (ReceiptType::ModelRegistered, ClaimMetadata::ModelRegistered { .. })
-            | (ReceiptType::ModelCapabilityUpdated, ClaimMetadata::ModelCapabilityUpdated { .. })
-            | (ReceiptType::InferenceRouted, ClaimMetadata::InferenceRouted { .. })
+            | (
+                ReceiptType::InferenceDispatched,
+                ClaimMetadata::InferenceDispatched { .. }
+            )
+            | (
+                ReceiptType::InferenceCompleted,
+                ClaimMetadata::InferenceCompleted { .. }
+            )
+            | (
+                ReceiptType::InferenceFailed,
+                ClaimMetadata::InferenceFailed { .. }
+            )
+            | (
+                ReceiptType::ModelRegistered,
+                ClaimMetadata::ModelRegistered { .. }
+            )
+            | (
+                ReceiptType::ModelCapabilityUpdated,
+                ClaimMetadata::ModelCapabilityUpdated { .. }
+            )
+            | (
+                ReceiptType::InferenceRouted,
+                ClaimMetadata::InferenceRouted { .. }
+            )
     )
 }
 

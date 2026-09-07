@@ -14,13 +14,20 @@ use chrono::Utc;
 use serde_json::json;
 use tracing::debug;
 
+use crate::chain_reads::{classify_delegation, classify_gate, DelegationKind, GateOutcome};
 use crate::finding::{Finding, Severity};
 use crate::officer::{ChainReader, Officer, VaultKeyLister};
-use zp_core::{AuditAction, AuditEntry};
+use zp_core::AuditEntry;
 
 /// The Sentinel officer — watches credential lifecycle, auth integrity,
 /// and access anomalies.
 pub struct Sentinel;
+
+impl Default for Sentinel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl Sentinel {
     pub fn new() -> Self {
@@ -45,13 +52,16 @@ impl Sentinel {
         let mut denied_by_actor: HashMap<String, usize> = HashMap::new();
 
         for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if event.starts_with("gate:denied:") {
-                    denied_entries.push(entry);
-                    let actor = actor_label(&entry.actor);
-                    *denied_by_actor.entry(actor).or_insert(0) += 1;
-                } else if event.starts_with("gate:allowed:") {
-                    allowed_count += 1;
+            if let Some(ev) = classify_gate(entry) {
+                match ev.outcome {
+                    GateOutcome::Denied => {
+                        denied_entries.push(entry);
+                        let actor = actor_label(&entry.actor);
+                        *denied_by_actor.entry(actor).or_insert(0) += 1;
+                    }
+                    GateOutcome::Allowed => {
+                        allowed_count += 1;
+                    }
                 }
             }
         }
@@ -156,15 +166,20 @@ impl Sentinel {
         let mut total_grants = 0usize;
 
         for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if let Some(subject) = event.strip_prefix("delegation:granted:") {
-                    *active_grants.entry(subject.to_string()).or_insert(0) += 1;
-                    total_grants += 1;
-                } else if let Some(subject) = event.strip_prefix("delegation:revoked:") {
-                    active_grants.remove(subject);
-                    revocations += 1;
-                } else if let Some(subject) = event.strip_prefix("delegation:expired:") {
-                    active_grants.remove(subject);
+            if let Some(ev) = classify_delegation(entry) {
+                match ev.kind {
+                    DelegationKind::Granted => {
+                        *active_grants.entry(ev.target).or_insert(0) += 1;
+                        total_grants += 1;
+                    }
+                    DelegationKind::Revoked => {
+                        active_grants.remove(&ev.target);
+                        revocations += 1;
+                    }
+                    DelegationKind::Expired => {
+                        active_grants.remove(&ev.target);
+                    }
+                    DelegationKind::Renewed => {}
                 }
             }
         }
@@ -237,15 +252,15 @@ impl Sentinel {
         // Check for plaintext secret patterns in key names (beyond Steward's
         // suspicious_patterns — Sentinel looks for full credential values)
         let credential_patterns = [
-            "sk-ant-",  // Anthropic API key
-            "sk-proj-", // OpenAI project API key
-            "ghp_",     // GitHub personal access token
-            "gho_",     // GitHub OAuth token
-            "glpat-",   // GitLab personal access token
-            "xoxb-",    // Slack bot token
-            "xoxp-",    // Slack user token
-            "AKIA",     // AWS access key
-            "eyJ",      // JWT prefix (base64 of {"...)
+            "sk-ant-",    // Anthropic API key
+            "sk-proj-",   // OpenAI project API key
+            "ghp_",       // GitHub personal access token
+            "gho_",       // GitHub OAuth token
+            "glpat-",     // GitLab personal access token
+            "xoxb-",      // Slack bot token
+            "xoxp-",      // Slack user token
+            "AKIA",       // AWS access key
+            "eyJ",        // JWT prefix (base64 of {"...)
             "-----BEGIN", // PEM key material
         ];
 
@@ -401,13 +416,30 @@ impl Sentinel {
 
         // Credential class — generic secret/token/key/password field names.
         const CREDENTIAL_NAMES: &[&str] = &[
-            "API_KEY", "APIKEY", "API_TOKEN", "APITOKEN", "API_SECRET",
-            "TOKEN", "AUTH_TOKEN", "ACCESS_TOKEN", "REFRESH_TOKEN",
-            "SECRET", "SECRET_KEY", "APP_SECRET", "APP_KEY",
-            "PASSWORD", "PASS", "PWD",
-            "KEY", "PRIVATE_KEY", "PUBLIC_KEY",
-            "CLIENT_SECRET", "SIGNING_KEY", "ENCRYPTION_KEY",
-            "WEBHOOK_SECRET", "SESSION_SECRET",
+            "API_KEY",
+            "APIKEY",
+            "API_TOKEN",
+            "APITOKEN",
+            "API_SECRET",
+            "TOKEN",
+            "AUTH_TOKEN",
+            "ACCESS_TOKEN",
+            "REFRESH_TOKEN",
+            "SECRET",
+            "SECRET_KEY",
+            "APP_SECRET",
+            "APP_KEY",
+            "PASSWORD",
+            "PASS",
+            "PWD",
+            "KEY",
+            "PRIVATE_KEY",
+            "PUBLIC_KEY",
+            "CLIENT_SECRET",
+            "SIGNING_KEY",
+            "ENCRYPTION_KEY",
+            "WEBHOOK_SECRET",
+            "SESSION_SECRET",
         ];
         if CREDENTIAL_NAMES.contains(&upper.as_str()) {
             return Some("credential");
@@ -415,10 +447,21 @@ impl Sentinel {
 
         // Endpoint class — network target field names.
         const ENDPOINT_NAMES: &[&str] = &[
-            "URL", "API_URL", "BASE_URL", "ENDPOINT", "API_ENDPOINT",
-            "HOST", "HOSTNAME", "SERVER", "SERVER_URL",
-            "PORT", "API_PORT",
-            "WEBHOOK_URL", "CALLBACK_URL", "REDIRECT_URL", "REDIRECT_URI",
+            "URL",
+            "API_URL",
+            "BASE_URL",
+            "ENDPOINT",
+            "API_ENDPOINT",
+            "HOST",
+            "HOSTNAME",
+            "SERVER",
+            "SERVER_URL",
+            "PORT",
+            "API_PORT",
+            "WEBHOOK_URL",
+            "CALLBACK_URL",
+            "REDIRECT_URL",
+            "REDIRECT_URI",
         ];
         if ENDPOINT_NAMES.contains(&upper.as_str()) {
             return Some("endpoint");
@@ -426,11 +469,22 @@ impl Sentinel {
 
         // Identity class — user/account/client identifiers.
         const IDENTITY_NAMES: &[&str] = &[
-            "USER", "USERNAME", "USER_NAME", "USER_ID", "USERID",
-            "ACCOUNT", "ACCOUNT_ID", "ACCOUNT_NAME",
-            "CLIENT_ID", "APP_ID", "APPLICATION_ID",
-            "TENANT_ID", "ORG_ID", "ORGANIZATION_ID",
-            "EMAIL", "LOGIN",
+            "USER",
+            "USERNAME",
+            "USER_NAME",
+            "USER_ID",
+            "USERID",
+            "ACCOUNT",
+            "ACCOUNT_ID",
+            "ACCOUNT_NAME",
+            "CLIENT_ID",
+            "APP_ID",
+            "APPLICATION_ID",
+            "TENANT_ID",
+            "ORG_ID",
+            "ORGANIZATION_ID",
+            "EMAIL",
+            "LOGIN",
         ];
         if IDENTITY_NAMES.contains(&upper.as_str()) {
             return Some("identity");
@@ -438,11 +492,22 @@ impl Sentinel {
 
         // Database class — DB connection field names.
         const DATABASE_NAMES: &[&str] = &[
-            "DATABASE_URL", "DB_URL", "DB_HOST", "DB_PORT",
-            "DB_NAME", "DB_USER", "DB_USERNAME", "DB_PASS", "DB_PASSWORD",
-            "DATABASE_NAME", "DATABASE_HOST", "DATABASE_PORT",
-            "DATABASE_USER", "DATABASE_PASSWORD",
-            "CONNECTION_STRING", "CONNECTION_URL",
+            "DATABASE_URL",
+            "DB_URL",
+            "DB_HOST",
+            "DB_PORT",
+            "DB_NAME",
+            "DB_USER",
+            "DB_USERNAME",
+            "DB_PASS",
+            "DB_PASSWORD",
+            "DATABASE_NAME",
+            "DATABASE_HOST",
+            "DATABASE_PORT",
+            "DATABASE_USER",
+            "DATABASE_PASSWORD",
+            "CONNECTION_STRING",
+            "CONNECTION_URL",
         ];
         if DATABASE_NAMES.contains(&upper.as_str()) {
             return Some("database");
@@ -450,9 +515,14 @@ impl Sentinel {
 
         // Region class — cloud region/zone/account fields.
         const REGION_NAMES: &[&str] = &[
-            "REGION", "ZONE", "AVAILABILITY_ZONE",
-            "AWS_REGION", "GCP_REGION", "AZURE_REGION",
-            "DATACENTER", "LOCATION",
+            "REGION",
+            "ZONE",
+            "AVAILABILITY_ZONE",
+            "AWS_REGION",
+            "GCP_REGION",
+            "AZURE_REGION",
+            "DATACENTER",
+            "LOCATION",
         ];
         if REGION_NAMES.contains(&upper.as_str()) {
             return Some("region");
@@ -460,10 +530,18 @@ impl Sentinel {
 
         // Timing class — timeout/retry/cadence field names.
         const TIMING_NAMES: &[&str] = &[
-            "TIMEOUT", "REQUEST_TIMEOUT", "READ_TIMEOUT", "WRITE_TIMEOUT",
-            "CONNECT_TIMEOUT", "IDLE_TIMEOUT",
-            "RETRY", "MAX_RETRIES", "RETRY_COUNT",
-            "INTERVAL", "POLL_INTERVAL", "SWEEP_INTERVAL",
+            "TIMEOUT",
+            "REQUEST_TIMEOUT",
+            "READ_TIMEOUT",
+            "WRITE_TIMEOUT",
+            "CONNECT_TIMEOUT",
+            "IDLE_TIMEOUT",
+            "RETRY",
+            "MAX_RETRIES",
+            "RETRY_COUNT",
+            "INTERVAL",
+            "POLL_INTERVAL",
+            "SWEEP_INTERVAL",
         ];
         if TIMING_NAMES.contains(&upper.as_str()) {
             return Some("timing");
@@ -528,6 +606,15 @@ impl Sentinel {
             // AI / agent apps
             ("Claude.app/", "ai_client_helper"),
             ("ChatGPT.app/", "ai_client_helper"),
+            // Local inference backends. Ollama spawns a fresh `llama-server`
+            // per model load, each on a random high port bound to 127.0.0.1,
+            // so it is a recurring source of genuinely-new listeners rather
+            // than a one-off — edge-triggering suppresses repeats but cannot
+            // suppress a real new process. Classified benign because it is the
+            // operator's own inference backend; the substrate routes its
+            // cognition through it.
+            ("Ollama.app/", "inference_backend"),
+            ("/llama-server", "inference_backend"),
             // Productivity
             ("Notion.app/", "productivity_helper"),
             ("Obsidian.app/", "productivity_helper"),
@@ -552,14 +639,33 @@ impl Sentinel {
             ("locationd", "system_daemon"),
         ];
 
+        // Case-insensitive. Bundle directory casing is not something the
+        // classifier gets to assume: Claude Code ships its helper at
+        //
+        //   …/Application Support/Claude/claude-code/2.1.219/claude.app/…
+        //
+        // — capitalised as a support directory, lowercase as the bundle. The
+        // keyword `Claude.app/` matched neither, so every Claude Code start was
+        // logged as a security incident. Found 2026-08-06, in the first receipt
+        // payload after officer findings began carrying `binary_path` at all;
+        // for as long as the classifier had existed the evidence needed to see
+        // this was being computed and discarded.
+        //
+        // Lowercasing per call rather than at compile time: this runs once per
+        // newly discovered listener, so the allocation is irrelevant next to
+        // the `proc_pidpath` syscall that produced the path.
+        let path_lc = binary_path.to_lowercase();
+        let name_lc = process_name.to_lowercase();
+
         // Check binary_path first (most reliable — canonical bundle location)
         for (keyword, class) in APPLICATION_KEYWORDS {
-            if binary_path.contains(keyword) {
+            if path_lc.contains(&keyword.to_lowercase()) {
                 return Some(class);
             }
         }
         for (keyword, class) in SYSTEM_DAEMON_KEYWORDS {
-            if binary_path.contains(keyword) || process_name.contains(keyword) {
+            let k = keyword.to_lowercase();
+            if path_lc.contains(&k) || name_lc.contains(&k) {
                 return Some(class);
             }
         }
@@ -609,9 +715,7 @@ impl Sentinel {
             .get("user")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
-        let parent_name = context
-            .get("parent_name")
-            .and_then(|v| v.as_str());
+        let parent_name = context.get("parent_name").and_then(|v| v.as_str());
 
         // Stage 1: classify against known-benign application classes.
         // Known-benign listeners emit low-severity `unregistered_known_app`
@@ -653,11 +757,14 @@ impl Sentinel {
 
         // Escalate if binary is outside standard paths
         let standard_prefixes = [
-            "/usr/", "/bin/", "/sbin/", "/System/",
-            "/Applications/", "/Library/",
+            "/usr/",
+            "/bin/",
+            "/sbin/",
+            "/System/",
+            "/Applications/",
+            "/Library/",
         ];
-        if binary_path != "unknown"
-            && !standard_prefixes.iter().any(|p| binary_path.starts_with(p))
+        if binary_path != "unknown" && !standard_prefixes.iter().any(|p| binary_path.starts_with(p))
         {
             risk_factors.push(format!("non-standard binary path: {binary_path}"));
         }
@@ -680,12 +787,18 @@ impl Sentinel {
             severity = std::cmp::max(severity, Severity::Error);
             risk_factors.push(format!(
                 "network-exposed on port(s): {}",
-                exposed_ports.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(", ")
+                exposed_ports
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ));
         }
 
         // Unknown parent lineage
-        let known_parents = ["launchd", "zsh", "bash", "fish", "sh", "login", "sshd", "tmux", "screen"];
+        let known_parents = [
+            "launchd", "zsh", "bash", "fish", "sh", "login", "sshd", "tmux", "screen",
+        ];
         if let Some(parent) = parent_name {
             if !known_parents.iter().any(|kp| parent.contains(kp)) {
                 risk_factors.push(format!("unusual parent: {parent}"));
@@ -729,7 +842,9 @@ impl Sentinel {
         };
 
         let mut findings = Vec::new();
-        let secret_patterns = ["sk-ant-", "sk-proj-", "ghp_", "gho_", "xoxb-", "xoxp-", "AKIA"];
+        let secret_patterns = [
+            "sk-ant-", "sk-proj-", "ghp_", "gho_", "xoxb-", "xoxp-", "AKIA",
+        ];
 
         for entry in &entries {
             // Check the receipt detail (serialized metadata) for secrets
@@ -744,8 +859,7 @@ impl Sentinel {
                             severity: Severity::Critical,
                             summary: format!(
                                 "Possible plaintext secret (pattern '{}') found in chain entry {}",
-                                pattern,
-                                entry.id.0
+                                pattern, entry.id.0
                             ),
                             detail: json!({
                                 "entry_id": entry.id.0.to_string(),
@@ -784,18 +898,10 @@ impl Officer for Sentinel {
     }
 
     fn watch_patterns(&self) -> &[&'static str] {
-        &[
-            "gate:denied:",
-            "delegation:revoked:",
-            "delegation:expired:",
-        ]
+        &["gate:denied:", "delegation:revoked:", "delegation:expired:"]
     }
 
-    fn sweep(
-        &self,
-        chain: &ChainReader<'_>,
-        vault_keys: &VaultKeyLister,
-    ) -> Vec<Finding> {
+    fn sweep(&self, chain: &ChainReader<'_>, vault_keys: &VaultKeyLister) -> Vec<Finding> {
         debug!("Sentinel sweep starting");
 
         let mut findings = Vec::new();
@@ -805,10 +911,7 @@ impl Officer for Sentinel {
         findings.extend(self.check_credential_hygiene(vault_keys));
         findings.extend(self.check_chain_secret_leaks(chain));
 
-        debug!(
-            findings = findings.len(),
-            "Sentinel sweep complete"
-        );
+        debug!(findings = findings.len(), "Sentinel sweep complete");
 
         findings
     }
@@ -848,9 +951,9 @@ mod tests {
     #[test]
     fn sentinel_detects_credential_in_key_name() {
         let vault = VaultKeyLister::new(vec![
-            "tools/ironclaw/api_key".into(),
+            "tools/example-tool/api_key".into(),
             "providers/anthropic/sk-ant-api03-real-key-value".into(), // leaked credential
-            "tools/github/ghp_1234567890abcdef".into(),              // leaked GitHub token
+            "tools/github/ghp_1234567890abcdef".into(),               // leaked GitHub token
         ]);
 
         let sen = Sentinel::new();
@@ -873,8 +976,8 @@ mod tests {
         // Should emit Info-level `generic_config_field_name`, NOT Warning
         // `shadow_credential`.
         let vault = VaultKeyLister::new(vec![
-            "tools/ironclaw/API_KEY".into(),
-            "providers/tools/ironclaw/API_KEY".into(),
+            "tools/example-tool/API_KEY".into(),
+            "providers/tools/example-tool/API_KEY".into(),
         ]);
 
         let sen = Sentinel::new();
@@ -885,7 +988,11 @@ mod tests {
             .iter()
             .filter(|f| f.finding_type == "shadow_credential")
             .collect();
-        assert_eq!(shadows.len(), 0, "API_KEY should classify as generic, not shadow");
+        assert_eq!(
+            shadows.len(),
+            0,
+            "API_KEY should classify as generic, not shadow"
+        );
 
         // One generic_config_field_name at Info.
         let generic: Vec<_> = findings
@@ -965,8 +1072,8 @@ mod tests {
     fn sentinel_classifier_is_case_insensitive() {
         // Variable names come in mixed cases; classifier should uppercase-compare.
         let vault = VaultKeyLister::new(vec![
-            "tools/app_a/api_key".into(),  // lowercase
-            "tools/app_b/Api_Key".into(),  // mixed
+            "tools/app_a/api_key".into(), // lowercase
+            "tools/app_b/Api_Key".into(), // mixed
         ]);
 
         let sen = Sentinel::new();
@@ -1043,9 +1150,7 @@ mod tests {
         // A variable name appearing in only one namespace (even with multiple
         // paths) should not emit any finding — the check is namespace-diversity,
         // not path-count. Behavior preserved from pre-refactor.
-        let vault = VaultKeyLister::new(vec![
-            "tools/only_here/CUSTOM_TOKEN".into(),
-        ]);
+        let vault = VaultKeyLister::new(vec!["tools/only_here/CUSTOM_TOKEN".into()]);
 
         let sen = Sentinel::new();
         let findings = sen.check_credential_hygiene(&vault);
@@ -1116,6 +1221,47 @@ mod tests {
         assert!(findings[0].summary.contains("editor_helper"));
     }
 
+    /// Bundle casing is not the classifier's to assume.
+    ///
+    /// Real path observed on chain 2026-08-06 — `Claude` capitalised as the
+    /// support directory, `claude.app` lowercase as the bundle. Against the
+    /// keyword `Claude.app/` under case-sensitive matching this classified as
+    /// unknown, so every Claude Code start was recorded as a security incident.
+    #[test]
+    fn benign_classification_is_case_insensitive_on_bundle_name() {
+        let sen = Sentinel::new();
+        let context = json!({
+            "binary_path": "/Users/kenrom/Library/Application Support/Claude/claude-code/2.1.219/claude.app/Contents/MacOS/claude",
+            "user": "kenrom",
+            "parent_name": "zsh"
+        });
+        let ports = vec![json!({"port": 61234, "protocol": "TCP", "socket": "127.0.0.1:61234"})];
+
+        let findings = sen.assess_unauthorized_listener(12345, "claude", &ports, &context);
+        assert_eq!(findings[0].finding_type, "unregistered_known_app");
+        assert_eq!(findings[0].severity, Severity::Info);
+        assert!(findings[0].summary.contains("ai_client_helper"));
+    }
+
+    /// Ollama spawns a `llama-server` per model load on a random high port, so
+    /// it is a recurring source of genuinely-new listeners that edge-triggering
+    /// cannot suppress — each really is a new process.
+    #[test]
+    fn ollama_inference_backend_classifies_benign() {
+        let sen = Sentinel::new();
+        let context = json!({
+            "binary_path": "/Applications/Ollama.app/Contents/Resources/llama-server",
+            "user": "kenrom",
+            "parent_name": "Ollama"
+        });
+        let ports = vec![json!({"port": 60546, "protocol": "TCP", "socket": "127.0.0.1:60546"})];
+
+        let findings = sen.assess_unauthorized_listener(60546, "llama-server", &ports, &context);
+        assert_eq!(findings[0].finding_type, "unregistered_known_app");
+        assert_eq!(findings[0].severity, Severity::Info);
+        assert!(findings[0].summary.contains("inference_backend"));
+    }
+
     #[test]
     fn sentinel_classifies_messaging_helper_as_benign() {
         let sen = Sentinel::new();
@@ -1128,7 +1274,8 @@ mod tests {
         });
         let ports = vec![json!({"port": 53219, "protocol": "TCP", "socket": "127.0.0.1:53219"})];
 
-        let findings = sen.assess_unauthorized_listener(73490, "Signal Helper (Renderer)", &ports, &context);
+        let findings =
+            sen.assess_unauthorized_listener(73490, "Signal Helper (Renderer)", &ports, &context);
         assert_eq!(findings[0].finding_type, "unregistered_known_app");
         assert_eq!(findings[0].severity, Severity::Info);
         assert!(findings[0].summary.contains("messaging_helper"));

@@ -15,7 +15,7 @@
 //! repeat the trap.
 //!
 //! See
-//! `docs/handoffs/singular-loopback-binding-design-2026-05.md`.
+//! `docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md`.
 //!
 //! # Allowlist
 //!
@@ -36,13 +36,11 @@ use zp_discipline::Discipline;
 #[test]
 fn loopback_servers_must_route_through_zp_net() {
     Discipline::new("no_raw_tcp_bind_outside_zp_net")
-        .cite_invariant(
-            "Principle 8 (one canonical path) — singular loopback binding",
-        )
+        .cite_invariant("Principle 8 (one canonical path) — singular loopback binding")
         .rationale(
             "Direct TcpListener::bind calls for loopback servers \
              re-introduce the IPv4-only resolver-order trap that \
-             surfaced on 2026-05-21 (IronClaw chain_render unreachable \
+             surfaced on 2026-05-21 (ExampleTool chain_render unreachable \
              via ::1-first resolution). All loopback server binds must \
              route through zp_net::bind_loopback so the IPv4 + IPv6 \
              pair are bound atomically and the bound_stacks fact can \

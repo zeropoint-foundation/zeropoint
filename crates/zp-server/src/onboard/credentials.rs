@@ -2,8 +2,8 @@
 
 use super::{OnboardAction, OnboardEvent, OnboardState};
 use serde::{Deserialize, Serialize};
-use zp_engine::validate::{self, CredentialToValidate, ValidationStatus};
 use zp_core::paths as zp_paths;
+use zp_engine::validate::{self, CredentialToValidate, ValidationStatus};
 
 // ============================================================================
 // Provider catalog — data-driven, TOML-backed
@@ -150,8 +150,7 @@ pub async fn handle_get_provider_catalog(state: &mut OnboardState) -> Vec<Onboar
     // even after a WS reconnect or page refresh.
     let mut stored_refs: Vec<String> = Vec::new();
     if let Some(vault_key) = &state.vault_key {
-        let vault_path = zp_paths::vault_path()
-            .unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let vault_path = zp_paths::vault_path().unwrap_or_else(|_| std::path::PathBuf::from("."));
 
         if vault_path.exists() {
             match zp_trust::CredentialVault::load_or_create(vault_key, &vault_path) {
@@ -201,8 +200,11 @@ pub async fn handle_vault_store(
     let mut events = Vec::new();
 
     // Phase 2.8 (P2-4): typed parameter extraction
-    let params: VaultStoreParams = serde_json::from_value(action.params.clone())
-        .unwrap_or(VaultStoreParams { vault_ref: None, value: None });
+    let params: VaultStoreParams =
+        serde_json::from_value(action.params.clone()).unwrap_or(VaultStoreParams {
+            vault_ref: None,
+            value: None,
+        });
 
     let vault_ref = match params.vault_ref.as_deref() {
         Some(r) => r,
@@ -243,8 +245,7 @@ pub async fn handle_vault_store(
     };
 
     // Open (or create) the vault file at ~/ZeroPoint/vault.json
-    let vault_path = zp_paths::vault_path()
-        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let vault_path = zp_paths::vault_path().unwrap_or_else(|_| std::path::PathBuf::from("."));
 
     let mut vault = match zp_trust::CredentialVault::load_or_create(&vault_key, &vault_path) {
         Ok(v) => v,
@@ -332,8 +333,7 @@ pub async fn handle_vault_import_all(
         }
     };
 
-    let vault_path = zp_paths::vault_path()
-        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let vault_path = zp_paths::vault_path().unwrap_or_else(|_| std::path::PathBuf::from("."));
 
     // Open (or create) the encrypted vault — same format as vault_store
     let mut vault = match zp_trust::CredentialVault::load_or_create(&vault_key, &vault_path) {
@@ -543,8 +543,7 @@ pub async fn handle_validate_all(
         }
     };
 
-    let vault_path = zp_paths::vault_path()
-        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let vault_path = zp_paths::vault_path().unwrap_or_else(|_| std::path::PathBuf::from("."));
 
     let vault = match zp_trust::CredentialVault::load_or_create(&vault_key, &vault_path) {
         Ok(v) => v,

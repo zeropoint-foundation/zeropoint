@@ -416,9 +416,7 @@ impl Receipt {
 
     /// Whether this receipt carries a signature using `alg`.
     pub fn has_algorithm(&self, alg: &SignatureAlgorithm) -> bool {
-        self.signature_blocks()
-            .iter()
-            .any(|b| b.algorithm == *alg)
+        self.signature_blocks().iter().any(|b| b.algorithm == *alg)
     }
 }
 
@@ -483,7 +481,10 @@ pub struct SignatureBlock {
     ///
     /// Absent on entries written before this field was introduced; defaults
     /// to 1 (legacy behavior) so existing chains round-trip without error.
-    #[serde(default = "default_preimage_version", skip_serializing_if = "is_preimage_v1")]
+    #[serde(
+        default = "default_preimage_version",
+        skip_serializing_if = "is_preimage_v1"
+    )]
     pub preimage_version: u8,
 }
 
@@ -1669,7 +1670,6 @@ pub enum ClaimMetadata {
     },
 
     // --- TurboVec memory index (Cache-not-canon, SCC §6) ---
-
     /// Metadata for `memory:indexed:turbovec`.
     ///
     /// Emitted when the substrate builds or rebuilds a TurboVec index over
@@ -1735,7 +1735,6 @@ pub enum ClaimMetadata {
     },
 
     // --- Model preference governance ---
-
     /// Metadata for `preference:model:selected`.
     ///
     /// Emitted when an operator explicitly selects a model for a tool via
@@ -1787,7 +1786,6 @@ pub enum ClaimMetadata {
     },
 
     // --- Inference governance (GAR Phase 4) ---
-
     /// Metadata for `preference:llm:policy:set`.
     ///
     /// Operator-declared LLM inference policy. Chain-anchored replacement for
@@ -1895,7 +1893,6 @@ pub enum ClaimMetadata {
         pattern_id: Option<String>,
 
         // -- Legacy fields kept for backward compatibility with RouteLLM-era receipts --
-
         /// Prompt tokens consumed (legacy name). Prefer `input_tokens` in new code.
         #[serde(skip_serializing_if = "Option::is_none")]
         prompt_tokens: Option<u32>,
@@ -1945,7 +1942,6 @@ pub enum ClaimMetadata {
     },
 
     // --- Model registry (chain-native routing) ---
-
     /// Metadata for `model:registered`.
     ///
     /// Operator registers a model with its capabilities, costs, and schema format.

@@ -122,7 +122,9 @@ impl CompactAuditEntry {
             at,
             pd,
             pm: entry.policy_module.clone(),
-            sg: entry.signatures.iter()
+            sg: entry
+                .signatures
+                .iter()
                 .find(|b| matches!(b.algorithm, zp_core::SignatureAlgorithm::Ed25519))
                 .map(|b| b.signature_b64.clone()),
         }

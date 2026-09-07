@@ -17,8 +17,8 @@ use std::path::{Path, PathBuf};
 
 use chrono::Utc;
 use libc::{
-    close, kevent, kqueue, EV_ADD, EV_DELETE, EV_ENABLE, EVFILT_PROC, EVFILT_VNODE,
-    NOTE_DELETE, NOTE_EXIT, NOTE_EXEC, NOTE_FORK, NOTE_RENAME, NOTE_WRITE,
+    close, kevent, kqueue, EVFILT_PROC, EVFILT_VNODE, EV_ADD, EV_DELETE, EV_ENABLE, NOTE_DELETE,
+    NOTE_EXEC, NOTE_EXIT, NOTE_FORK, NOTE_RENAME, NOTE_WRITE,
 };
 use tokio::io::unix::AsyncFd;
 use tokio::io::Interest;
@@ -213,10 +213,13 @@ fn register_file(
     }
 
     debug!(path = %path.display(), fd, "Watching file");
-    watched.insert(fd, WatchedFile {
-        path: path.to_path_buf(),
-        _file: file,
-    });
+    watched.insert(
+        fd,
+        WatchedFile {
+            path: path.to_path_buf(),
+            _file: file,
+        },
+    );
 
     Ok(())
 }
@@ -239,7 +242,14 @@ fn unregister_file(kq_fd: RawFd, path: &Path, watched: &mut HashMap<RawFd, Watch
         };
 
         unsafe {
-            kevent(kq_fd, &ev as *const libc::kevent, 1, std::ptr::null_mut(), 0, std::ptr::null());
+            kevent(
+                kq_fd,
+                &ev as *const libc::kevent,
+                1,
+                std::ptr::null_mut(),
+                0,
+                std::ptr::null(),
+            );
         }
 
         watched.remove(&fd);
@@ -264,7 +274,14 @@ fn register_pid(
     };
 
     let ret = unsafe {
-        kevent(kq_fd, &ev as *const libc::kevent, 1, std::ptr::null_mut(), 0, std::ptr::null())
+        kevent(
+            kq_fd,
+            &ev as *const libc::kevent,
+            1,
+            std::ptr::null_mut(),
+            0,
+            std::ptr::null(),
+        )
     };
 
     if ret < 0 {
@@ -290,7 +307,14 @@ fn unregister_pid(kq_fd: RawFd, pid: u32, watched: &mut HashMap<u32, WatchedProc
         };
 
         unsafe {
-            kevent(kq_fd, &ev as *const libc::kevent, 1, std::ptr::null_mut(), 0, std::ptr::null());
+            kevent(
+                kq_fd,
+                &ev as *const libc::kevent,
+                1,
+                std::ptr::null_mut(),
+                0,
+                std::ptr::null(),
+            );
         }
 
         debug!(pid, "Unwatched process");
@@ -347,11 +371,11 @@ fn translate_event(
     } else if ev.filter == EVFILT_PROC {
         let pid = ev.ident as u32;
         let watched = procs.get(&pid)?;
-        let kind = if ev.fflags & (NOTE_EXIT as u32) != 0 {
+        let kind = if ev.fflags & NOTE_EXIT != 0 {
             ProcessEventKind::Exit
-        } else if ev.fflags & (NOTE_FORK as u32) != 0 {
+        } else if ev.fflags & NOTE_FORK != 0 {
             ProcessEventKind::Fork
-        } else if ev.fflags & (NOTE_EXEC as u32) != 0 {
+        } else if ev.fflags & NOTE_EXEC != 0 {
             ProcessEventKind::Exec
         } else {
             ProcessEventKind::Signal

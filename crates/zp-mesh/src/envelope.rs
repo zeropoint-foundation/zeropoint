@@ -326,8 +326,22 @@ impl CompactDelegation {
                     .and_then(|s| serde_json::from_str(s).ok())
                     .unwrap_or(serde_json::Value::Null),
             },
-            _ => zp_core::GrantedCapability::Read {
-                scope: self.sc.clone(),
+            // `from_grant` emits "tc" for ToolCall; this arm was missing, so a
+            // ToolCall grant crossing the mesh decoded as `Read { scope: tools }`
+            // — a wildcard tool grant became a wildcard *read* grant. Silent
+            // capability-type conversion, no error, no log.
+            "tc" => zp_core::GrantedCapability::ToolCall {
+                tools: self.sc.clone(),
+            },
+            // Unknown code from the wire. This cannot be an exhaustive match —
+            // `ct` is a string from an untrusted peer, not an enum — so the
+            // remaining protection is the *value*. `Read { scope }` granted read
+            // access on any code we failed to recognise; `Custom` pairs with no
+            // `ActionType`, so `matches_action` returns false for every action
+            // and an unrecognised capability authorises nothing.
+            unknown => zp_core::GrantedCapability::Custom {
+                name: format!("mesh:unrecognised:{unknown}"),
+                parameters: serde_json::Value::Null,
             },
         };
 

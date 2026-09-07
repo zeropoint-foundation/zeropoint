@@ -37,3 +37,16 @@ reqwest = { workspace = true }
 
 # Logging
 tracing = { workspace = true }
+
+[dev-dependencies]
+# tests/fail_closed.rs needs a scratch directory for the audit database and for
+# the marker file whose existence is how those tests observe whether a refused
+# effect actually happened.
+tempfile = { workspace = true }
+
+# `AuditStore::open_unsigned` is gated behind `test-support` because
+# `open_signed` is the only production entry point — a deliberate restriction
+# the audit crate documents. Enabling the feature here applies to test targets
+# only: `cargo build` still cannot reach it. Same arrangement zp-hardening-tests
+# uses.
+zp-audit = { path = "../zp-audit", features = ["test-support"] }

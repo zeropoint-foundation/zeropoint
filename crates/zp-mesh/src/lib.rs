@@ -72,8 +72,8 @@ pub mod libp2p_interface;
 pub mod link;
 pub mod node_registry;
 pub mod packet;
-pub mod policy_distributor;
 pub mod peer_keystore;
+pub mod policy_distributor;
 pub mod policy_sync;
 pub mod reputation;
 pub mod reticulum_discovery;
@@ -93,8 +93,14 @@ pub use envelope::{CompactDelegation, CompactReceipt, MeshEnvelope};
 pub use error::MeshError;
 pub use identity::MeshIdentity;
 pub use interface::{Interface, InterfaceType};
+pub use libp2p_interface::{Libp2pInterface, MESH_TOPIC};
 pub use link::{Link, LinkState, SessionKeys};
+pub use node_registry::{
+    FleetNode, FleetSummary, HeartbeatError, MembershipStatus, NodeHeartbeat, NodeRegistry,
+    NodeStatus, SignedHeartbeat, HEARTBEAT_REPLAY_WINDOW,
+};
 pub use packet::{Packet, PacketHeader, PacketType, PropagationType};
+pub use policy_distributor::{PolicyDistributor, PolicyRollout, RolloutSummary};
 pub use policy_sync::{
     PolicyAdvertisement, PolicyAgreement, PolicyChunk, PolicyDenial, PolicyModuleInfo,
     PolicyProposal, PolicyPullRequest, PolicyPullResponse, PolicyVote, TransferState,
@@ -103,14 +109,8 @@ pub use reputation::{
     CompactReputationSummary, PeerReputation, ReputationGrade, ReputationScore, ReputationSignal,
     ReputationWeights, SignalCategory, SignalPolarity,
 };
-pub use node_registry::{
-    FleetNode, FleetSummary, HeartbeatError, MembershipStatus, NodeHeartbeat, NodeRegistry,
-    NodeStatus, SignedHeartbeat, HEARTBEAT_REPLAY_WINDOW,
-};
-pub use policy_distributor::{PolicyDistributor, PolicyRollout, RolloutSummary};
 pub use runtime::{InboundEnvelope, MeshRuntime, RuntimeConfig, RuntimeStats};
 pub use store::MeshStore;
-pub use libp2p_interface::{Libp2pInterface, MESH_TOPIC};
 pub use tcp::{TcpClientInterface, TcpServerInterface};
 pub use transport::{AgentTransport, MeshNode};
 

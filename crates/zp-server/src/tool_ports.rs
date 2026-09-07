@@ -12,11 +12,11 @@
 //!   2. **Proxy**: The subdomain proxy at `{name}.localhost:17770` forwards to
 //!      `127.0.0.1:{assigned_port}`.
 
+use chrono;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use chrono;
 use tracing::{debug, info, warn};
 use zp_audit::chain::UnsealedEntry;
 use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
@@ -185,9 +185,7 @@ impl ToolBinding {
     ///
     /// Priority: `proxy_port` (HTTP probe) → `actual_port` (lsof reconcile) → `port` (allocated).
     pub fn proxy_target(&self) -> u16 {
-        self.proxy_port
-            .or(self.actual_port)
-            .unwrap_or(self.port)
+        self.proxy_port.or(self.actual_port).unwrap_or(self.port)
     }
 
     /// Return the port that hosts the tool's web UI.
@@ -294,10 +292,7 @@ impl PortRegistry {
                             .into_iter()
                             .filter_map(|(tool_name, v)| {
                                 let port = v.get("port")?.as_u64()? as u16;
-                                let port_var = v
-                                    .get("port_var")?
-                                    .as_str()?
-                                    .to_string();
+                                let port_var = v.get("port_var")?.as_str()?.to_string();
                                 let auth_token = v
                                     .get("auth_token")
                                     .and_then(|t| t.as_str())
@@ -416,6 +411,10 @@ impl PortRegistry {
     ///
     /// Pass canonical values: `Some(&["ipv4"])` for single-stack,
     /// `Some(&["ipv4", "ipv6"])` for dual-stack. `None` for unknown.
+    // Eight parameters against clippy's seven. Each is a distinct fact about
+    // the binding being recorded; bundling them into a struct is a refactor of
+    // the registry's call contract, not a lint fix.
+    #[allow(clippy::too_many_arguments)]
     pub fn allocate_or_existing_with_stacks(
         &self,
         tool: &str,
@@ -441,9 +440,7 @@ impl PortRegistry {
 
             let all_used: std::collections::HashSet<u16> = map
                 .values()
-                .flat_map(|b| {
-                    std::iter::once(b.port).chain(b.extra_ports.values().copied())
-                })
+                .flat_map(|b| std::iter::once(b.port).chain(b.extra_ports.values().copied()))
                 .collect();
             let mut next_port = self.range_start;
             for var in extra_vars {
@@ -472,9 +469,10 @@ impl PortRegistry {
 
         // Conflict check for preferred port.
         if let Some(pref) = preferred {
-            if let Some(owner) = map.values().find(|b| {
-                b.port == pref || b.extra_ports.values().any(|&p| p == pref)
-            }) {
+            if let Some(owner) = map
+                .values()
+                .find(|b| b.port == pref || b.extra_ports.values().any(|&p| p == pref))
+            {
                 return Err(RegistryError::Conflict {
                     port: pref,
                     owner: owner.tool.clone(),
@@ -547,11 +545,13 @@ impl PortRegistry {
             allocated_receipt_id: receipt_id,
             preference_source,
             last_version: None,
-            bound_stacks: bound_stacks
-                .map(|s| s.iter().map(|x| x.to_string()).collect()),
+            bound_stacks: bound_stacks.map(|s| s.iter().map(|x| x.to_string()).collect()),
             agent_key: None,
         };
-        info!("Port registry: {} → :{} ({})", tool, primary_port, primary_var);
+        info!(
+            "Port registry: {} → :{} ({})",
+            tool, primary_port, primary_var
+        );
         map.insert(tool.to_string(), binding.clone());
         drop(map);
         self.persist();
@@ -605,8 +605,7 @@ impl PortRegistry {
     pub fn record_bound_stacks(&self, tool: &str, stacks: &[&str]) {
         let mut map = self.bindings.lock().unwrap();
         if let Some(binding) = map.get_mut(tool) {
-            binding.bound_stacks =
-                Some(stacks.iter().map(|s| s.to_string()).collect());
+            binding.bound_stacks = Some(stacks.iter().map(|s| s.to_string()).collect());
             let port = binding.port;
             let port_var = binding.port_var.clone();
             let pid = binding.pid.unwrap_or(0);
@@ -775,13 +774,7 @@ impl PortRegistry {
     /// Called periodically by the background sweeper task. Uses POSIX
     /// `kill -0` on Unix; degrades gracefully on non-Unix (no releases).
     pub fn sweep_dead_pids(&self) {
-        let snapshot: Vec<ToolBinding> = self
-            .bindings
-            .lock()
-            .unwrap()
-            .values()
-            .cloned()
-            .collect();
+        let snapshot: Vec<ToolBinding> = self.bindings.lock().unwrap().values().cloned().collect();
         for binding in snapshot {
             if let Some(pid) = binding.pid {
                 if !is_pid_alive(pid) {
@@ -797,6 +790,9 @@ impl PortRegistry {
 
     // ── Chain receipt helpers ─────────────────────────────────────────
 
+    // Mirrors `allocate_or_existing_with_stacks`'s parameters — this is the
+    // receipt for exactly that call, so the two signatures track each other.
+    #[allow(clippy::too_many_arguments)]
     fn emit_allocate_receipt(
         &self,
         tool: &str,
@@ -993,8 +989,11 @@ impl PortRegistry {
         // Build ordered list of (port_var, allocated_port) pairs.
         // Primary first, then extra_ports in consistent order.
         let mut declared: Vec<(String, u16)> = vec![(binding.port_var.clone(), binding.port)];
-        let mut extra_sorted: Vec<(String, u16)> =
-            binding.extra_ports.iter().map(|(k, &v)| (k.clone(), v)).collect();
+        let mut extra_sorted: Vec<(String, u16)> = binding
+            .extra_ports
+            .iter()
+            .map(|(k, &v)| (k.clone(), v))
+            .collect();
         extra_sorted.sort_by_key(|(k, _)| k.clone());
         declared.extend(extra_sorted);
 
@@ -1382,7 +1381,7 @@ pub async fn write_env_zp(
         format!("{}/env.zp", tool_name),
     ))
     .await
-    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    .map_err(|e| std::io::Error::other(e.to_string()))?;
     debug!(
         "Wrote .env.zp for {} → {}={}{}, {}=<redacted>",
         tool_path.display(),
@@ -1405,8 +1404,11 @@ pub async fn write_env_zp(
     let dot_env = tool_path.join(".env");
     if dot_env.exists() {
         if let Ok(env_contents) = std::fs::read_to_string(&dot_env) {
-            let mut zp_owned: Vec<&str> =
-                vec![auth_var.as_str(), assignment.port_var.as_str(), "ZP_MANAGED"];
+            let mut zp_owned: Vec<&str> = vec![
+                auth_var.as_str(),
+                assignment.port_var.as_str(),
+                "ZP_MANAGED",
+            ];
             for var in assignment.extra_ports.keys() {
                 zp_owned.push(var.as_str());
             }
@@ -1420,10 +1422,7 @@ pub async fn write_env_zp(
                     if let Some((key, _)) = trimmed.split_once('=') {
                         let key = key.trim();
                         if zp_owned.contains(&key) {
-                            debug!(
-                                "Removing shadowed {} from .env (ZP owns via .env.zp)",
-                                key
-                            );
+                            debug!("Removing shadowed {} from .env (ZP owns via .env.zp)", key);
                             return false;
                         }
                     }
@@ -1447,7 +1446,7 @@ pub async fn write_env_zp(
                     format!("{}/env.cleanup", tool_name),
                 ))
                 .await
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+                .map_err(|e| std::io::Error::other(e.to_string()))?;
                 info!(
                     "Removed ZP-managed vars ({}) from {}.env to prevent shadow conflicts",
                     zp_owned.join(", "),
@@ -1494,8 +1493,10 @@ fn detect_auth_var(tool_path: &Path) -> String {
     "GATEWAY_AUTH_TOKEN".to_string()
 }
 
-/// Build a shell preamble that sources env files in priority order.
-///
+// `env_zp_preamble` built a shell preamble that sourced env files in
+// priority order. Plain `//`, not `///`: the function is gone, so a doc
+// comment here attaches itself to whatever is declared next.
+//
 // `env_zp_preamble` was the shell-sourced preamble for the historical
 // `Command::new("sh").arg("-c")` launch flow. It built a string like
 // `set -a; [ -f .env.example ] && . ./.env.example; ...` that was
@@ -1507,13 +1508,8 @@ fn detect_auth_var(tool_path: &Path) -> String {
 
 // ── Port variable detection ────────────────────────────────────────────
 
-/// Detect which .env variable name a tool uses for its primary UI port.
-///
-/// Scans `.env` / `.env.example` in priority order and returns the
-/// variable name (e.g. "GATEWAY_PORT") so we know what to override in
-/// `.env.zp`.  Falls back to "PORT" if nothing is found.
-///
-/// Priority order matches the governance intent: gateway/app ports first,
+/// The .env variable names recognised as port declarations, most-preferred
+/// first. Order matches the governance intent: gateway/app ports first,
 /// generic ports next, webhook/internal ports last.
 const PORT_VAR_PRIORITY: &[&str] = &[
     "PORT",
@@ -1526,6 +1522,11 @@ const PORT_VAR_PRIORITY: &[&str] = &[
     "GATEWAY_PORT",
 ];
 
+/// Detect which .env variable name a tool uses for its primary UI port.
+///
+/// Scans `.env` / `.env.example` in priority order and returns the
+/// variable name (e.g. "GATEWAY_PORT") so we know what to override in
+/// `.env.zp`.  Falls back to "PORT" if nothing is found.
 pub fn detect_port_var(tool_path: &Path) -> String {
     let all = detect_all_port_vars(tool_path);
     all.into_iter().next().unwrap_or_else(|| "PORT".to_string())
@@ -2077,14 +2078,7 @@ mod tests {
     fn registry_allocate_returns_binding() {
         let (reg, _dir) = make_registry();
         let b = reg
-            .allocate_or_existing(
-                "tool-a",
-                1000,
-                "PORT",
-                &[],
-                None,
-                PreferenceSource::Default,
-            )
+            .allocate_or_existing("tool-a", 1000, "PORT", &[], None, PreferenceSource::Default)
             .expect("allocate");
         assert_eq!(b.tool, "tool-a");
         assert_eq!(b.port_var, "PORT");
@@ -2095,15 +2089,8 @@ mod tests {
     #[test]
     fn registry_release_clears_binding_preserves_allocation() {
         let (reg, _dir) = make_registry();
-        reg.allocate_or_existing(
-            "tool-b",
-            2000,
-            "PORT",
-            &[],
-            None,
-            PreferenceSource::Default,
-        )
-        .expect("allocate");
+        reg.allocate_or_existing("tool-b", 2000, "PORT", &[], None, PreferenceSource::Default)
+            .expect("allocate");
         let allocated_port = reg.get_assigned("tool-b").unwrap().port;
         reg.release("tool-b", ReleaseReason::GracefulExit);
         // Entry preserved — allocation survives process death.
@@ -2117,14 +2104,7 @@ mod tests {
     fn registry_owner_returns_holder() {
         let (reg, _dir) = make_registry();
         let b = reg
-            .allocate_or_existing(
-                "tool-c",
-                3000,
-                "PORT",
-                &[],
-                None,
-                PreferenceSource::Default,
-            )
+            .allocate_or_existing("tool-c", 3000, "PORT", &[], None, PreferenceSource::Default)
             .expect("allocate");
         let owner = reg.owner(b.port).expect("owner");
         assert_eq!(owner.tool, "tool-c");
@@ -2136,19 +2116,15 @@ mod tests {
         // the allocated port so conflict detection works.
         let (reg, _dir) = make_registry();
         let b = reg
-            .allocate_or_existing(
-                "tool-d",
-                4000,
-                "PORT",
-                &[],
-                None,
-                PreferenceSource::Default,
-            )
+            .allocate_or_existing("tool-d", 4000, "PORT", &[], None, PreferenceSource::Default)
             .expect("allocate");
         let port = b.port;
         reg.release("tool-d", ReleaseReason::GracefulExit);
         // Allocation persists — allocated port is still "owned"
-        assert!(reg.owner(port).is_some(), "owner still holds allocated port");
+        assert!(
+            reg.owner(port).is_some(),
+            "owner still holds allocated port"
+        );
     }
 
     #[test]
@@ -2174,14 +2150,7 @@ mod tests {
     fn registry_conflict_returns_conflict_error() {
         let (reg, _dir) = make_registry();
         let b = reg
-            .allocate_or_existing(
-                "tool-e",
-                5000,
-                "PORT",
-                &[],
-                None,
-                PreferenceSource::Default,
-            )
+            .allocate_or_existing("tool-e", 5000, "PORT", &[], None, PreferenceSource::Default)
             .expect("allocate first");
         // Attempt to allocate a different tool on the same port
         let err = reg
@@ -2201,24 +2170,10 @@ mod tests {
     fn registry_allocate_or_existing_idempotent() {
         let (reg, _dir) = make_registry();
         let b1 = reg
-            .allocate_or_existing(
-                "tool-g",
-                7000,
-                "PORT",
-                &[],
-                None,
-                PreferenceSource::Default,
-            )
+            .allocate_or_existing("tool-g", 7000, "PORT", &[], None, PreferenceSource::Default)
             .expect("first");
         let b2 = reg
-            .allocate_or_existing(
-                "tool-g",
-                7001,
-                "PORT",
-                &[],
-                None,
-                PreferenceSource::Default,
-            )
+            .allocate_or_existing("tool-g", 7001, "PORT", &[], None, PreferenceSource::Default)
             .expect("second (idempotent)");
         // Same port returned
         assert_eq!(b1.port, b2.port);
@@ -2272,10 +2227,15 @@ mod tests {
         let (reg, _dir) = make_registry();
         reg.allocate_or_existing("lc-tool", 1, "PORT", &[], None, PreferenceSource::Default)
             .expect("allocate");
-        reg.store_launch_command("lc-tool", "ironclaw", &["--port".to_string(), "9100".to_string()], None)
-            .expect("store");
+        reg.store_launch_command(
+            "lc-tool",
+            "example-tool",
+            &["--port".to_string(), "9100".to_string()],
+            None,
+        )
+        .expect("store");
         let lc = reg.get_assigned("lc-tool").unwrap().launch_command.unwrap();
-        assert_eq!(lc.command, "ironclaw");
+        assert_eq!(lc.command, "example-tool");
         assert_eq!(lc.args, vec!["--port", "9100"]);
     }
 
@@ -2291,9 +2251,17 @@ mod tests {
     #[test]
     fn launch_command_survives_clear_binding() {
         let (reg, _dir) = make_registry();
-        reg.allocate_or_existing("persist-lc", 2, "PORT", &[], None, PreferenceSource::Default)
-            .expect("allocate");
-        reg.store_launch_command("persist-lc", "mytool", &[], None).expect("store");
+        reg.allocate_or_existing(
+            "persist-lc",
+            2,
+            "PORT",
+            &[],
+            None,
+            PreferenceSource::Default,
+        )
+        .expect("allocate");
+        reg.store_launch_command("persist-lc", "mytool", &[], None)
+            .expect("store");
         reg.clear_binding("persist-lc", ReleaseReason::GracefulExit);
         // Allocation-side data survives runtime clear
         let lc = reg
@@ -2330,8 +2298,15 @@ mod tests {
     #[test]
     fn clear_binding_zeroes_pid_and_actuals() {
         let (reg, _dir) = make_registry();
-        reg.allocate_or_existing("cb-tool", 9999, "PORT", &[], None, PreferenceSource::Default)
-            .expect("allocate");
+        reg.allocate_or_existing(
+            "cb-tool",
+            9999,
+            "PORT",
+            &[],
+            None,
+            PreferenceSource::Default,
+        )
+        .expect("allocate");
         reg.update_pid("cb-tool", 9999).expect("update_pid");
         // Manually set actual_port by doing a reconciliation
         let b = reg.get_assigned("cb-tool").unwrap();
@@ -2349,8 +2324,15 @@ mod tests {
     #[test]
     fn clear_binding_preserves_auth_token_and_port_var() {
         let (reg, _dir) = make_registry();
-        reg.allocate_or_existing("auth-tool", 1111, "MY_PORT", &[], None, PreferenceSource::Default)
-            .expect("allocate");
+        reg.allocate_or_existing(
+            "auth-tool",
+            1111,
+            "MY_PORT",
+            &[],
+            None,
+            PreferenceSource::Default,
+        )
+        .expect("allocate");
         let original = reg.get_assigned("auth-tool").unwrap();
         reg.clear_binding("auth-tool", ReleaseReason::PidDead);
         let after = reg.get_assigned("auth-tool").unwrap();
@@ -2365,7 +2347,14 @@ mod tests {
     fn post_launch_reconciliation_detects_port_mismatch() {
         let (reg, _dir) = make_registry();
         let b = reg
-            .allocate_or_existing("recon-tool", 1234, "PORT", &[], None, PreferenceSource::Default)
+            .allocate_or_existing(
+                "recon-tool",
+                1234,
+                "PORT",
+                &[],
+                None,
+                PreferenceSource::Default,
+            )
             .expect("allocate");
         let allocated = b.port;
 
@@ -2390,7 +2379,14 @@ mod tests {
     fn post_launch_reconciliation_no_mismatch_no_receipts() {
         let (reg, _dir) = make_registry();
         let b = reg
-            .allocate_or_existing("match-tool", 5678, "PORT", &[], None, PreferenceSource::Default)
+            .allocate_or_existing(
+                "match-tool",
+                5678,
+                "PORT",
+                &[],
+                None,
+                PreferenceSource::Default,
+            )
             .expect("allocate");
 
         // Tool bound exactly to its allocated port — no mismatch
@@ -2406,12 +2402,22 @@ mod tests {
     #[test]
     fn reconcile_empty_actual_ports_is_noop() {
         let (reg, _dir) = make_registry();
-        reg.allocate_or_existing("crash-tool", 999, "PORT", &[], None, PreferenceSource::Default)
-            .expect("allocate");
+        reg.allocate_or_existing(
+            "crash-tool",
+            999,
+            "PORT",
+            &[],
+            None,
+            PreferenceSource::Default,
+        )
+        .expect("allocate");
         // Empty actuals = tool crashed before binding; sweeper will clean up
         let receipts = reg.reconcile_ports("crash-tool", 999, &[]);
         assert_eq!(receipts, 0);
-        assert!(reg.get_assigned("crash-tool").is_some(), "binding preserved");
+        assert!(
+            reg.get_assigned("crash-tool").is_some(),
+            "binding preserved"
+        );
     }
 
     // ── Multi-port reconciliation tests ───────────────────────────────
@@ -2469,7 +2475,10 @@ mod tests {
         assert_eq!(pairs, 1, "one mismatch pair");
 
         let updated = reg.get_assigned("partial-tool").unwrap();
-        assert_eq!(updated.actual_port, None, "primary matched — actual_port not set");
+        assert_eq!(
+            updated.actual_port, None,
+            "primary matched — actual_port not set"
+        );
         assert_eq!(
             updated.actual_extra_ports.get("GATEWAY_PORT"),
             Some(&(alloc_extra + 500))
@@ -2493,7 +2502,10 @@ mod tests {
             updated.actual_extra_ports.contains_key("UNMATCHED_PORT_0"),
             "undeclared port captured"
         );
-        assert_eq!(updated.actual_extra_ports.get("UNMATCHED_PORT_0"), Some(&50051));
+        assert_eq!(
+            updated.actual_extra_ports.get("UNMATCHED_PORT_0"),
+            Some(&50051)
+        );
     }
 
     // ── lsof parser tests ─────────────────────────────────────────────
@@ -2502,10 +2514,10 @@ mod tests {
     fn parse_lsof_listen_ports_extracts_ports() {
         let sample = "\
 COMMAND    PID   USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME\n\
-ironclaw 1234 user   17u  IPv4 0xabc       0t0  TCP *:3000 (LISTEN)\n\
-ironclaw 1234 user   18u  IPv4 0xdef       0t0  TCP *:8090 (LISTEN)\n\
-ironclaw 1234 user   19u  IPv4 0x123       0t0  TCP 127.0.0.1:50051 (LISTEN)\n\
-ironclaw 1234 user   20u  IPv4 0x456       0t0  TCP 127.0.0.1:50051 (ESTABLISHED)\n";
+example-tool 1234 user   17u  IPv4 0xabc       0t0  TCP *:3000 (LISTEN)\n\
+example-tool 1234 user   18u  IPv4 0xdef       0t0  TCP *:8090 (LISTEN)\n\
+example-tool 1234 user   19u  IPv4 0x123       0t0  TCP 127.0.0.1:50051 (LISTEN)\n\
+example-tool 1234 user   20u  IPv4 0x456       0t0  TCP 127.0.0.1:50051 (ESTABLISHED)\n";
         let ports = parse_lsof_listen_ports(sample);
         assert_eq!(ports, vec![3000, 8090, 50051]);
     }
@@ -2584,17 +2596,21 @@ node      1234   ken    18u  IPv6 0x2    0t0  TCP *:3000 (LISTEN)\n";
 python3   100    ken    5u   IPv4 0x1    0t0  TCP *:8000 (LISTEN)\n\
 python3   200    ken    5u   IPv4 0x2    0t0  TCP *:8000 (LISTEN)\n";
         let procs = parse_lsof_all_listen(sample);
-        assert_eq!(procs.len(), 2, "different PIDs on same port must both appear");
+        assert_eq!(
+            procs.len(),
+            2,
+            "different PIDs on same port must both appear"
+        );
     }
 
     #[test]
     fn parse_lsof_all_listen_handles_localhost_address() {
         let sample = "\
-ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
+example-tool  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
         let procs = parse_lsof_all_listen(sample);
         assert_eq!(procs.len(), 1);
         assert_eq!(procs[0].port, 17770);
-        assert_eq!(procs[0].name, "ironclaw");
+        assert_eq!(procs[0].name, "example-tool");
     }
 
     #[test]
@@ -2643,7 +2659,11 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
 
     #[test]
     fn parse_lsof_pid_field_empty_input() {
-        assert_eq!(parse_lsof_pid_field(""), None, "empty input must yield None");
+        assert_eq!(
+            parse_lsof_pid_field(""),
+            None,
+            "empty input must yield None"
+        );
     }
 
     #[test]
@@ -2671,13 +2691,20 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
         let (reg, _dir) = make_registry();
         // Allocate primary port for ironclaw (pid=0, no preferred port — registry picks).
         let b_alloc = reg
-            .allocate_or_existing("ironclaw", 0, "PORT", &[], None, PreferenceSource::Default)
+            .allocate_or_existing(
+                "example-tool",
+                0,
+                "PORT",
+                &[],
+                None,
+                PreferenceSource::Default,
+            )
             .expect("allocate");
         let primary_port = b_alloc.port;
         // Inject actual extra ports the way Wire 2 / reconcile_ports does.
         {
             let mut map = reg.bindings.lock().unwrap();
-            let b = map.get_mut("ironclaw").unwrap();
+            let b = map.get_mut("example-tool").unwrap();
             b.actual_extra_ports.insert("GRPC_PORT".into(), 50051);
             b.actual_extra_ports.insert("GATEWAY_PORT".into(), 3000);
         }
@@ -2685,17 +2712,33 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
         // Use the actually-allocated primary_port (not a hardcoded value) so the
         // proc matches what's in port_map.
         let procs = vec![
-            ListenProcess { pid: 93290, name: "ironclaw".into(), port: primary_port },
-            ListenProcess { pid: 93290, name: "ironclaw".into(), port: 50051 },
-            ListenProcess { pid: 93290, name: "ironclaw".into(), port: 3000 },
+            ListenProcess {
+                pid: 93290,
+                name: "example-tool".into(),
+                port: primary_port,
+            },
+            ListenProcess {
+                pid: 93290,
+                name: "example-tool".into(),
+                port: 50051,
+            },
+            ListenProcess {
+                pid: 93290,
+                name: "example-tool".into(),
+                port: 3000,
+            },
         ];
         let snap = PostureSnapshot::from_processes(&reg, procs);
-        assert_eq!(snap.substrate_managed.len(), 3, "all three ports must be SubstrateManaged");
+        assert_eq!(
+            snap.substrate_managed.len(),
+            3,
+            "all three ports must be SubstrateManaged"
+        );
         assert_eq!(snap.unknown.len(), 0, "no ports should be Unknown");
         for ap in &snap.substrate_managed {
             match &ap.attribution {
                 ProcessAttribution::SubstrateManaged { tool_name, .. } => {
-                    assert_eq!(tool_name, "ironclaw");
+                    assert_eq!(tool_name, "example-tool");
                 }
                 other => panic!("expected SubstrateManaged, got {:?}", other),
             }
@@ -2720,15 +2763,29 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
         let metrics_port = {
             let map = reg.bindings.lock().unwrap();
             let b = map.get("mytool").unwrap();
-            *b.extra_ports.get("METRICS_PORT").expect("METRICS_PORT must be allocated")
+            *b.extra_ports
+                .get("METRICS_PORT")
+                .expect("METRICS_PORT must be allocated")
         };
         let primary_port = reg.get_assigned("mytool").unwrap().port;
         let procs = vec![
-            ListenProcess { pid: 42, name: "mytool".into(), port: primary_port },
-            ListenProcess { pid: 42, name: "mytool".into(), port: metrics_port },
+            ListenProcess {
+                pid: 42,
+                name: "mytool".into(),
+                port: primary_port,
+            },
+            ListenProcess {
+                pid: 42,
+                name: "mytool".into(),
+                port: metrics_port,
+            },
         ];
         let snap = PostureSnapshot::from_processes(&reg, procs);
-        assert_eq!(snap.substrate_managed.len(), 2, "primary + extra must both be SubstrateManaged");
+        assert_eq!(
+            snap.substrate_managed.len(),
+            2,
+            "primary + extra must both be SubstrateManaged"
+        );
         assert_eq!(snap.unknown.len(), 0);
     }
 
@@ -2736,8 +2793,15 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
 
     #[test]
     fn known_system_category_exact_macos_daemons() {
-        for name in &["rapportd", "ARDAgent", "ControlCenter", "launchd",
-                      "UserEventAgent", "sharingd", "screensharingd"] {
+        for name in &[
+            "rapportd",
+            "ARDAgent",
+            "ControlCenter",
+            "launchd",
+            "UserEventAgent",
+            "sharingd",
+            "screensharingd",
+        ] {
             assert_eq!(
                 known_system_category(name),
                 Some("macOS system"),
@@ -2749,9 +2813,15 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
     #[test]
     fn known_system_category_docker() {
         assert_eq!(known_system_category("dockerd"), Some("container runtime"));
-        assert_eq!(known_system_category("com.docker.backend"), Some("container runtime"));
+        assert_eq!(
+            known_system_category("com.docker.backend"),
+            Some("container runtime")
+        );
         // lsof truncates com.docker.backend → com.docke on macOS.
-        assert_eq!(known_system_category("com.docke"), Some("container runtime"));
+        assert_eq!(
+            known_system_category("com.docke"),
+            Some("container runtime")
+        );
     }
 
     #[test]
@@ -2781,8 +2851,14 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
     #[test]
     fn known_system_category_cloudflare_tunnel() {
         // cloudflared → cloudflar under lsof truncation.
-        assert_eq!(known_system_category("cloudflared"), Some("cloudflare tunnel"));
-        assert_eq!(known_system_category("cloudflar"), Some("cloudflare tunnel"));
+        assert_eq!(
+            known_system_category("cloudflared"),
+            Some("cloudflare tunnel")
+        );
+        assert_eq!(
+            known_system_category("cloudflar"),
+            Some("cloudflare tunnel")
+        );
     }
 
     #[test]
@@ -2796,7 +2872,10 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
     fn known_system_category_google_apps() {
         // Google Drive, Chrome — lsof shows "Google" (truncated).
         assert_eq!(known_system_category("Google"), Some("developer tool"));
-        assert_eq!(known_system_category("Google Drive"), Some("developer tool"));
+        assert_eq!(
+            known_system_category("Google Drive"),
+            Some("developer tool")
+        );
     }
 
     #[test]
@@ -2809,8 +2888,14 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
             );
         }
         // lsof often shows versioned names like python3.1, python3.12 — prefix match.
-        assert_eq!(known_system_category("python3.1"), Some("developer runtime"));
-        assert_eq!(known_system_category("python3.12"), Some("developer runtime"));
+        assert_eq!(
+            known_system_category("python3.1"),
+            Some("developer runtime")
+        );
+        assert_eq!(
+            known_system_category("python3.12"),
+            Some("developer runtime")
+        );
     }
 
     #[test]
@@ -2833,7 +2918,7 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
     #[test]
     fn known_system_category_unknown_returns_none() {
         assert!(known_system_category("").is_none());
-        assert!(known_system_category("ironclaw").is_none());
+        assert!(known_system_category("example-tool").is_none());
         assert!(known_system_category("my-custom-service").is_none());
         // Prefix must match exactly — "com.apple" without trailing dot must not match.
         assert!(known_system_category("com.apple").is_none());
@@ -2914,9 +2999,21 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
             .expect("allocate");
 
         let procs = vec![
-            ListenProcess { pid: 1, name: "zp-tool".to_string(), port: 9100 },
-            ListenProcess { pid: 2, name: "rapportd".to_string(), port: 49197 },
-            ListenProcess { pid: 3, name: "mystery".to_string(), port: 7777 },
+            ListenProcess {
+                pid: 1,
+                name: "zp-tool".to_string(),
+                port: 9100,
+            },
+            ListenProcess {
+                pid: 2,
+                name: "rapportd".to_string(),
+                port: 49197,
+            },
+            ListenProcess {
+                pid: 3,
+                name: "mystery".to_string(),
+                port: 7777,
+            },
         ];
         let snap = PostureSnapshot::from_processes(&reg, procs);
 
@@ -3002,8 +3099,8 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
     fn allocate_with_stacks_emits_chain_receipt_with_field() {
         use std::sync::{Arc, Mutex};
         let dir = tempfile::tempdir().expect("tempdir");
-        let store = zp_audit::AuditStore::open_unsigned(dir.path().join("audit.db"))
-            .expect("audit store");
+        let store =
+            zp_audit::AuditStore::open_unsigned(dir.path().join("audit.db")).expect("audit store");
         let store = Arc::new(Mutex::new(store));
         let reg = PortRegistry::new_with_audit(
             dir.path(),
@@ -3046,10 +3143,7 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
             .get("bound_stacks")
             .and_then(|s| s.as_array())
             .expect("bound_stacks present in extension");
-        let stack_names: Vec<&str> = stacks
-            .iter()
-            .filter_map(|v| v.as_str())
-            .collect();
+        let stack_names: Vec<&str> = stacks.iter().filter_map(|v| v.as_str()).collect();
         assert_eq!(
             stack_names,
             vec!["ipv4", "ipv6"],
@@ -3064,8 +3158,8 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
     fn allocate_without_stacks_omits_field_from_chain_receipt() {
         use std::sync::{Arc, Mutex};
         let dir = tempfile::tempdir().expect("tempdir");
-        let store = zp_audit::AuditStore::open_unsigned(dir.path().join("audit.db"))
-            .expect("audit store");
+        let store =
+            zp_audit::AuditStore::open_unsigned(dir.path().join("audit.db")).expect("audit store");
         let store = Arc::new(Mutex::new(store));
         let reg = PortRegistry::new_with_audit(
             dir.path(),
@@ -3108,8 +3202,8 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
     fn record_bound_stacks_updates_binding_and_emits_chain_receipt() {
         use std::sync::{Arc, Mutex};
         let dir = tempfile::tempdir().expect("tempdir");
-        let store = zp_audit::AuditStore::open_unsigned(dir.path().join("audit.db"))
-            .expect("audit store");
+        let store =
+            zp_audit::AuditStore::open_unsigned(dir.path().join("audit.db")).expect("audit store");
         let store = Arc::new(Mutex::new(store));
         let reg = PortRegistry::new_with_audit(
             dir.path(),
@@ -3128,7 +3222,11 @@ ironclaw  9999   ken   17u  IPv4 0x1    0t0  TCP 127.0.0.1:17770 (LISTEN)\n";
         .expect("allocate");
 
         // Initial allocation: bound_stacks unknown.
-        assert!(reg.get_assigned("deferred-stacks").unwrap().bound_stacks.is_none());
+        assert!(reg
+            .get_assigned("deferred-stacks")
+            .unwrap()
+            .bound_stacks
+            .is_none());
 
         // Caller observes the actual bind result and reports.
         reg.record_bound_stacks("deferred-stacks", &["ipv4", "ipv6"]);

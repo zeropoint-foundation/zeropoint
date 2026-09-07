@@ -1,20 +1,30 @@
 //! Lifecycle state machine tests.
 
-use std::sync::Arc;
-use tempfile::TempDir;
-use zp_artifacts::{ArtifactKind, Library, LibraryFilter, LibraryStateFilter, LocalArtifactLibrary};
-use zp_artifacts::artifact::{Artifact, ArtifactContent, LifecycleState, RenderConfig, SourceManifest};
-use zp_content::backends::LocalFsBackend;
 use chrono::Utc;
 use ed25519_dalek::SigningKey;
 use rand::rngs::OsRng;
+use std::sync::Arc;
+use tempfile::TempDir;
+use zp_artifacts::artifact::{
+    Artifact, ArtifactContent, LifecycleState, RenderConfig, SourceManifest,
+};
+use zp_artifacts::{
+    ArtifactKind, Library, LibraryFilter, LibraryStateFilter, LocalArtifactLibrary,
+};
+use zp_content::backends::LocalFsBackend;
 
 async fn make_library(tmp: &TempDir) -> LocalArtifactLibrary {
     let content_dir = tmp.path().join("content");
     let index_path = tmp.path().join("content-index.db");
-    let store = Arc::new(LocalFsBackend::new(&content_dir, &index_path).await.unwrap());
+    let store = Arc::new(
+        LocalFsBackend::new(&content_dir, &index_path)
+            .await
+            .unwrap(),
+    );
     let artifact_index = tmp.path().join("artifact-index.db");
-    LocalArtifactLibrary::new(store, &artifact_index).await.unwrap()
+    LocalArtifactLibrary::new(store, &artifact_index)
+        .await
+        .unwrap()
 }
 
 fn make_candidate(id_hex: Option<&str>) -> Artifact {
@@ -121,7 +131,9 @@ async fn reject_signed_returns_wrong_state() {
     let art = make_candidate(None);
     let id = lib.store_candidate(&art).await.unwrap();
     let sk = SigningKey::generate(&mut OsRng);
-    lib.sign(&id, &sk, sk.verifying_key().to_bytes()).await.unwrap();
+    lib.sign(&id, &sk, sk.verifying_key().to_bytes())
+        .await
+        .unwrap();
     let err = lib.reject(&id).await.unwrap_err();
     assert!(matches!(err, zp_artifacts::LibraryError::WrongState(_)));
 }
@@ -134,7 +146,9 @@ async fn sign_supersedes_prior() {
     let prior = make_candidate(None);
     let prior_id = lib.store_candidate(&prior).await.unwrap();
     let sk = SigningKey::generate(&mut OsRng);
-    lib.sign(&prior_id, &sk, sk.verifying_key().to_bytes()).await.unwrap();
+    lib.sign(&prior_id, &sk, sk.verifying_key().to_bytes())
+        .await
+        .unwrap();
 
     // Create a new candidate that supersedes the prior
     let manifest2 = SourceManifest {
@@ -156,10 +170,15 @@ async fn sign_supersedes_prior() {
     art2.render_config = config2;
     art2.supersedes = Some(prior_id.to_hex());
     let id2 = lib.store_candidate(&art2).await.unwrap();
-    lib.sign(&id2, &sk, sk.verifying_key().to_bytes()).await.unwrap();
+    lib.sign(&id2, &sk, sk.verifying_key().to_bytes())
+        .await
+        .unwrap();
 
     let prior_now = lib.get(&prior_id).await.unwrap().unwrap();
-    assert!(matches!(prior_now.lifecycle, LifecycleState::Superseded { .. }));
+    assert!(matches!(
+        prior_now.lifecycle,
+        LifecycleState::Superseded { .. }
+    ));
 }
 
 #[tokio::test]
@@ -194,7 +213,10 @@ async fn list_by_state_filter() {
 async fn latest_signed_returns_none_when_empty() {
     let tmp = TempDir::new().unwrap();
     let lib = make_library(&tmp).await;
-    let result = lib.latest_signed(&ArtifactKind::ChainNarration, "op-test").await.unwrap();
+    let result = lib
+        .latest_signed(&ArtifactKind::ChainNarration, "op-test")
+        .await
+        .unwrap();
     assert!(result.is_none());
 }
 
@@ -205,7 +227,12 @@ async fn latest_signed_returns_after_sign() {
     let art = make_candidate(None);
     let id = lib.store_candidate(&art).await.unwrap();
     let sk = SigningKey::generate(&mut OsRng);
-    lib.sign(&id, &sk, sk.verifying_key().to_bytes()).await.unwrap();
-    let latest = lib.latest_signed(&ArtifactKind::ChainNarration, "op-test").await.unwrap();
+    lib.sign(&id, &sk, sk.verifying_key().to_bytes())
+        .await
+        .unwrap();
+    let latest = lib
+        .latest_signed(&ArtifactKind::ChainNarration, "op-test")
+        .await
+        .unwrap();
     assert!(latest.is_some());
 }

@@ -492,5 +492,5 @@ that need raw shell access accept elevated officer scrutiny.
   `ToolCall` variant, `contains()` for delegation narrowing
 - `crates/zp-server/src/lib.rs` — `lease_prereq_for_agent()`, gate
   evaluation, `register_agent_handler` wildcard grant
-- A tenant's governance-tool file (e.g. `src/tools/builtin/zp_governance.rs`) — the four governance
+- A tenant's governance-tool file (e.g. `src/tools/builtin/zp_governance.rs`, external — a path in the tenant's tree, not this one) — the four governance
   tools this classification covers

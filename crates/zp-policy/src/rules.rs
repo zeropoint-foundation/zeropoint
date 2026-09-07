@@ -545,21 +545,36 @@ impl TrustTierEnforcementRule {
             // dashboard is sufficient authorization.  The caller (enforce_gate)
             // already elevates to Tier1 for the audit trail, but the *rule*
             // should not block a local operator from running their own tools.
-            ActionType::Chat
-            | ActionType::Read { .. }
-            | ActionType::Execute { .. } => TrustTier::Tier0,
+            ActionType::Chat | ActionType::Read { .. } | ActionType::Execute { .. } => {
+                TrustTier::Tier0
+            }
 
             // Tier 1: write operations, API calls, config changes
             ActionType::Write { .. }
             | ActionType::ApiCall { .. }
-            | ActionType::FileOp { op: FileOperation::Write, .. }
-            | ActionType::FileOp { op: FileOperation::Create, .. }
-            | ActionType::FileOp { op: FileOperation::Delete, .. }
+            | ActionType::FileOp {
+                op: FileOperation::Write,
+                ..
+            }
+            | ActionType::FileOp {
+                op: FileOperation::Create,
+                ..
+            }
+            | ActionType::FileOp {
+                op: FileOperation::Delete,
+                ..
+            }
             | ActionType::ConfigChange { .. } => TrustTier::Tier1,
 
             // Tier 0 for non-mutating file ops
-            ActionType::FileOp { op: FileOperation::Read, .. }
-            | ActionType::FileOp { op: FileOperation::List, .. } => TrustTier::Tier0,
+            ActionType::FileOp {
+                op: FileOperation::Read,
+                ..
+            }
+            | ActionType::FileOp {
+                op: FileOperation::List,
+                ..
+            } => TrustTier::Tier0,
 
             // Tier 2: critical operations requiring genesis provenance
             ActionType::CredentialAccess { .. }

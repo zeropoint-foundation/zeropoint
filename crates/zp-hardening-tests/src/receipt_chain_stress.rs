@@ -14,8 +14,18 @@
 //! cargo test -p zp-hardening-tests stress
 //! ```
 
+// `#[cfg(test)]` on the imports, not just the tests. Every item below is
+// `#[tokio::test]`, which expands to `#[test]` and is therefore excluded from
+// non-test builds — so in the *lib* target these imports read as unused,
+// rustc warns, and `cargo clippy --fix` deletes them. It did exactly that on
+// 2026-08-12, breaking the lib-test target with 29 errors. Gating the imports
+// the same way the items are gated makes this crate safe to run `--fix` over.
+// `claim2_collective_audit.rs` already used this pattern for `uuid::Uuid`.
+#[cfg(test)]
 use crate::harness::TestApp;
+#[cfg(test)]
 use axum::http::StatusCode;
+#[cfg(test)]
 use serde_json::json;
 
 // ─── Chain growth via gate calls ─────────────────────────────────────────────
@@ -92,7 +102,10 @@ async fn stress_chain_head_advances_on_gate_activity() {
     let (_, head1) = app.get_authed("/api/v1/audit/chain-head", &token).await;
     let hash1 = head1["latest_hash"].as_str().unwrap_or("").to_string();
 
-    assert!(!hash1.is_empty(), "chain head must be non-empty after a gate call");
+    assert!(
+        !hash1.is_empty(),
+        "chain head must be non-empty after a gate call"
+    );
     assert_ne!(hash0, hash1, "chain head must advance after a gate call");
 }
 
@@ -180,7 +193,11 @@ async fn stress_claim4_http_lifecycle_grant_allow_deny() {
             &token,
         )
         .await;
-    assert_eq!(status, StatusCode::OK, "narrow grant must succeed: {grant_resp}");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "narrow grant must succeed: {grant_resp}"
+    );
 
     // The gate's prereq check walks the audit chain for delegation:granted receipts.
     // "bash" is in scope → allowed.
@@ -240,7 +257,10 @@ async fn stress_unknown_agent_denied_and_chained() {
         .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["allowed"], false, "unknown agent must be denied: {body}");
+    assert_eq!(
+        body["allowed"], false,
+        "unknown agent must be denied: {body}"
+    );
     assert_eq!(body["reason"], "no_valid_delegation");
     assert!(
         body["chain_entry_hash"].is_string(),

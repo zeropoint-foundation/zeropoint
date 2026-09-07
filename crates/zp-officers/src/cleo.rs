@@ -18,14 +18,24 @@ use chrono::Utc;
 use serde_json::json;
 use tracing::debug;
 
+use crate::chain_reads::{
+    classify_delegation, classify_gate, is_delegation_event, is_gate_event, DelegationKind,
+    GateOutcome,
+};
 use crate::finding::{Finding, Severity};
 use crate::narration::{ChainNarrator, ChainStory, StorySegment};
 use crate::officer::{ChainReader, Officer, VaultKeyLister};
-use zp_core::{AuditAction, AuditEntry, PolicyDecision};
+use zp_core::{AuditEntry, PolicyDecision};
 
 /// The Cleo officer — watches delegation lifecycle, gate decisions,
 /// and authority chains.
 pub struct Cleo;
+
+impl Default for Cleo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl Cleo {
     pub fn new() -> Self {
@@ -46,15 +56,12 @@ impl Cleo {
         let mut renewals: Vec<&AuditEntry> = Vec::new();
 
         for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if event.starts_with("delegation:granted:") {
-                    grants.push(entry);
-                } else if event.starts_with("delegation:revoked:") {
-                    revocations.push(entry);
-                } else if event.starts_with("delegation:expired:") {
-                    expirations.push(entry);
-                } else if event.starts_with("delegation:renewed:") {
-                    renewals.push(entry);
+            if let Some(ev) = classify_delegation(entry) {
+                match ev.kind {
+                    DelegationKind::Granted => grants.push(entry),
+                    DelegationKind::Revoked => revocations.push(entry),
+                    DelegationKind::Expired => expirations.push(entry),
+                    DelegationKind::Renewed => renewals.push(entry),
                 }
             }
         }
@@ -85,36 +92,38 @@ impl Cleo {
         // Warn on expired delegations without renewal
         if !expirations.is_empty() {
             for exp in &expirations {
-                if let AuditAction::SystemEvent { event } = &exp.action {
-                    let subject = event
-                        .strip_prefix("delegation:expired:")
-                        .unwrap_or("unknown");
-                    // Check if a renewal exists for this subject
-                    let renewed = renewals.iter().any(|r| {
-                        if let AuditAction::SystemEvent { event: rev } = &r.action {
-                            rev.ends_with(subject) && r.timestamp > exp.timestamp
-                        } else {
-                            false
-                        }
+                // `exp` is a delegation-expired entry by virtue of how it
+                // got into the `expirations` vec above. Re-classify to
+                // pull the target out via the shared helper.
+                let subject = classify_delegation(exp)
+                    .map(|ev| ev.target)
+                    .unwrap_or_else(|| "unknown".to_string());
+                // Check if a renewal exists for this subject. Behavior
+                // preserved from pre-refactor: matches when the renewal
+                // event *ends with* the subject string (not exact target
+                // equality — a renewal for "foobar" would match an
+                // expired "bar"). Preserved as-is; if this fuzzy match
+                // is a bug rather than a feature, fix separately.
+                let renewed = renewals.iter().any(|r| {
+                    let Some(r_ev) = classify_delegation(r) else {
+                        return false;
+                    };
+                    r_ev.target.ends_with(&subject) && r.timestamp > exp.timestamp
+                });
+                if !renewed {
+                    findings.push(Finding {
+                        officer: self.name(),
+                        domain: self.domain(),
+                        finding_type: "delegation_expired".into(),
+                        severity: Severity::Warning,
+                        summary: format!("Delegation to '{}' expired without renewal", subject),
+                        detail: json!({
+                            "subject": subject,
+                            "expired_at": exp.timestamp.to_rfc3339(),
+                        }),
+                        timestamp: Utc::now(),
+                        cross_domain_depth: 0,
                     });
-                    if !renewed {
-                        findings.push(Finding {
-                            officer: self.name(),
-                            domain: self.domain(),
-                            finding_type: "delegation_expired".into(),
-                            severity: Severity::Warning,
-                            summary: format!(
-                                "Delegation to '{}' expired without renewal",
-                                subject
-                            ),
-                            detail: json!({
-                                "subject": subject,
-                                "expired_at": exp.timestamp.to_rfc3339(),
-                            }),
-                            timestamp: Utc::now(),
-                            cross_domain_depth: 0,
-                        });
-                    }
                 }
             }
         }
@@ -135,18 +144,21 @@ impl Cleo {
         let mut denied_no_delegation = 0usize;
 
         for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if event.starts_with("gate:allowed:") {
-                    allowed += 1;
-                } else if event.starts_with("gate:denied:") {
-                    denied += 1;
-                    // Check if denial was due to missing delegation
-                    if let PolicyDecision::Block { reason, .. } = &entry.policy_decision {
-                        if reason.contains("no delegation")
-                            || reason.contains("not found")
-                            || reason.contains("missing")
-                        {
-                            denied_no_delegation += 1;
+            if let Some(ev) = classify_gate(entry) {
+                match ev.outcome {
+                    GateOutcome::Allowed => {
+                        allowed += 1;
+                    }
+                    GateOutcome::Denied => {
+                        denied += 1;
+                        // Check if denial was due to missing delegation
+                        if let PolicyDecision::Block { reason, .. } = &entry.policy_decision {
+                            if reason.contains("no delegation")
+                                || reason.contains("not found")
+                                || reason.contains("missing")
+                            {
+                                denied_no_delegation += 1;
+                            }
                         }
                     }
                 }
@@ -193,11 +205,15 @@ impl Cleo {
         let mut delegated_subjects: std::collections::HashSet<String> =
             std::collections::HashSet::new();
         for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if let Some(subject) = event.strip_prefix("delegation:granted:") {
-                    delegated_subjects.insert(subject.to_string());
-                } else if let Some(subject) = event.strip_prefix("delegation:revoked:") {
-                    delegated_subjects.remove(subject);
+            if let Some(ev) = classify_delegation(entry) {
+                match ev.kind {
+                    DelegationKind::Granted => {
+                        delegated_subjects.insert(ev.target);
+                    }
+                    DelegationKind::Revoked => {
+                        delegated_subjects.remove(&ev.target);
+                    }
+                    _ => {}
                 }
             }
         }
@@ -206,31 +222,36 @@ impl Cleo {
         let mut gap_count = 0usize;
         let mut valid_count = 0usize;
         for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                if let Some(tool) = event.strip_prefix("gate:allowed:") {
-                    // Extract the actor from the entry
-                    let actor_name = match &entry.actor {
-                        zp_core::ActorId::System(s) => {
-                            // Strip "agent:" or similar prefixes
-                            s.strip_prefix("agent:").unwrap_or(s).to_string()
-                        }
-                        zp_core::ActorId::User(u) => u.clone(),
-                        _ => String::new(),
-                    };
+            let Some(ev) = classify_gate(entry) else {
+                continue;
+            };
+            if !matches!(ev.outcome, GateOutcome::Allowed) {
+                continue;
+            }
+            // (The gated tool name — `ev.subject` — isn't consulted in
+            // this check; actor-delegation validity is independent of
+            // which tool was gated.)
 
-                    // Check if this actor has a delegation
-                    if delegated_subjects.contains(&actor_name) {
-                        valid_count += 1;
-                    } else if !actor_name.is_empty()
-                        && actor_name != "operator"
-                        && !actor_name.starts_with("officer:")
-                    {
-                        // Operator and officers are implicit — they don't need
-                        // explicit delegation from Genesis
-                        gap_count += 1;
-                    }
-                    let _ = tool; // suppress unused warning
+            // Extract the actor from the entry
+            let actor_name = match &entry.actor {
+                zp_core::ActorId::System(s) => {
+                    // Strip "agent:" or similar prefixes
+                    s.strip_prefix("agent:").unwrap_or(s).to_string()
                 }
+                zp_core::ActorId::User(u) => u.clone(),
+                _ => String::new(),
+            };
+
+            // Check if this actor has a delegation
+            if delegated_subjects.contains(&actor_name) {
+                valid_count += 1;
+            } else if !actor_name.is_empty()
+                && actor_name != "operator"
+                && !actor_name.starts_with("officer:")
+            {
+                // Operator and officers are implicit — they don't need
+                // explicit delegation from Genesis
+                gap_count += 1;
             }
         }
 
@@ -283,15 +304,15 @@ impl Cleo {
         let mut total_governance = 0usize;
 
         for entry in &entries {
-            if let AuditAction::SystemEvent { event } = &entry.action {
-                let is_governance = event.starts_with("delegation:")
-                    || event.starts_with("gate:");
-
-                if is_governance {
-                    total_governance += 1;
-                    if entry.signatures.is_empty() {
-                        unsigned_governance += 1;
-                    }
+            // Broad-prefix check preserves pre-refactor behavior: catches
+            // any future delegation:* or gate:* kind not yet modeled in
+            // DelegationKind/GateOutcome. `is_delegation_event` /
+            // `is_gate_event` are the shared helpers for this pattern.
+            let is_governance = is_delegation_event(entry) || is_gate_event(entry);
+            if is_governance {
+                total_governance += 1;
+                if entry.signatures.is_empty() {
+                    unsigned_governance += 1;
                 }
             }
         }
@@ -347,11 +368,7 @@ impl Officer for Cleo {
         ]
     }
 
-    fn sweep(
-        &self,
-        chain: &ChainReader<'_>,
-        _vault_keys: &VaultKeyLister,
-    ) -> Vec<Finding> {
+    fn sweep(&self, chain: &ChainReader<'_>, _vault_keys: &VaultKeyLister) -> Vec<Finding> {
         debug!("Cleo sweep starting");
 
         let mut findings = Vec::new();
@@ -361,10 +378,7 @@ impl Officer for Cleo {
         findings.extend(self.check_authority_chains(chain));
         findings.extend(self.check_unsigned_governance(chain));
 
-        debug!(
-            findings = findings.len(),
-            "Cleo sweep complete"
-        );
+        debug!(findings = findings.len(), "Cleo sweep complete");
 
         findings
     }

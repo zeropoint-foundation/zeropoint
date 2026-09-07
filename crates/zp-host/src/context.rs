@@ -27,7 +27,9 @@
 
 use async_trait::async_trait;
 
-use crate::{HostError, HttpRequest, HttpResult, SpawnRequest, SpawnResult, WriteRequest, WriteResult};
+use crate::{
+    HostError, HttpRequest, HttpResult, SpawnRequest, SpawnResult, WriteRequest, WriteResult,
+};
 
 /// The interface through which all governed side effects must pass.
 ///

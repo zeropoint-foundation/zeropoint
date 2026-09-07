@@ -117,7 +117,7 @@ fn main() {
     let mut warned = 0;
     let mut blocked = 0;
 
-    let actions = vec![
+    let actions = [
         ActionType::Chat,
         ActionType::Chat,
         ActionType::Read {
@@ -180,7 +180,8 @@ fn main() {
     // 4. Audit trail
     println!("\nAUDIT");
     println!("─────");
-    let mut store = AuditStore::open_unsigned("./capstone-audit.db").expect("Should open audit store");
+    let mut store =
+        AuditStore::open_unsigned("./capstone-audit.db").expect("Should open audit store");
     let conv_id = ConversationId::new();
 
     let unsealed = UnsealedEntry::new(

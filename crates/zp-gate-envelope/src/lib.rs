@@ -29,6 +29,9 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod signer;
+pub use signer::GateRequestSigner;
+
 /// HTTP header name carrying the envelope. The substrate's gate accepts ZP-Sig
 /// envelopes via the standard `Authorization` header so callers do not need to
 /// add a custom-header allowlist on any intermediary.
@@ -185,10 +188,14 @@ pub fn parse_header(header: &str) -> Result<ParsedHeader, ParseError> {
         return Err(ParseError::WrongFieldCount);
     }
 
-    let v_str = parts[0].strip_prefix("v=").ok_or(ParseError::MalformedField("v"))?;
+    let v_str = parts[0]
+        .strip_prefix("v=")
+        .ok_or(ParseError::MalformedField("v"))?;
     let v: u8 = v_str.parse().map_err(|_| ParseError::InvalidValue("v"))?;
 
-    let kid_hex = parts[1].strip_prefix("kid=").ok_or(ParseError::MalformedField("kid"))?;
+    let kid_hex = parts[1]
+        .strip_prefix("kid=")
+        .ok_or(ParseError::MalformedField("kid"))?;
     let kid_vec = hex::decode(kid_hex).map_err(|_| ParseError::InvalidValue("kid"))?;
     if kid_vec.len() != 32 {
         return Err(ParseError::InvalidValue("kid"));
@@ -196,18 +203,25 @@ pub fn parse_header(header: &str) -> Result<ParsedHeader, ParseError> {
     let mut kid = [0u8; 32];
     kid.copy_from_slice(&kid_vec);
 
-    let ts_str = parts[2].strip_prefix("ts=").ok_or(ParseError::MalformedField("ts"))?;
+    let ts_str = parts[2]
+        .strip_prefix("ts=")
+        .ok_or(ParseError::MalformedField("ts"))?;
     let ts: i64 = ts_str.parse().map_err(|_| ParseError::InvalidValue("ts"))?;
 
-    let nonce = parts[3].strip_prefix("nonce=").ok_or(ParseError::MalformedField("nonce"))?;
+    let nonce = parts[3]
+        .strip_prefix("nonce=")
+        .ok_or(ParseError::MalformedField("nonce"))?;
     // Validate that the nonce decodes to exactly NONCE_BYTES — guards against
     // mis-sized nonces silently passing through to the dedup store.
-    let nonce_bytes = base64_url_no_pad_decode(nonce).map_err(|_| ParseError::InvalidValue("nonce"))?;
+    let nonce_bytes =
+        base64_url_no_pad_decode(nonce).map_err(|_| ParseError::InvalidValue("nonce"))?;
     if nonce_bytes.len() != NONCE_BYTES {
         return Err(ParseError::InvalidValue("nonce"));
     }
 
-    let sig_b64 = parts[4].strip_prefix("sig=").ok_or(ParseError::MalformedField("sig"))?;
+    let sig_b64 = parts[4]
+        .strip_prefix("sig=")
+        .ok_or(ParseError::MalformedField("sig"))?;
     let sig_vec = base64_url_no_pad_decode(sig_b64).map_err(|_| ParseError::InvalidValue("sig"))?;
     if sig_vec.len() != 64 {
         return Err(ParseError::InvalidValue("sig"));
@@ -358,7 +372,11 @@ mod tests {
         assert_eq!(parsed.sig, sig);
 
         // Reconstruct the full claims and verify.
-        let recon = parsed.into_claims(claims.method.clone(), claims.path.clone(), claims.body_hash.clone());
+        let recon = parsed.into_claims(
+            claims.method.clone(),
+            claims.path.clone(),
+            claims.body_hash.clone(),
+        );
         assert_eq!(recon, claims);
         zp_receipt::verify_signed(&recon, &kid, &sig).expect("verify");
     }
@@ -416,6 +434,9 @@ mod tests {
             nonce_8,
             base64_url_no_pad_encode(&[0u8; 64]),
         );
-        assert_eq!(parse_header(&header), Err(ParseError::InvalidValue("nonce")));
+        assert_eq!(
+            parse_header(&header),
+            Err(ParseError::InvalidValue("nonce"))
+        );
     }
 }

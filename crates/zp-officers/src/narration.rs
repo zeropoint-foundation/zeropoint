@@ -12,6 +12,10 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::chain_reads::{
+    classify_delegation, classify_gate, is_officer_event, is_system_shutdown_event,
+    is_system_startup_event, DelegationKind, GateOutcome,
+};
 use crate::officer::ChainReader;
 use zp_core::{AuditAction, AuditEntry, AuditId, PolicyDecision};
 
@@ -82,7 +86,9 @@ impl SegmentKind {
             | Self::ChainBurst
             | Self::SignatureCoverage => "integrity",
 
-            Self::ToolInvoked | Self::ToolCompleted | Self::ToolFailed
+            Self::ToolInvoked
+            | Self::ToolCompleted
+            | Self::ToolFailed
             | Self::OfficerFindingOperations => "operations",
 
             Self::OfficerFindingGovernance => "governance",
@@ -135,10 +141,7 @@ impl ChainStory {
     /// Each `AuditAction` variant maps to a narration template.
     /// Entries are processed in chronological order.
     pub fn from_entries(entries: &[AuditEntry]) -> Self {
-        let segments: Vec<StorySegment> = entries
-            .iter()
-            .filter_map(|entry| narrate_entry(entry))
-            .collect();
+        let segments: Vec<StorySegment> = entries.iter().filter_map(narrate_entry).collect();
 
         let time_range = if let (Some(first), Some(last)) = (entries.first(), entries.last()) {
             Some((first.timestamp, last.timestamp))
@@ -200,9 +203,7 @@ impl ChainStory {
 
             // Count consecutive segments of the same kind
             let mut run_end = i + 1;
-            while run_end < self.segments.len()
-                && self.segments[run_end].kind == current.kind
-            {
+            while run_end < self.segments.len() && self.segments[run_end].kind == current.kind {
                 run_end += 1;
             }
 
@@ -358,109 +359,97 @@ fn narrate_system_event(event: &str, entry: &AuditEntry) -> Option<StorySegment>
     let id = entry.id.clone();
     let conditions = extract_conditions(&entry.policy_decision);
 
-    // Delegation events
-    if let Some(subject) = event.strip_prefix("delegation:granted:") {
-        let capabilities = conditions
-            .get("capabilities")
-            .cloned()
-            .unwrap_or_default();
-        let expiry = conditions.get("expires").cloned().unwrap_or_default();
-        let text = if !capabilities.is_empty() && !expiry.is_empty() {
-            format!(
-                "Delegation granted to **{}** for {}, valid until {}.",
-                subject, capabilities, expiry
-            )
-        } else if !capabilities.is_empty() {
-            format!(
-                "Delegation granted to **{}** for {}.",
-                subject, capabilities
-            )
-        } else {
-            format!("Delegation granted to **{}**.", subject)
+    // Delegation events — one classifier call, four-way match on kind.
+    if let Some(ev) = classify_delegation(entry) {
+        let subject = ev.target;
+        let (text, kind) = match ev.kind {
+            DelegationKind::Granted => {
+                let capabilities = conditions.get("capabilities").cloned().unwrap_or_default();
+                let expiry = conditions.get("expires").cloned().unwrap_or_default();
+                let text = if !capabilities.is_empty() && !expiry.is_empty() {
+                    format!(
+                        "Delegation granted to **{}** for {}, valid until {}.",
+                        subject, capabilities, expiry
+                    )
+                } else if !capabilities.is_empty() {
+                    format!(
+                        "Delegation granted to **{}** for {}.",
+                        subject, capabilities
+                    )
+                } else {
+                    format!("Delegation granted to **{}**.", subject)
+                };
+                (text, SegmentKind::DelegationGranted)
+            }
+            DelegationKind::Revoked => {
+                let actor = format!("{:?}", entry.actor);
+                (
+                    format!("Delegation to **{}** revoked by {}.", subject, actor),
+                    SegmentKind::DelegationRevoked,
+                )
+            }
+            DelegationKind::Expired => (
+                format!("Delegation to **{}** expired without renewal.", subject),
+                SegmentKind::DelegationExpired,
+            ),
+            DelegationKind::Renewed => {
+                let renews = conditions.get("renews").cloned().unwrap_or_default();
+                let text = if !renews.is_empty() {
+                    format!(
+                        "Delegation to **{}** renewed (prior: {}…).",
+                        subject,
+                        &renews[..12.min(renews.len())]
+                    )
+                } else {
+                    format!("Delegation to **{}** renewed.", subject)
+                };
+                (text, SegmentKind::DelegationRenewed)
+            }
         };
         return Some(StorySegment {
             entry_ids: vec![id],
             text,
-            kind: SegmentKind::DelegationGranted,
-            span: (ts, ts),
-            source_officer: None,
-        });
-    }
-
-    if let Some(subject) = event.strip_prefix("delegation:revoked:") {
-        let actor = format!("{:?}", entry.actor);
-        return Some(StorySegment {
-            entry_ids: vec![id],
-            text: format!("Delegation to **{}** revoked by {}.", subject, actor),
-            kind: SegmentKind::DelegationRevoked,
-            span: (ts, ts),
-            source_officer: None,
-        });
-    }
-
-    if let Some(subject) = event.strip_prefix("delegation:expired:") {
-        return Some(StorySegment {
-            entry_ids: vec![id],
-            text: format!("Delegation to **{}** expired without renewal.", subject),
-            kind: SegmentKind::DelegationExpired,
-            span: (ts, ts),
-            source_officer: None,
-        });
-    }
-
-    if let Some(subject) = event.strip_prefix("delegation:renewed:") {
-        let renews = conditions.get("renews").cloned().unwrap_or_default();
-        let text = if !renews.is_empty() {
-            format!(
-                "Delegation to **{}** renewed (prior: {}…).",
-                subject,
-                &renews[..12.min(renews.len())]
-            )
-        } else {
-            format!("Delegation to **{}** renewed.", subject)
-        };
-        return Some(StorySegment {
-            entry_ids: vec![id],
-            text,
-            kind: SegmentKind::DelegationRenewed,
+            kind,
             span: (ts, ts),
             source_officer: None,
         });
     }
 
     // Gate decisions
-    if let Some(tool) = event.strip_prefix("gate:allowed:") {
-        let grant_id = conditions.get("grant_id").cloned().unwrap_or_default();
-        let text = if !grant_id.is_empty() {
-            format!(
-                "Gate allowed **{}**, citing delegation {}….",
-                tool,
-                &grant_id[..12.min(grant_id.len())]
-            )
-        } else {
-            format!("Gate allowed **{}**.", tool)
+    if let Some(ev) = classify_gate(entry) {
+        let tool = ev.subject;
+        let (text, kind) = match ev.outcome {
+            GateOutcome::Allowed => {
+                let grant_id = conditions.get("grant_id").cloned().unwrap_or_default();
+                let text = if !grant_id.is_empty() {
+                    format!(
+                        "Gate allowed **{}**, citing delegation {}….",
+                        tool,
+                        &grant_id[..12.min(grant_id.len())]
+                    )
+                } else {
+                    format!("Gate allowed **{}**.", tool)
+                };
+                (text, SegmentKind::GateAllowed)
+            }
+            GateOutcome::Denied => {
+                let reason = match &entry.policy_decision {
+                    PolicyDecision::Block { reason, .. } => reason.clone(),
+                    _ => conditions
+                        .get("reason")
+                        .cloned()
+                        .unwrap_or_else(|| "no reason given".into()),
+                };
+                (
+                    format!("Gate denied **{}**: {}.", tool, reason),
+                    SegmentKind::GateDenied,
+                )
+            }
         };
         return Some(StorySegment {
             entry_ids: vec![id],
             text,
-            kind: SegmentKind::GateAllowed,
-            span: (ts, ts),
-            source_officer: None,
-        });
-    }
-
-    if let Some(tool) = event.strip_prefix("gate:denied:") {
-        let reason = match &entry.policy_decision {
-            PolicyDecision::Block { reason, .. } => reason.clone(),
-            _ => conditions
-                .get("reason")
-                .cloned()
-                .unwrap_or_else(|| "no reason given".into()),
-        };
-        return Some(StorySegment {
-            entry_ids: vec![id],
-            text: format!("Gate denied **{}**: {}.", tool, reason),
-            kind: SegmentKind::GateDenied,
+            kind,
             span: (ts, ts),
             source_officer: None,
         });
@@ -491,7 +480,10 @@ fn narrate_system_event(event: &str, entry: &AuditEntry) -> Option<StorySegment>
     }
 
     // Officer findings (officer:{name}:{domain}:{type})
-    if event.starts_with("officer:") {
+    // Broad-match via chain_reads helper. The `officer:*` shape is a
+    // multi-segment identifier; parsing into (name, domain, finding_type)
+    // is narration-specific and stays here rather than in the classifier.
+    if is_officer_event(entry) {
         let parts: Vec<&str> = event.split(':').collect();
         if parts.len() >= 4 {
             let officer_name = parts[1];
@@ -582,8 +574,9 @@ fn narrate_system_event(event: &str, entry: &AuditEntry) -> Option<StorySegment>
         });
     }
 
-    // System lifecycle
-    if event.starts_with("system:startup") || event.starts_with("server:started") {
+    // System lifecycle — broad matchers preserve pre-refactor behavior
+    // (they include longer variants like `system:startup:extra_context`).
+    if is_system_startup_event(entry) {
         return Some(StorySegment {
             entry_ids: vec![id],
             text: format!("System started ({}).", event),
@@ -593,7 +586,7 @@ fn narrate_system_event(event: &str, entry: &AuditEntry) -> Option<StorySegment>
         });
     }
 
-    if event.starts_with("system:shutdown") || event.starts_with("server:stopped") {
+    if is_system_shutdown_event(entry) {
         return Some(StorySegment {
             entry_ids: vec![id],
             text: format!("System stopped ({}).", event),
@@ -704,7 +697,7 @@ mod tests {
     #[test]
     fn narrates_delegation_granted() {
         let entry = make_system_event(
-            "delegation:granted:ironclaw",
+            "delegation:granted:example-tool",
             vec![
                 "capabilities=chain_render".into(),
                 "expires=2026-07-01T00:00:00Z".into(),
@@ -712,7 +705,7 @@ mod tests {
         );
         let seg = narrate_entry(&entry).expect("should produce segment");
         assert_eq!(seg.kind, SegmentKind::DelegationGranted);
-        assert!(seg.text.contains("ironclaw"));
+        assert!(seg.text.contains("example-tool"));
         assert!(seg.text.contains("chain_render"));
     }
 
@@ -766,15 +759,13 @@ mod tests {
             timestamp: Utc::now(),
             prev_hash: "0".repeat(64),
             entry_hash: "f".repeat(64),
-            actor: ActorId::System("agent:ironclaw".into()),
+            actor: ActorId::System("agent:example-tool".into()),
             action: AuditAction::ToolInvoked {
                 tool_name: "memory_write".into(),
                 arguments_hash: "abcdef1234567890".into(),
             },
             conversation_id: ConversationId::new(),
-            policy_decision: PolicyDecision::Allow {
-                conditions: vec![],
-            },
+            policy_decision: PolicyDecision::Allow { conditions: vec![] },
             policy_module: "gate".into(),
             receipt: None,
             signatures: vec![],
@@ -787,7 +778,7 @@ mod tests {
     #[test]
     fn story_from_entries_produces_text() {
         let entries = vec![
-            make_system_event("delegation:granted:ironclaw", vec![]),
+            make_system_event("delegation:granted:example-tool", vec![]),
             make_system_event("gate:allowed:chain_render", vec![]),
         ];
         let story = ChainStory::from_entries(&entries);
@@ -796,7 +787,7 @@ mod tests {
 
         let text = story.render_text();
         assert!(text.contains("Chain Story"));
-        assert!(text.contains("ironclaw"));
+        assert!(text.contains("example-tool"));
     }
 
     #[test]
@@ -815,21 +806,15 @@ mod tests {
     #[test]
     fn filter_domain_works() {
         let entries = vec![
-            make_system_event("delegation:granted:ironclaw", vec![]),
+            make_system_event("delegation:granted:example-tool", vec![]),
             make_system_event(
                 "officer:std:heartbeat",
-                vec![
-                    "finding_count=0".into(),
-                    "max_severity=Ok".into(),
-                ],
+                vec!["finding_count=0".into(), "max_severity=Ok".into()],
             ),
         ];
         let story = ChainStory::from_entries(&entries);
         let governance = story.filter_domain("governance");
         assert_eq!(governance.segments.len(), 1);
-        assert_eq!(
-            governance.segments[0].kind,
-            SegmentKind::DelegationGranted
-        );
+        assert_eq!(governance.segments[0].kind, SegmentKind::DelegationGranted);
     }
 }

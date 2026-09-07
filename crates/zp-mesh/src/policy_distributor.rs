@@ -126,11 +126,7 @@ impl PolicyDistributor {
     /// Returns the rollout ID for tracking. Offline/stale nodes are marked Skipped.
     /// Actual delivery is simulated here — in production this would send the payload
     /// over the mesh transport or HTTP to each node's endpoint.
-    pub async fn push_policy(
-        &self,
-        policy_version: String,
-        policy_hash: String,
-    ) -> String {
+    pub async fn push_policy(&self, policy_version: String, policy_hash: String) -> String {
         let rollout_id = format!(
             "rollout-{}-{}",
             &policy_version,

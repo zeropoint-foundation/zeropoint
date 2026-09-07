@@ -907,7 +907,7 @@ mod tests {
     #[tokio::test]
     async fn test_server_client_connect() {
         let server = TcpServerInterface::bind("127.0.0.1:0").await.unwrap();
-        let port = server.config.name.split(':').last().unwrap();
+        let port = server.config.name.split(':').next_back().unwrap();
         let addr = format!("127.0.0.1:{}", port);
 
         let client = TcpClientInterface::connect(&addr).await.unwrap();
@@ -923,7 +923,7 @@ mod tests {
     #[tokio::test]
     async fn test_client_to_server_packet() {
         let server = TcpServerInterface::bind("127.0.0.1:0").await.unwrap();
-        let port = server.config.name.split(':').last().unwrap();
+        let port = server.config.name.split(':').next_back().unwrap();
         let addr = format!("127.0.0.1:{}", port);
 
         let client = TcpClientInterface::connect(&addr).await.unwrap();
@@ -948,7 +948,7 @@ mod tests {
     #[tokio::test]
     async fn test_server_to_client_packet() {
         let server = TcpServerInterface::bind("127.0.0.1:0").await.unwrap();
-        let port = server.config.name.split(':').last().unwrap();
+        let port = server.config.name.split(':').next_back().unwrap();
         let addr = format!("127.0.0.1:{}", port);
 
         let client = TcpClientInterface::connect(&addr).await.unwrap();
@@ -973,7 +973,7 @@ mod tests {
     #[tokio::test]
     async fn test_bidirectional_exchange() {
         let server = TcpServerInterface::bind("127.0.0.1:0").await.unwrap();
-        let port = server.config.name.split(':').last().unwrap();
+        let port = server.config.name.split(':').next_back().unwrap();
         let addr = format!("127.0.0.1:{}", port);
 
         let client = TcpClientInterface::connect(&addr).await.unwrap();
@@ -1006,7 +1006,7 @@ mod tests {
     #[tokio::test]
     async fn test_multiple_clients() {
         let server = TcpServerInterface::bind("127.0.0.1:0").await.unwrap();
-        let port = server.config.name.split(':').last().unwrap();
+        let port = server.config.name.split(':').next_back().unwrap();
         let addr = format!("127.0.0.1:{}", port);
 
         let client1 = TcpClientInterface::connect(&addr).await.unwrap();
@@ -1040,7 +1040,7 @@ mod tests {
     #[tokio::test]
     async fn test_stats_tracking() {
         let server = TcpServerInterface::bind("127.0.0.1:0").await.unwrap();
-        let port = server.config.name.split(':').last().unwrap();
+        let port = server.config.name.split(':').next_back().unwrap();
         let addr = format!("127.0.0.1:{}", port);
 
         let client = TcpClientInterface::connect(&addr).await.unwrap();
@@ -1077,7 +1077,7 @@ mod tests {
         let pkt = Packet::data(dest, tricky_data.clone(), PacketContext::Receipt).unwrap();
 
         let server = TcpServerInterface::bind("127.0.0.1:0").await.unwrap();
-        let port = server.config.name.split(':').last().unwrap();
+        let port = server.config.name.split(':').next_back().unwrap();
         let addr = format!("127.0.0.1:{}", port);
 
         let client = TcpClientInterface::connect(&addr).await.unwrap();

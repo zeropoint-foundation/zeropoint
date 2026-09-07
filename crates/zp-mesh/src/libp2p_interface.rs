@@ -373,10 +373,7 @@ impl Interface for Libp2pInterface {
     }
 
     fn stats(&self) -> InterfaceStats {
-        self.stats
-            .try_lock()
-            .map(|s| s.clone())
-            .unwrap_or_default()
+        self.stats.try_lock().map(|s| s.clone()).unwrap_or_default()
     }
 }
 

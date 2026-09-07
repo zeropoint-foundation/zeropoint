@@ -7681,6 +7681,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "zp-anchor-ots"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "futures",
+ "hex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "zp-anchor",
+]
+
+[[package]]
 name = "zp-artifacts"
 version = "0.1.0"
 dependencies = [
@@ -7773,6 +7790,7 @@ dependencies = [
  "zp-configure",
  "zp-core",
  "zp-engine",
+ "zp-gate-envelope",
  "zp-host",
  "zp-keys",
  "zp-mesh",
@@ -7860,7 +7878,18 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "regex",
+ "tempfile",
  "walkdir",
+]
+
+[[package]]
+name = "zp-emission-coherence"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -7893,6 +7922,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_json",
+ "zp-core",
  "zp-receipt",
 ]
 
@@ -7947,12 +7977,23 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
  "zp-audit",
  "zp-core",
  "zp-policy",
+]
+
+[[package]]
+name = "zp-inference-observer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -8148,6 +8189,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "zp-ontology"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tracing",
+ "uuid",
+ "zp-core",
+]
+
+[[package]]
 name = "zp-pipeline"
 version = "0.1.0"
 dependencies = [
@@ -8172,7 +8230,6 @@ dependencies = [
  "zp-mesh",
  "zp-policy",
  "zp-receipt",
- "zp-skills",
  "zp-trust",
 ]
 
@@ -8231,6 +8288,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "toml",
@@ -8239,7 +8297,10 @@ dependencies = [
  "zp-audit",
  "zp-config",
  "zp-core",
+ "zp-emission-coherence",
+ "zp-net",
  "zp-officers",
+ "zp-ontology",
  "zp-receipt",
 ]
 
@@ -8297,6 +8358,7 @@ dependencies = [
  "which",
  "zeroize",
  "zp-anchor",
+ "zp-anchor-ots",
  "zp-artifacts",
  "zp-audit",
  "zp-config",
@@ -8306,12 +8368,14 @@ dependencies = [
  "zp-engine",
  "zp-gate-envelope",
  "zp-host",
+ "zp-inference-observer",
  "zp-keys",
  "zp-memory",
  "zp-mesh",
  "zp-net",
  "zp-observation",
  "zp-officers",
+ "zp-ontology",
  "zp-pipeline",
  "zp-policy",
  "zp-receipt",
@@ -8319,21 +8383,6 @@ dependencies = [
  "zp-sensors",
  "zp-trust",
  "zp-verbs",
-]
-
-[[package]]
-name = "zp-skills"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "parking_lot",
- "semver",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "zp-core",
 ]
 
 [[package]]

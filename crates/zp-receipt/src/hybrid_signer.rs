@@ -99,7 +99,10 @@ impl std::fmt::Debug for HybridSigner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("HybridSigner")
             .field("ed25519", &self.ed25519_public_key_hex())
-            .field("ml_dsa_65", &format!("{}…", &self.pq_verifying_key_hex()[..32]))
+            .field(
+                "ml_dsa_65",
+                &format!("{}…", &self.pq_verifying_key_hex()[..32]),
+            )
             .finish()
     }
 }
@@ -169,11 +172,7 @@ mod tests {
         signer.sign(&mut receipt);
 
         // Old verifier path: only check Ed25519 — should pass.
-        let ed_ok = Signer::verify_receipt(
-            &receipt,
-            &signer.ed25519_public_key_bytes(),
-        )
-        .unwrap();
+        let ed_ok = Signer::verify_receipt(&receipt, &signer.ed25519_public_key_bytes()).unwrap();
         assert!(ed_ok);
     }
 

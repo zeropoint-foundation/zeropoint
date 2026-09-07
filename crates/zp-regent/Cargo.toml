@@ -13,7 +13,12 @@ zp-core = { path = "../zp-core" }
 zp-receipt = { path = "../zp-receipt" }
 zp-audit = { path = "../zp-audit" }
 zp-officers = { path = "../zp-officers" }
+# Read-side only. The Regent consumes ontology objects; the Cartographer in
+# zp-server writes them. zp-ontology depends on zp-core alone, so this adds no
+# cycle -- zp-server -> zp-regent -> zp-ontology -> zp-core.
+zp-ontology = { path = "../zp-ontology" }
 zp-config = { path = "../zp-config" }
+zp-emission-coherence = { path = "../zp-emission-coherence" }
 
 # Async
 tokio = { workspace = true }
@@ -43,3 +48,7 @@ toml = { workspace = true }
 
 # SHA-256 for cognitive-input composition-summary hashing
 sha2 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+zp-net = { path = "../zp-net" }

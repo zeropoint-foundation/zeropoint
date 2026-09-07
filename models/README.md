@@ -3,42 +3,48 @@
 Each subdirectory contains a `model_dossier.toml` — the substrate's structured
 characterization of a model family before it is trusted with cognitive work.
 
-Dossiers combine researched knowledge (published quirks, architecture notes,
-community findings) with empirical measurements (bench results, prompt
-compatibility testing). Together they form the input to the chain-validation
-gate: the Regent reads the model dossier to know *what to test for*, runs the
-bench to get *empirical results*, and emits a `regent:config:inference`
-receipt with the full evidence. The operator signs the characterized pair.
+## Canonical spec
 
-## Lifecycle
+**Schema, lifecycle, adversarial profiling, think-suppression profiling,
+drafter sub-record, and receipt discipline are specified in
+[`docs/design/MODEL-DOSSIER-2026-07.md`](../docs/design/MODEL-DOSSIER-2026-07.md).**
 
-1. **Research** — populate `[identity]`, `[architecture]`, `[quirks]`, `[research]`
-2. **Bench** — run `scripts/bench-local-models.py`, populate `[bench]`
-3. **Prompt testing** — test against regent prompt templates, populate `[prompt_compatibility]`
-4. **Adversarial profiling** — the Regent runs the full battery including adversarial probes that test instruction conflict resolution, prompt injection resistance, framing sensitivity, context degradation, and compliance boundaries. A model that passes polite tests but fails adversarial ones has known deployment constraints. Failures are characterized in `[quirks]`, not treated as blocking — the dossier captures WHERE the model breaks so the substrate can deploy it within its safe envelope.
-5. **Tier recommendation** — based on all evidence, populate `[tiers]`
-6. **Chain validation** — Regent self-tests, emits receipt, operator signs
+This directory holds the operational files (per-model dossier TOMLs, bench
+outputs, evaluation report artifacts). This README covers the operational
+side; the discipline lives in the Tier-2 doc.
 
-## Schema
+## Files in this tree
 
-See any `model_dossier.toml` for the canonical field set. The schema is
-self-documenting via TOML comments.
+- `<model_family>/model_dossier.toml` — the dossier itself, canonical
+  serialization. Schema per MODEL-DOSSIER-2026-07 §"The canonical schema."
+- `<model_family>/bench_results/` — raw output from `scripts/bench-local-models.py`.
+  Referenced from the dossier's `evidence.evaluation_receipts`.
+- `<model_family>/adversarial_probes/` — adversarial probe outputs feeding
+  the dossier's `suitability.adversarial_resistance` field. Probe families
+  per MODEL-DOSSIER-2026-07 §"Adversarial profiling."
+- `<model_family>/think_suppression/` — think-suppression probe results
+  feeding `suitability.think_suppression_profile`.
+- `<model_family>/drafters/` — when a speculative-decoding drafter exists
+  for this target, drafter checkpoint metadata and byte-identical parity
+  receipts land here. Populates the dossier's `drafter` sub-record.
 
-## Think Suppression Profiling
+## Running the bench
 
-The evaluation battery probes three think suppression mechanisms per model:
+```
+python scripts/bench-local-models.py --model <family>/<variant>
+```
 
-1. **`think: false`** — Ollama API option, portable across families
-2. **`think` omitted** — don't send the parameter at all
-3. **`/no_think` token** — model-specific token in the user message (qwen3)
+Emits results under `<model_family>/bench_results/` and produces the
+`evaluation_receipt` hashes that get inlined into the dossier.
 
-Different variants of the same family may respond to different mechanisms.
-The evaluation report's `think_suppression_profile` captures which mechanisms
-are effective per variant, and the model dossier's `[quirks]` section records
-the findings. The inference layer should use the model dossier to select the
-right mechanism rather than assuming `think: false` works universally.
+## Bootstrap ceremony
 
-Model behavior differences around think suppression are diagnostic signal,
-not noise. The inference layer logs leaked think tags at warn level but
-does NOT strip them — the leak tells you the suppression mechanism isn't
-working for that variant, which feeds back into the model dossier.
+The full bootstrap ceremony (candidate → validated → active) is specified
+in MODEL-DOSSIER-2026-07 §"Bootstrap ceremony." The Regent's
+`regent:config:inference` receipt is the sovereign-signature seat.
+
+## Adding a drafter
+
+Drafter adoption follows the same discipline. See
+MODEL-DOSSIER-2026-07 §"Two serializations, one artifact" and the drafter
+adoption ceremony under §"Immediate design work."

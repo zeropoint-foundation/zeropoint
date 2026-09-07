@@ -186,10 +186,7 @@ impl SovereigntyProvider for FaceEnrollProvider {
         }
     }
 
-    fn upgrade_from(
-        &self,
-        secret: &[u8; 32],
-    ) -> Result<Option<super::EnrollmentResult>, KeyError> {
+    fn upgrade_from(&self, secret: &[u8; 32]) -> Result<Option<super::EnrollmentResult>, KeyError> {
         // Enroll face, then save the secret under face gating
         let enrollment = self.enroll()?;
         self.save_secret(secret)?;
@@ -714,7 +711,11 @@ fn verify_face_v2(
                         // Below threshold — keep trying (lighting may improve)
                     }
                     Err(e) => {
-                        tracing::debug!("Embedding computation failed on attempt {}: {}", attempt, e);
+                        tracing::debug!(
+                            "Embedding computation failed on attempt {}: {}",
+                            attempt,
+                            e
+                        );
                     }
                 }
             }

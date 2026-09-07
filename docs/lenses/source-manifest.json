@@ -1,11 +1,11 @@
 {
-  "generated_at": 1785028493,
-  "extractor": "zp-lens-ast-extractor/0.1.0 (syn 2)",
+  "generated_from_commit": "a097fbd",
+  "generated_at": 1788738029,
   "crates": [
     {
       "name": "course-examples",
       "files": 17,
-      "loc": 1436,
+      "loc": 1437,
       "deps": [
         "zp-audit",
         "zp-core",
@@ -31,8 +31,8 @@
       "types_produced": {},
       "types_consumed": {
         "ActionType": 3,
-        "PolicyContext": 3,
-        "TrustTier": 3
+        "TrustTier": 3,
+        "PolicyContext": 3
       },
       "type_flow_signal": 9,
       "types_produced_total": 0,
@@ -41,7 +41,7 @@
     {
       "name": "execution-engine",
       "files": 7,
-      "loc": 1778,
+      "loc": 1800,
       "deps": [
         "zp-host"
       ],
@@ -75,24 +75,19 @@
       ],
       "type_defs_count": 14,
       "types_produced": {
-        "Runtime": 8,
-        "SandboxConfig": 7,
-        "ExecutionReceipt": 5,
         "ExecutionResult": 5,
-        "SandboxCapability": 4,
-        "ExecutionRequest": 2,
-        "EngineStatus": 1,
+        "Runtime": 4,
+        "SandboxConfig": 3,
+        "SandboxCapability": 3,
+        "ExecutionReceipt": 2,
+        "ExecutionRequest": 1,
         "ExecOutcome": 1,
-        "ExecOutput": 1,
-        "ExecutionEngine": 1,
-        "ExecutionError": 1,
-        "ExecutionTiming": 1,
-        "ResourceUsage": 1,
-        "RuntimeInfo": 1
+        "EngineStatus": 1,
+        "ExecOutput": 1
       },
       "types_consumed": {},
-      "type_flow_signal": 39,
-      "types_produced_total": 39,
+      "type_flow_signal": 21,
+      "types_produced_total": 21,
       "types_consumed_total": 0
     },
     {
@@ -141,37 +136,26 @@
       ],
       "type_defs_count": 25,
       "types_produced": {
-        "Observation": 30,
-        "ExpertiseProfile": 23,
-        "Hypothesis": 10,
-        "LearningContext": 6,
-        "MLEStarConfig": 6,
-        "ReadinessAssessment": 6,
-        "InMemoryExpertiseStore": 5,
-        "InMemoryObservationStore": 5,
+        "Observation": 28,
+        "ExpertiseProfile": 20,
+        "Hypothesis": 8,
         "MLEStarResult": 5,
-        "TaskAffinity": 5,
-        "CapabilityEstimate": 4,
-        "ParameterSensitivity": 4,
-        "BayesianEstimator": 3,
-        "PerformancePattern": 3,
-        "StandardHypothesisGenerator": 3,
-        "BasicEstimator": 2,
-        "CombinedStore": 2,
-        "ConservativeHypothesisGenerator": 2,
-        "HypothesisType": 2,
-        "MLEStarEngine": 2,
-        "PredictedEffect": 2,
-        "EffectDirection": 1,
-        "MLEStarError": 1,
+        "LearningContext": 5,
+        "ReadinessAssessment": 4,
+        "TaskAffinity": 4,
+        "CapabilityEstimate": 3,
+        "ParameterSensitivity": 3,
+        "MLEStarConfig": 2,
+        "PerformancePattern": 2,
         "PreLearningResult": 1,
-        "SensitivityDirection": 1
+        "HypothesisType": 1,
+        "PredictedEffect": 1
       },
       "types_consumed": {
         "ObservationStore": 1
       },
-      "type_flow_signal": 135,
-      "types_produced_total": 134,
+      "type_flow_signal": 88,
+      "types_produced_total": 87,
       "types_consumed_total": 1
     },
     {
@@ -223,38 +207,20 @@
       ],
       "type_defs_count": 28,
       "types_produced": {
-        "OutcomeDistribution": 16,
+        "OutcomeDistribution": 13,
         "ParameterBounds": 8,
-        "SampledParameters": 7,
-        "MonteCarloConfig": 6,
-        "RiskAssessment": 6,
-        "SignificanceResult": 6,
-        "ConfidenceIntervals": 5,
+        "SampledParameters": 6,
+        "SignificanceResult": 5,
+        "RiskAssessment": 5,
+        "ConfidenceIntervals": 4,
         "MonteCarloResult": 4,
-        "BootstrapCICalculator": 3,
-        "KernelDensityEstimator": 3,
-        "LatinHypercubeSampler": 3,
-        "PermutationTest": 3,
-        "RandomSampler": 3,
-        "SobolSampler": 3,
-        "ConservativeRiskAssessor": 2,
-        "DistributionHint": 2,
-        "EffectSizeInterpretation": 2,
-        "EmpiricalEstimator": 2,
-        "MannWhitneyU": 2,
-        "MonteCarloEngine": 2,
-        "RobustEstimator": 2,
+        "MonteCarloConfig": 2,
         "SimulationResults": 2,
-        "StandardCICalculator": 2,
-        "StandardRiskAssessor": 2,
-        "WelchTTest": 2,
-        "ConvergenceInfo": 1,
-        "MonteCarloError": 1,
-        "SimulationRun": 1
+        "DistributionHint": 1
       },
       "types_consumed": {},
-      "type_flow_signal": 101,
-      "types_produced_total": 101,
+      "type_flow_signal": 50,
+      "types_produced_total": 50,
       "types_consumed_total": 0
     },
     {
@@ -295,38 +261,30 @@
       ],
       "type_defs_count": 13,
       "types_produced": {
-        "NodeContext": 10,
-        "QueryResponse": 6,
-        "AppState": 4,
-        "ClinicDb": 4,
-        "PharmacyDb": 4,
+        "NodeContext": 7,
+        "QueryResponse": 4,
         "Args": 3,
-        "QueryRequest": 3,
-        "HopResult": 2,
-        "PatientAppointment": 2,
-        "PrescriptionRecord": 2,
+        "QueryRequest": 2,
         "ScenarioResult": 2,
-        "HealthResponse": 1,
-        "NodeRole": 1
+        "ClinicDb": 1,
+        "PatientAppointment": 1,
+        "PrescriptionRecord": 1,
+        "AppState": 1,
+        "PharmacyDb": 1
       },
       "types_consumed": {
-        "Receipt": 6,
-        "CertificateChain": 3,
-        "Certificate": 2,
-        "IntroductionRequest": 2,
-        "IntroductionResponse": 2,
+        "Receipt": 3,
+        "CertificateChain": 2,
         "PolicyDecision": 2,
-        "AgentKey": 1,
-        "GenesisKey": 1,
-        "OperatorKey": 1,
-        "PolicyContext": 1,
-        "PolicyEngine": 1,
         "Router": 1,
-        "Signer": 1
+        "Certificate": 1,
+        "IntroductionRequest": 1,
+        "IntroductionResponse": 1,
+        "PolicyContext": 1
       },
-      "type_flow_signal": 68,
-      "types_produced_total": 44,
-      "types_consumed_total": 24
+      "type_flow_signal": 35,
+      "types_produced_total": 23,
+      "types_consumed_total": 12
     },
     {
       "name": "zp-anchor",
@@ -343,6 +301,7 @@
       "info_flow_signal": 0,
       "primary_role": "utility",
       "consumed_by": [
+        "zp-anchor-ots",
         "zp-cli",
         "zp-server"
       ],
@@ -358,22 +317,57 @@
       "type_defs_count": 7,
       "types_produced": {
         "AnchorReceipt": 6,
-        "AnchorCommitment": 3,
-        "AnchorVerification": 2,
-        "AnchorError": 1,
-        "AnchorTrigger": 1,
-        "ChainType": 1,
-        "NoOpAnchor": 1
+        "AnchorCommitment": 2,
+        "AnchorVerification": 2
       },
       "types_consumed": {},
-      "type_flow_signal": 15,
-      "types_produced_total": 15,
+      "type_flow_signal": 10,
+      "types_produced_total": 10,
       "types_consumed_total": 0
+    },
+    {
+      "name": "zp-anchor-ots",
+      "files": 2,
+      "loc": 805,
+      "deps": [
+        "zp-anchor"
+      ],
+      "sign_count": 0,
+      "gate_count": 0,
+      "chain_count": 0,
+      "verify_count": 1,
+      "receipt_families": {},
+      "receipt_slugs_sample": [],
+      "receipt_slug_total": 0,
+      "info_flow_signal": 1,
+      "primary_role": "verifying",
+      "consumed_by": [
+        "zp-server"
+      ],
+      "type_defs": [
+        "CalendarProof",
+        "OtsAnchor",
+        "OtsProof",
+        "PartialProof"
+      ],
+      "type_defs_count": 4,
+      "types_produced": {
+        "OtsProof": 2,
+        "PartialProof": 1
+      },
+      "types_consumed": {
+        "AnchorReceipt": 5,
+        "AnchorCommitment": 3,
+        "AnchorVerification": 1
+      },
+      "type_flow_signal": 12,
+      "types_produced_total": 3,
+      "types_consumed_total": 9
     },
     {
       "name": "zp-artifacts",
       "files": 10,
-      "loc": 1368,
+      "loc": 1411,
       "deps": [
         "zp-content"
       ],
@@ -411,34 +405,29 @@
       "type_defs_count": 17,
       "types_produced": {
         "LibraryError": 23,
-        "ArtifactId": 15,
-        "Artifact": 11,
-        "ArtifactKind": 8,
+        "ArtifactId": 13,
+        "Artifact": 10,
         "NormalizedReceipt": 5,
-        "LocalArtifactLibrary": 4,
-        "RenderConfig": 4,
-        "SourceManifest": 4,
         "LibraryFilter": 3,
-        "ArtifactIndex": 2,
-        "ChainNarrationComposition": 2,
+        "ArtifactKind": 3,
         "IndexRow": 2,
-        "LibraryStateFilter": 2,
-        "ArtifactContent": 1,
-        "ArtifactSignature": 1,
-        "LifecycleState": 1
+        "ChainNarrationComposition": 2,
+        "LocalArtifactLibrary": 2,
+        "SourceManifest": 1,
+        "RenderConfig": 1
       },
       "types_consumed": {
-        "ContentError": 2,
-        "ContentId": 2
+        "ContentError": 1,
+        "ContentId": 1
       },
-      "type_flow_signal": 92,
-      "types_produced_total": 88,
-      "types_consumed_total": 4
+      "type_flow_signal": 67,
+      "types_produced_total": 65,
+      "types_consumed_total": 2
     },
     {
       "name": "zp-audit",
       "files": 12,
-      "loc": 6394,
+      "loc": 6822,
       "deps": [
         "zp-core",
         "zp-receipt",
@@ -448,9 +437,13 @@
       "gate_count": 0,
       "chain_count": 0,
       "verify_count": 54,
-      "receipt_families": {},
-      "receipt_slugs_sample": [],
-      "receipt_slug_total": 0,
+      "receipt_families": {
+        "delegation": 1
+      },
+      "receipt_slugs_sample": [
+        "delegation:granted:regent"
+      ],
+      "receipt_slug_total": 1,
       "info_flow_signal": 106,
       "primary_role": "verifying",
       "consumed_by": [
@@ -511,69 +504,45 @@
       ],
       "type_defs_count": 42,
       "types_produced": {
-        "UnsealedEntry": 8,
-        "ReconstitutionEntry": 7,
-        "AuditSigner": 4,
-        "PeerAuditAttestation": 4,
-        "VerificationReport": 4,
-        "AuditResponse": 3,
-        "CompactAuditEntry": 3,
-        "ReconstitutedState": 3,
-        "ReconstitutionConfig": 3,
-        "RecoveryConfig": 3,
-        "ActiveObservation": 2,
-        "AuditStore": 2,
-        "BlastRadiusReport": 2,
-        "ChainVerifier": 2,
-        "InFlightGrant": 2,
-        "PendingToolExecution": 2,
-        "RecoveredState": 2,
+        "UnsealedEntry": 7,
+        "ReconstitutionEntry": 6,
+        "PeerAuditAttestation": 3,
+        "VerificationReport": 3,
+        "AuditResponse": 2,
+        "ReconstitutedState": 2,
         "SharedNotifier": 2,
-        "ShutdownMarker": 2,
-        "TailEntry": 2,
-        "AnchorVerificationResult": 1,
-        "AnomalyKind": 1,
-        "AnomalySeverity": 1,
-        "AuditChallenge": 1,
-        "AuditRange": 1,
-        "AuditRow": 1,
-        "AuditVerifiableEntry": 1,
-        "CapabilitySummary": 1,
+        "CompactAuditEntry": 1,
+        "ReconstitutionConfig": 1,
+        "BlastRadiusReport": 1,
+        "RecoveryConfig": 1,
         "Checkpoint": 1,
-        "DiscardedEntry": 1,
-        "EntryVerification": 1,
-        "MemoryStageMismatch": 1,
-        "ReconstitutedMemory": 1,
-        "ReconstitutionAnomaly": 1,
-        "ReconstitutionEngine": 1,
-        "RecoveryAction": 1,
-        "RecoveryEngine": 1,
+        "RecoveredState": 1,
         "RecoveryReceipt": 1,
         "ScrubRule": 1,
-        "StoreError": 1,
+        "AuditSigner": 1,
         "TailProbes": 1,
-        "TimelineGap": 1
+        "AuditRow": 1
       },
       "types_consumed": {
-        "AuditEntry": 26,
-        "AuditAction": 4,
+        "AuditEntry": 25,
+        "AuditAction": 3,
         "AuditId": 3,
-        "ConversationId": 3,
-        "PolicyDecision": 3,
         "SignatureBlock": 3,
-        "ActorId": 2,
-        "Receipt": 2,
+        "ConversationId": 2,
+        "PolicyDecision": 2,
         "SignatureBlockView": 1,
-        "VerifyReport": 1
+        "VerifyReport": 1,
+        "ActorId": 1,
+        "Receipt": 1
       },
-      "type_flow_signal": 132,
-      "types_produced_total": 84,
-      "types_consumed_total": 48
+      "type_flow_signal": 78,
+      "types_produced_total": 36,
+      "types_consumed_total": 42
     },
     {
       "name": "zp-bench",
       "files": 1,
-      "loc": 515,
+      "loc": 496,
       "deps": [
         "zp-engine",
         "zp-receipt",
@@ -594,20 +563,20 @@
       ],
       "type_defs_count": 1,
       "types_produced": {
-        "BenchEntry": 2
+        "BenchEntry": 1
       },
       "types_consumed": {
         "Receipt": 1,
         "Signer": 1
       },
-      "type_flow_signal": 4,
-      "types_produced_total": 2,
+      "type_flow_signal": 3,
+      "types_produced_total": 1,
       "types_consumed_total": 2
     },
     {
       "name": "zp-cli",
-      "files": 15,
-      "loc": 19028,
+      "files": 17,
+      "loc": 20653,
       "deps": [
         "zp-anchor",
         "zp-audit",
@@ -615,6 +584,7 @@
         "zp-configure",
         "zp-core",
         "zp-engine",
+        "zp-gate-envelope",
         "zp-host",
         "zp-keys",
         "zp-mesh",
@@ -627,7 +597,7 @@
         "zp-trust",
         "zp-verify"
       ],
-      "sign_count": 53,
+      "sign_count": 55,
       "gate_count": 1,
       "chain_count": 1,
       "verify_count": 4,
@@ -638,7 +608,7 @@
         "governance:propose"
       ],
       "receipt_slug_total": 2,
-      "info_flow_signal": 59,
+      "info_flow_signal": 61,
       "primary_role": "signing",
       "consumed_by": [],
       "type_defs": [
@@ -647,11 +617,14 @@
         "AnchorMismatch",
         "AnchorReport",
         "ApprovalCache",
+        "ApprovalCmd",
         "ApprovalResult",
         "Args",
         "AuditCmd",
+        "Catalog",
         "CfgCmd",
         "ChainCmd",
+        "Check",
         "Commands",
         "CompiledRule",
         "ConfigureCmd",
@@ -683,10 +656,13 @@
         "PolicyShowCmd",
         "PortCmd",
         "Posture",
+        "PrecedentCmd",
         "PricingCmd",
+        "RevokeTarget",
         "RiskLevel",
         "ScanReport",
         "ScanSummary",
+        "Scratch",
         "SecureConfig",
         "SecurityRule",
         "SensitiveDirInfo",
@@ -698,93 +674,70 @@
         "ToolCmd",
         "VaultCmd"
       ],
-      "type_defs_count": 55,
+      "type_defs_count": 61,
       "types_produced": {
         "EvalResult": 6,
-        "GuardConfig": 6,
-        "Posture": 6,
-        "ShellParseError": 6,
-        "Actor": 5,
-        "AiToolInfo": 4,
-        "RiskLevel": 4,
-        "DiscoveredTool": 3,
-        "SensitiveDirInfo": 3,
-        "ShellInfo": 3,
-        "DiscoveryResult": 2,
-        "ManifestHashError": 2,
-        "NetworkInfo": 2,
-        "OnboardConfig": 2,
-        "PricingCmd": 2,
-        "SecureConfig": 2,
-        "ServiceInfo": 2,
+        "GuardConfig": 5,
+        "ShellParseError": 4,
+        "AiToolInfo": 3,
+        "Posture": 3,
         "Statement": 2,
-        "AnchorMismatch": 1,
-        "AnchorReport": 1,
-        "ApprovalCache": 1,
-        "ApprovalResult": 1,
-        "AuditCmd": 1,
-        "CfgCmd": 1,
-        "ChainCmd": 1,
-        "Commands": 1,
+        "Actor": 2,
+        "Commands": 2,
+        "OnboardConfig": 2,
+        "DiscoveredTool": 2,
+        "ShellInfo": 2,
+        "SensitiveDirInfo": 2,
+        "DiscoveryResult": 2,
+        "SecureConfig": 2,
+        "Scratch": 2,
         "CompiledRule": 1,
-        "ConfigureCmd": 1,
-        "CorrectionCmd": 1,
-        "DeriveCmd": 1,
-        "DiscoverReport": 1,
-        "GateCmd": 1,
-        "GrantSnapshot": 1,
+        "ApprovalCache": 1,
         "GuardDecision": 1,
+        "ApprovalResult": 1,
         "InitConfig": 1,
-        "KeychainCmd": 1,
-        "KeysCmd": 1,
-        "LaunchReceiptFields": 1,
-        "MemoryCmd": 1,
-        "MeshCmd": 1,
-        "ModelCmd": 1,
-        "NeededCredential": 1,
-        "OfficerCmd": 1,
-        "OperatorCmd": 1,
-        "PolicyCmd": 1,
-        "PolicySetCmd": 1,
-        "PolicyShowCmd": 1,
-        "PortCmd": 1,
+        "AnchorReport": 1,
+        "RevokeTarget": 1,
+        "GrantSnapshot": 1,
         "ScanReport": 1,
-        "ScanSummary": 1,
-        "SecurityRule": 1,
-        "SubstrateCmd": 1,
-        "ToolCmd": 1,
-        "VaultCmd": 1
+        "DiscoverReport": 1,
+        "PricingCmd": 1,
+        "NeededCredential": 1,
+        "ManifestHashError": 1,
+        "LaunchReceiptFields": 1,
+        "ServiceInfo": 1,
+        "NetworkInfo": 1
       },
       "types_consumed": {
         "Pipeline": 14,
         "Keyring": 6,
         "CredentialVault": 5,
-        "AuditEntry": 4,
         "KeyError": 4,
-        "CapabilityGrant": 3,
+        "AuditEntry": 4,
         "ConfigEngine": 3,
-        "Receipt": 2,
         "RotationCertificate": 2,
-        "ActionType": 1,
-        "AuditStore": 1,
-        "AuthorityRef": 1,
-        "CascadePolicy": 1,
-        "GenesisKey": 1,
-        "GrantedCapability": 1,
-        "KeyringStatus": 1,
-        "LeaseFailureMode": 1,
+        "Receipt": 2,
+        "PolicyContext": 2,
+        "InjectorError": 2,
+        "CapabilityGrant": 2,
         "OperatorKey": 1,
-        "ProviderProfile": 1,
-        "RevocationReason": 1,
-        "ScannedTool": 1,
-        "SovereigntyMode": 1,
+        "GenesisKey": 1,
+        "KeyringStatus": 1,
+        "ActionType": 1,
         "ToolVersionInfo": 1,
+        "AuditStore": 1,
+        "LeaseFailureMode": 1,
+        "CascadePolicy": 1,
+        "RevocationReason": 1,
+        "AuthorityRef": 1,
+        "GrantedCapability": 1,
         "TrustTier": 1,
+        "ProviderProfile": 1,
         "WasmModuleMetadata": 1
       },
-      "type_flow_signal": 157,
-      "types_produced_total": 98,
-      "types_consumed_total": 59
+      "type_flow_signal": 117,
+      "types_produced_total": 57,
+      "types_consumed_total": 60
     },
     {
       "name": "zp-cloudflare",
@@ -812,7 +765,7 @@
     {
       "name": "zp-config",
       "files": 8,
-      "loc": 1603,
+      "loc": 2142,
       "deps": [],
       "sign_count": 8,
       "gate_count": 0,
@@ -834,6 +787,7 @@
         "ConfigError",
         "ConfigFile",
         "ConfigResolver",
+        "ConfigSetOutcome",
         "DataSection",
         "IdentitySection",
         "LlmSection",
@@ -842,43 +796,37 @@
         "OfficersSection",
         "RegentSection",
         "ServerSection",
+        "ShadowedAtBoot",
         "Source",
         "Sourced",
         "TransitionInfo",
         "UpstreamBindingStatus",
         "ZpConfig"
       ],
-      "type_defs_count": 17,
+      "type_defs_count": 19,
       "types_produced": {
-        "Sourced": 28,
         "ZpConfig": 8,
-        "Source": 6,
-        "ConfigError": 4,
-        "ConfigFile": 3,
-        "UpstreamBindingStatus": 3,
-        "AcknowledgedListener": 2,
-        "ConfigResolver": 2,
-        "DataSection": 1,
-        "IdentitySection": 1,
-        "LlmSection": 1,
-        "NodeSection": 1,
-        "OfficersSection": 1,
-        "RegentSection": 1,
-        "ServerSection": 1,
+        "ConfigError": 5,
+        "Source": 4,
+        "ShadowedAtBoot": 2,
+        "ConfigFile": 2,
+        "UpstreamBindingStatus": 2,
+        "ConfigSetOutcome": 1,
         "TransitionInfo": 1
       },
       "types_consumed": {
-        "NodeRole": 9
+        "NodeRole": 8
       },
-      "type_flow_signal": 73,
-      "types_produced_total": 64,
-      "types_consumed_total": 9
+      "type_flow_signal": 33,
+      "types_produced_total": 25,
+      "types_consumed_total": 8
     },
     {
       "name": "zp-configure",
       "files": 1,
-      "loc": 4479,
+      "loc": 4546,
       "deps": [
+        "zp-core",
         "zp-engine",
         "zp-net",
         "zp-trust"
@@ -910,36 +858,34 @@
       ],
       "type_defs_count": 10,
       "types_produced": {
-        "ConfigEngine": 5,
-        "Resolution": 5,
-        "ConfigPattern": 4,
-        "VaultConfigResult": 3,
-        "ConfigField": 2,
-        "AutoStatus": 1,
-        "CompiledPattern": 1,
+        "Resolution": 4,
+        "ConfigPattern": 3,
+        "VaultConfigResult": 2,
+        "ConfigEngine": 2,
         "ResolveSummary": 1
       },
       "types_consumed": {
         "CredentialVault": 15,
-        "CapabilityRequirement": 5,
+        "CapabilityRequirement": 6,
         "PolicyCheckFn": 3,
-        "DiscoveredTool": 2,
         "ResolvedTool": 2,
         "ToolManifest": 2,
-        "CapabilityResolution": 1,
+        "DiscoveredTool": 2,
+        "PolicyContext": 2,
+        "ProviderProfile": 1,
+        "InjectorError": 1,
         "InjectorResult": 1,
-        "PolicyContext": 1,
         "ProviderOverride": 1,
-        "ProviderProfile": 1
+        "CapabilityResolution": 1
       },
-      "type_flow_signal": 56,
-      "types_produced_total": 22,
-      "types_consumed_total": 34
+      "type_flow_signal": 49,
+      "types_produced_total": 12,
+      "types_consumed_total": 37
     },
     {
       "name": "zp-content",
       "files": 6,
-      "loc": 747,
+      "loc": 763,
       "deps": [],
       "sign_count": 0,
       "gate_count": 0,
@@ -967,27 +913,24 @@
       "type_defs_count": 8,
       "types_produced": {
         "ContentError": 24,
-        "ContentId": 23,
-        "ContentMeta": 10,
+        "ContentId": 20,
+        "ContentMeta": 9,
         "ContentFilter": 4,
-        "LocalFsBackend": 3,
-        "LocalIndex": 2,
-        "MemoryBackend": 2,
-        "Store": 1
+        "LocalFsBackend": 1
       },
       "types_consumed": {},
-      "type_flow_signal": 69,
-      "types_produced_total": 69,
+      "type_flow_signal": 58,
+      "types_produced_total": 58,
       "types_consumed_total": 0
     },
     {
       "name": "zp-core",
-      "files": 19,
-      "loc": 8178,
+      "files": 20,
+      "loc": 9285,
       "deps": [
         "zp-receipt"
       ],
-      "sign_count": 45,
+      "sign_count": 46,
       "gate_count": 0,
       "chain_count": 0,
       "verify_count": 39,
@@ -999,18 +942,20 @@
       "receipt_slugs_sample": [
         "audit:append",
         "audit:read",
-        "observation:op",
-        "receipt:op"
+        "receipt:op",
+        "observation:op"
       ],
       "receipt_slug_total": 4,
-      "info_flow_signal": 84,
+      "info_flow_signal": 85,
       "primary_role": "signing",
       "consumed_by": [
         "course-examples",
         "trust-triangle",
         "zp-audit",
         "zp-cli",
+        "zp-configure",
         "zp-engine",
+        "zp-gate-envelope",
         "zp-gossip",
         "zp-hardening-tests",
         "zp-host",
@@ -1022,11 +967,12 @@
         "zp-mesh",
         "zp-observation",
         "zp-officers",
+        "zp-ontology",
         "zp-pipeline",
         "zp-policy",
         "zp-regent",
         "zp-server",
-        "zp-skills",
+        "zp-trace",
         "zp-trust"
       ],
       "type_defs": [
@@ -1100,6 +1046,7 @@
         "RenewalError",
         "Request",
         "RequestMetadata",
+        "ReservedReason",
         "Response",
         "ReviewTarget",
         "RevocationClaim",
@@ -1120,118 +1067,75 @@
         "TrustTier",
         "ZpError"
       ],
-      "type_defs_count": 89,
+      "type_defs_count": 90,
       "types_produced": {
-        "ActionContext": 24,
-        "GovernanceActor": 24,
-        "GovernanceDecision": 21,
-        "AuthorityRef": 12,
-        "EpistemicStatus": 11,
+        "GovernanceActor": 22,
+        "ActionContext": 22,
+        "GovernanceDecision": 20,
         "PathError": 11,
-        "ConversationId": 10,
-        "CapabilityGrant": 8,
-        "GrantedCapability": 8,
         "Receipt": 7,
-        "TrustTier": 6,
-        "Constraint": 5,
-        "EventProvenance": 5,
-        "InternalScope": 5,
-        "MessageId": 5,
-        "Channel": 4,
-        "DelegationError": 4,
-        "EpisodeId": 4,
-        "GrantProvenance": 4,
-        "LeasePolicy": 4,
-        "PolicyDecision": 4,
-        "RedelegationPolicy": 4,
-        "AuditId": 3,
-        "CascadePolicy": 3,
-        "ChainError": 3,
-        "ConstraintContext": 3,
-        "GranteeType": 3,
-        "IssuanceError": 3,
-        "RenewalError": 3,
-        "RevocationReason": 3,
-        "SkillId": 3,
-        "ToolCall": 3,
-        "ConstraintViolation": 2,
-        "EpistemicError": 2,
-        "GovernanceEvent": 2,
-        "GovernanceEventType": 2,
-        "InternalCapabilityToken": 2,
-        "InternalTokenAuthority": 2,
-        "ProviderId": 2,
-        "RevocationClaim": 2,
-        "ToolDefinition": 2,
-        "ZpError": 2,
-        "ActorId": 1,
-        "Attachment": 1,
-        "AuditAction": 1,
-        "AuthorityRefType": 1,
-        "CandidateStatus": 1,
-        "Capability": 1,
-        "ConsensusThreshold": 1,
-        "DelegationChain": 1,
-        "Epistemic": 1,
-        "EventOrigin": 1,
-        "Feedback": 1,
-        "FeedbackRating": 1,
-        "FileOperation": 1,
-        "LeaseFailureMode": 1,
-        "MeshAction": 1,
-        "MeshPeerContext": 1,
-        "MessageRole": 1,
-        "ModelClass": 1,
-        "ModelPreference": 1,
-        "OperatorIdentity": 1,
-        "Outcome": 1,
-        "Request": 1,
-        "RequestMetadata": 1,
-        "ReviewTarget": 1,
-        "SanitizePattern": 1,
-        "SkillManifest": 1,
-        "SkillOrigin": 1,
-        "SkillStats": 1,
-        "StatusTransition": 1,
-        "TokenError": 1,
-        "ToolResult": 1
-      },
-      "types_consumed": {
+        "CapabilityGrant": 6,
+        "GrantedCapability": 5,
+        "AuthorityRef": 5,
         "ActionType": 3,
-        "Signable": 2,
-        "RiskLevel": 1,
-        "SignatureBlock": 1
+        "InternalScope": 3,
+        "Constraint": 2,
+        "EventProvenance": 2,
+        "RedelegationPolicy": 2,
+        "ConstraintContext": 2,
+        "ConstraintViolation": 2,
+        "ReservedReason": 2,
+        "EpistemicStatus": 2,
+        "EpistemicError": 2,
+        "InternalCapabilityToken": 2,
+        "TrustTier": 1,
+        "GrantProvenance": 1,
+        "IssuanceError": 1,
+        "LeasePolicy": 1,
+        "GranteeType": 1,
+        "RenewalError": 1,
+        "DelegationError": 1,
+        "ChainError": 1,
+        "GovernanceEventType": 1,
+        "GovernanceEvent": 1,
+        "TokenError": 1,
+        "CascadePolicy": 1,
+        "RevocationReason": 1,
+        "ConversationId": 1,
+        "Channel": 1
       },
-      "type_flow_signal": 278,
-      "types_produced_total": 271,
-      "types_consumed_total": 7
+      "types_consumed": {},
+      "type_flow_signal": 137,
+      "types_produced_total": 137,
+      "types_consumed_total": 0
     },
     {
       "name": "zp-discipline",
-      "files": 18,
-      "loc": 2475,
+      "files": 32,
+      "loc": 5721,
       "deps": [],
       "sign_count": 6,
       "gate_count": 0,
-      "chain_count": 0,
+      "chain_count": 2,
       "verify_count": 12,
       "receipt_families": {},
       "receipt_slugs_sample": [],
       "receipt_slug_total": 0,
-      "info_flow_signal": 18,
+      "info_flow_signal": 20,
       "primary_role": "verifying",
       "consumed_by": [],
       "type_defs": [
+        "CleanupGuard",
         "Discipline",
         "ResourceKind",
+        "Use",
         "Violation",
         "ViolationKind"
       ],
-      "type_defs_count": 4,
+      "type_defs_count": 6,
       "types_produced": {
-        "ResourceKind": 2,
-        "Discipline": 1,
-        "ViolationKind": 1
+        "Discipline": 3,
+        "Use": 1
       },
       "types_consumed": {},
       "type_flow_signal": 4,
@@ -1239,9 +1143,65 @@
       "types_consumed_total": 0
     },
     {
+      "name": "zp-emission-coherence",
+      "files": 5,
+      "loc": 1073,
+      "deps": [],
+      "sign_count": 0,
+      "gate_count": 0,
+      "chain_count": 0,
+      "verify_count": 0,
+      "receipt_families": {
+        "regent": 3
+      },
+      "receipt_slugs_sample": [
+        "regent:emission:doom_loop_flagged",
+        "regent:emission:doom_loop_suspected",
+        "regent:emission:doom_loop_confirmed"
+      ],
+      "receipt_slug_total": 3,
+      "info_flow_signal": 0,
+      "primary_role": "utility",
+      "consumed_by": [
+        "zp-regent"
+      ],
+      "type_defs": [
+        "AnalyzerConfig",
+        "Cli",
+        "EmissionAnalyzer",
+        "EntropyBaseline",
+        "Finding",
+        "HeuristicName",
+        "Outcome",
+        "ReceiptFamily",
+        "Response",
+        "ResponseClass",
+        "SamplingAdjustment",
+        "SamplingParams",
+        "Severity",
+        "StdinResponse"
+      ],
+      "type_defs_count": 14,
+      "types_produced": {
+        "Finding": 4,
+        "EntropyBaseline": 3,
+        "AnalyzerConfig": 1,
+        "ResponseClass": 1,
+        "ReceiptFamily": 1,
+        "SamplingAdjustment": 1
+      },
+      "types_consumed": {
+        "Response": 2,
+        "Outcome": 1
+      },
+      "type_flow_signal": 14,
+      "types_produced_total": 11,
+      "types_consumed_total": 3
+    },
+    {
       "name": "zp-engine",
       "files": 10,
-      "loc": 6197,
+      "loc": 6200,
       "deps": [
         "zp-core",
         "zp-trust"
@@ -1328,110 +1288,87 @@
       ],
       "type_defs_count": 63,
       "types_produced": {
-        "ProviderProfile": 17,
-        "ValidationStatus": 12,
-        "ScanFinding": 8,
-        "ToolManifest": 8,
-        "Reversibility": 6,
-        "CapabilityRequirement": 5,
-        "Confidence": 4,
+        "ProviderProfile": 13,
+        "ValidationStatus": 11,
+        "ToolManifest": 7,
+        "ScanFinding": 7,
         "EnvVarInfo": 4,
-        "ManifestError": 4,
+        "Reversibility": 3,
+        "CapabilityRequirement": 3,
         "CredentialToValidate": 3,
-        "ScanVerdict": 3,
-        "ToolContentScanResult": 3,
-        "ValidationReport": 3,
-        "ValidationResult": 3,
-        "VaultVarSchema": 3,
-        "VaultVarViolation": 3,
-        "AttentionItem": 2,
-        "CapabilityResolution": 2,
-        "FoundCredential": 2,
-        "LaunchSpec": 2,
+        "ManifestError": 2,
+        "VaultVarSchema": 2,
+        "VaultVarViolation": 2,
         "PricingUpdate": 2,
-        "ProviderCredentialGroup": 2,
-        "ProviderOverride": 2,
-        "ScanSeverity": 2,
-        "ToolParameter": 2,
-        "ToolScanResult": 2,
-        "VarClass": 2,
-        "VaultAuditFinding": 2,
-        "VaultFieldType": 2,
-        "AbacusFetcher": 1,
-        "AbacusModel": 1,
-        "AggregatedValue": 1,
-        "AttentionKind": 1,
-        "AutoGenerate": 1,
-        "BackendGroup": 1,
-        "CapabilityEnvelope": 1,
-        "ConfigStatus": 1,
-        "ConfigurableParam": 1,
-        "DeluxeCandidate": 1,
-        "DeluxeConfig": 1,
-        "DetectedProvider": 1,
-        "ImportDetail": 1,
-        "ImportResult": 1,
-        "InheritEnv": 1,
-        "ManifestSource": 1,
-        "PricingRefreshResult": 1,
-        "PricingSource": 1,
-        "ProbeConfig": 1,
-        "ResolutionStatus": 1,
+        "ToolContentScanResult": 2,
+        "ValidationResult": 2,
+        "ValidationReport": 2,
+        "LaunchSpec": 1,
+        "VaultFieldType": 1,
+        "VaultAuditFinding": 1,
+        "CapabilityResolution": 1,
         "ResolvedTool": 1,
-        "ScanCategory": 1,
+        "DeluxeCandidate": 1,
+        "ProviderOverride": 1,
+        "AttentionItem": 1,
+        "VarClass": 1,
+        "PricingRefreshResult": 1,
+        "DetectedProvider": 1,
         "ScanResults": 1,
+        "ToolScanResult": 1,
+        "FoundCredential": 1,
+        "ProviderCredentialGroup": 1,
+        "ScanVerdict": 1,
         "ScannedTool": 1,
-        "ToolConfigResult": 1,
-        "ToolMeta": 1,
-        "ToolStatus": 1,
-        "VerificationConfig": 1
+        "ToolParameter": 1
       },
       "types_consumed": {
         "ToolDefinition": 7,
-        "Capability": 4,
         "DiscoveryResult": 4,
         "CredentialVault": 1
       },
-      "type_flow_signal": 159,
-      "types_produced_total": 143,
-      "types_consumed_total": 16
+      "type_flow_signal": 95,
+      "types_produced_total": 83,
+      "types_consumed_total": 12
     },
     {
       "name": "zp-gate-envelope",
-      "files": 1,
-      "loc": 421,
+      "files": 2,
+      "loc": 663,
       "deps": [
+        "zp-core",
         "zp-receipt"
       ],
-      "sign_count": 7,
+      "sign_count": 24,
       "gate_count": 0,
       "chain_count": 0,
-      "verify_count": 0,
+      "verify_count": 2,
       "receipt_families": {},
       "receipt_slugs_sample": [],
       "receipt_slug_total": 0,
-      "info_flow_signal": 7,
+      "info_flow_signal": 26,
       "primary_role": "signing",
       "consumed_by": [
+        "zp-cli",
         "zp-server"
       ],
       "type_defs": [
         "EnvelopeClaims",
+        "GateRequestSigner",
         "ParseError",
         "ParsedHeader"
       ],
-      "type_defs_count": 3,
+      "type_defs_count": 4,
       "types_produced": {
-        "EnvelopeClaims": 4,
-        "ParseError": 3,
-        "ParsedHeader": 2
+        "EnvelopeClaims": 3,
+        "ParsedHeader": 1,
+        "ParseError": 1,
+        "GateRequestSigner": 1
       },
-      "types_consumed": {
-        "Signable": 1
-      },
-      "type_flow_signal": 10,
-      "types_produced_total": 9,
-      "types_consumed_total": 1
+      "types_consumed": {},
+      "type_flow_signal": 6,
+      "types_produced_total": 6,
+      "types_consumed_total": 0
     },
     {
       "name": "zp-gossip",
@@ -1467,29 +1404,24 @@
       ],
       "type_defs_count": 13,
       "types_produced": {
-        "GossipFinding": 11,
+        "GossipFinding": 9,
         "TransportError": 4,
-        "ContentHash": 3,
         "AllowanceError": 2,
-        "FindingInbox": 2,
-        "FindingPayload": 2,
-        "FindingType": 2,
-        "ComputeAllowance": 1,
-        "CouplingResult": 1,
-        "NullTransport": 1,
+        "ContentHash": 1,
+        "FindingType": 1,
+        "FindingPayload": 1,
         "ReceiveResult": 1,
-        "SocialAllowance": 1,
         "Zone": 1
       },
       "types_consumed": {},
-      "type_flow_signal": 32,
-      "types_produced_total": 32,
+      "type_flow_signal": 20,
+      "types_produced_total": 20,
       "types_consumed_total": 0
     },
     {
       "name": "zp-hardening-tests",
       "files": 16,
-      "loc": 3352,
+      "loc": 3473,
       "deps": [
         "zp-audit",
         "zp-config",
@@ -1517,30 +1449,26 @@
       ],
       "type_defs_count": 4,
       "types_produced": {
-        "TestApp": 4,
-        "TestServer": 3,
-        "ChainHarness": 1,
-        "GateHarness": 1
+        "TestApp": 3,
+        "TestServer": 2
       },
       "types_consumed": {
         "AuditEntry": 5,
-        "AuditStore": 3,
+        "AuditStore": 2,
         "Response": 2,
-        "Router": 2,
-        "ServerConfig": 2,
+        "UnsealedEntry": 1,
         "AuditResponse": 1,
         "CapabilityGrant": 1,
-        "Request": 1,
-        "UnsealedEntry": 1
+        "Request": 1
       },
-      "type_flow_signal": 27,
-      "types_produced_total": 9,
-      "types_consumed_total": 18
+      "type_flow_signal": 18,
+      "types_produced_total": 5,
+      "types_consumed_total": 13
     },
     {
       "name": "zp-host",
-      "files": 5,
-      "loc": 767,
+      "files": 6,
+      "loc": 1008,
       "deps": [
         "zp-audit",
         "zp-core",
@@ -1562,6 +1490,7 @@
         "zp-server"
       ],
       "type_defs": [
+        "Harness",
         "HostError",
         "HttpMethod",
         "HttpRequest",
@@ -1573,27 +1502,118 @@
         "WriteRequest",
         "WriteResult"
       ],
-      "type_defs_count": 10,
+      "type_defs_count": 11,
       "types_produced": {
-        "HostError": 9,
-        "HttpRequest": 6,
-        "HttpMethod": 4,
+        "HostError": 10,
+        "HttpRequest": 5,
         "SpawnRequest": 3,
-        "SystemHostContext": 3,
-        "WriteRequest": 3,
-        "HttpResult": 2,
         "SpawnResult": 2,
-        "WriteMode": 2,
-        "WriteResult": 2
+        "WriteRequest": 2,
+        "WriteResult": 2,
+        "HttpResult": 2,
+        "HttpMethod": 2,
+        "WriteMode": 1,
+        "Harness": 1
       },
       "types_consumed": {
         "Response": 3,
-        "AuditStore": 2,
-        "GovernanceGate": 2
+        "GovernanceGate": 1,
+        "AuditStore": 1,
+        "UnsealedEntry": 1
       },
-      "type_flow_signal": 43,
-      "types_produced_total": 36,
-      "types_consumed_total": 7
+      "type_flow_signal": 36,
+      "types_produced_total": 30,
+      "types_consumed_total": 6
+    },
+    {
+      "name": "zp-identity-hosting",
+      "files": 7,
+      "loc": 717,
+      "deps": [],
+      "sign_count": 5,
+      "gate_count": 0,
+      "chain_count": 0,
+      "verify_count": 0,
+      "receipt_families": {},
+      "receipt_slugs_sample": [],
+      "receipt_slug_total": 0,
+      "info_flow_signal": 5,
+      "primary_role": "signing",
+      "consumed_by": [],
+      "type_defs": [
+        "CapturedAuthorizationCode",
+        "CimdDocument",
+        "ClientIdScheme",
+        "FingerprintError",
+        "FoundationMirrorAdapter",
+        "GenesisFingerprint",
+        "HostingError",
+        "Jwk",
+        "Jwks",
+        "PreRegistrationAdapter",
+        "PublishedLocation",
+        "RegentNameState",
+        "SelfHostedAdapter"
+      ],
+      "type_defs_count": 13,
+      "types_produced": {
+        "GenesisFingerprint": 6,
+        "CimdDocument": 5,
+        "PublishedLocation": 4,
+        "HostingError": 4,
+        "ClientIdScheme": 2,
+        "RegentNameState": 2,
+        "FingerprintError": 1,
+        "CapturedAuthorizationCode": 1
+      },
+      "types_consumed": {},
+      "type_flow_signal": 25,
+      "types_produced_total": 25,
+      "types_consumed_total": 0
+    },
+    {
+      "name": "zp-inference-observer",
+      "files": 2,
+      "loc": 456,
+      "deps": [],
+      "sign_count": 0,
+      "gate_count": 0,
+      "chain_count": 0,
+      "verify_count": 0,
+      "receipt_families": {
+        "observation": 3,
+        "substrate": 2
+      },
+      "receipt_slugs_sample": [
+        "observation:inference:drafter_acceptance",
+        "substrate:characterization:drift_suspected",
+        "observation:inference:something_future"
+      ],
+      "receipt_slug_total": 5,
+      "info_flow_signal": 0,
+      "primary_role": "receipt-authoring",
+      "consumed_by": [
+        "zp-server"
+      ],
+      "type_defs": [
+        "Cli",
+        "DrafterAcceptanceEvent",
+        "DriftSuspectedEvent",
+        "InferenceObservation",
+        "TailConfig",
+        "TailedEvent",
+        "Window"
+      ],
+      "type_defs_count": 7,
+      "types_produced": {
+        "TailConfig": 1,
+        "TailedEvent": 1,
+        "InferenceObservation": 1
+      },
+      "types_consumed": {},
+      "type_flow_signal": 3,
+      "types_produced_total": 3,
+      "types_consumed_total": 0
     },
     {
       "name": "zp-introduction",
@@ -1625,28 +1645,24 @@
       "type_defs_count": 5,
       "types_produced": {
         "IntroductionError": 5,
-        "IntroductionRequest": 2,
-        "IntroductionDecision": 1,
-        "IntroductionOutcome": 1,
-        "IntroductionResponse": 1
+        "IntroductionRequest": 1,
+        "IntroductionOutcome": 1
       },
       "types_consumed": {
-        "Certificate": 4,
-        "PolicyContext": 2,
         "TrustTier": 2,
-        "CertificateChain": 1,
+        "Certificate": 2,
         "Channel": 1,
-        "KeyError": 1,
-        "KeyRole": 1
+        "KeyRole": 1,
+        "PolicyContext": 1
       },
-      "type_flow_signal": 22,
-      "types_produced_total": 10,
-      "types_consumed_total": 12
+      "type_flow_signal": 14,
+      "types_produced_total": 7,
+      "types_consumed_total": 7
     },
     {
       "name": "zp-keys",
       "files": 30,
-      "loc": 12218,
+      "loc": 12504,
       "deps": [
         "zp-core",
         "zp-receipt"
@@ -1690,6 +1706,7 @@
         "GenesisV2Record",
         "InMemoryBuilder",
         "InMemoryCredential",
+        "IsolatedZpHome",
         "KeyError",
         "KeyRole",
         "Keyring",
@@ -1726,71 +1743,49 @@
         "WindowsHelloProvider",
         "YubiKeyProvider"
       ],
-      "type_defs_count": 56,
+      "type_defs_count": 57,
       "types_produced": {
-        "KeyError": 152,
-        "Certificate": 33,
+        "KeyError": 110,
+        "Certificate": 25,
         "ProviderCapability": 23,
-        "SovereigntyMode": 20,
+        "SovereigntyMode": 13,
         "EnrollmentResult": 11,
-        "KeyRole": 10,
-        "OperatorKey": 7,
-        "GenesisKey": 5,
-        "AgentKey": 4,
+        "KeyRole": 5,
+        "OperatorKey": 5,
         "BiometricEvidence": 4,
-        "CertificateChain": 4,
-        "RotationCertificate": 4,
-        "SharingConfig": 4,
-        "BlastRadius": 3,
-        "Platform": 3,
-        "RevocationCertificate": 3,
         "ShamirShare": 3,
-        "BiometricType": 2,
-        "DelegationEdge": 2,
+        "GenesisKey": 3,
+        "CertificateChain": 3,
+        "SharingConfig": 2,
+        "AgentKey": 2,
+        "RotationCertificate": 2,
         "EnrollmentMetadata": 2,
-        "InMemoryBuilder": 2,
-        "Keyring": 2,
-        "ProviderStatus": 2,
-        "RevocationStatus": 2,
-        "RevocationStore": 2,
-        "RotationBody": 2,
-        "Storage": 2,
-        "StorageKey": 2,
-        "BiometricCapability": 1,
-        "BlastRadiusTracker": 1,
-        "CertificateBody": 1,
         "CompromiseResponse": 1,
-        "DerivationSalt": 1,
-        "FaceEnrollProvider": 1,
-        "FileProvider": 1,
-        "FingerprintProvider": 1,
+        "BlastRadius": 1,
+        "DelegationEdge": 1,
         "GenesisV2Record": 1,
-        "InMemoryCredential": 1,
         "KeyringStatus": 1,
-        "LedgerProvider": 1,
-        "LoginPasswordProvider": 1,
-        "OnlyKeyProvider": 1,
         "OrphanEntry": 1,
-        "QuorumThreshold": 1,
-        "ResolvedVaultKey": 1,
-        "RevocationBody": 1,
-        "RotationChain": 1,
-        "RotationSchedule": 1,
+        "IsolatedZpHome": 1,
+        "RevocationCertificate": 1,
+        "RevocationStatus": 1,
+        "RevocationStore": 1,
+        "RotationBody": 1,
+        "Platform": 1,
+        "BiometricCapability": 1,
         "SovereigntyCategory": 1,
-        "TouchIdProvider": 1,
-        "TrezorProvider": 1,
-        "VaultKeySource": 1,
-        "WindowsHelloProvider": 1,
-        "YubiKeyProvider": 1
+        "ProviderStatus": 1,
+        "Keyring": 1,
+        "ResolvedVaultKey": 1
       },
       "types_consumed": {
-        "ProviderCapabilities": 7,
-        "RevocationReason": 5,
-        "Receipt": 2
+        "ProviderCapabilities": 4,
+        "Receipt": 2,
+        "RevocationReason": 1
       },
-      "type_flow_signal": 355,
-      "types_produced_total": 341,
-      "types_consumed_total": 14
+      "type_flow_signal": 237,
+      "types_produced_total": 230,
+      "types_consumed_total": 7
     },
     {
       "name": "zp-learning",
@@ -1824,42 +1819,37 @@
       ],
       "type_defs_count": 9,
       "types_produced": {
-        "SkillProposal": 11,
-        "EpisodeStore": 5,
-        "PatternDetectorError": 4,
-        "PatternDetector": 3,
-        "ProposalStore": 3,
-        "ProposalStatus": 2,
-        "LearningLoop": 1,
-        "ProposalError": 1
+        "SkillProposal": 10,
+        "EpisodeStore": 3,
+        "ProposalStore": 1
       },
       "types_consumed": {
         "Episode": 9,
         "Pattern": 5,
-        "StoreError": 3,
         "ConversationId": 2,
+        "StoreError": 1,
         "EpisodeId": 1
       },
-      "type_flow_signal": 50,
-      "types_produced_total": 30,
-      "types_consumed_total": 20
+      "type_flow_signal": 32,
+      "types_produced_total": 14,
+      "types_consumed_total": 18
     },
     {
       "name": "zp-llm",
-      "files": 9,
-      "loc": 1785,
+      "files": 8,
+      "loc": 1689,
       "deps": [
         "zp-core"
       ],
-      "sign_count": 0,
+      "sign_count": 14,
       "gate_count": 0,
       "chain_count": 0,
       "verify_count": 0,
       "receipt_families": {},
       "receipt_slugs_sample": [],
       "receipt_slug_total": 0,
-      "info_flow_signal": 0,
-      "primary_role": "utility",
+      "info_flow_signal": 14,
+      "primary_role": "signing",
       "consumed_by": [
         "zp-pipeline"
       ],
@@ -1877,19 +1867,13 @@
         "CompletionRequest",
         "CompletionResponse",
         "MockProvider",
-        "OllamaFunction",
-        "OllamaMessage",
-        "OllamaProvider",
-        "OllamaRequest",
-        "OllamaResponse",
-        "OllamaTool",
-        "OllamaToolCall",
-        "OllamaToolCallFunction",
         "OpenAiChoice",
+        "OpenAiFunction",
         "OpenAiMessage",
         "OpenAiRequest",
         "OpenAiResponse",
         "OpenAiResponseMessage",
+        "OpenAiTool",
         "OpenAiToolCall",
         "OpenAiToolCallFunction",
         "OpenAiUsage",
@@ -1897,61 +1881,38 @@
         "ProviderPool",
         "ProxyLlmProvider",
         "RequestValidator",
+        "SilentSigner",
+        "StubSigner",
         "ToolCall",
         "Usage"
       ],
-      "type_defs_count": 35,
+      "type_defs_count": 31,
       "types_produced": {
-        "CompletionRequest": 8,
-        "CompletionResponse": 7,
-        "ChatMessage": 3,
-        "Usage": 3,
-        "AnthropicProvider": 2,
-        "OllamaMessage": 2,
-        "OllamaProvider": 2,
-        "OllamaTool": 2,
-        "ProviderPool": 2,
-        "ProxyLlmProvider": 2,
-        "AnthropicContent": 1,
-        "AnthropicMessage": 1,
-        "AnthropicResponseContent": 1,
-        "AnthropicTool": 1,
-        "AnthropicUsage": 1,
-        "ChatRole": 1,
-        "MockProvider": 1,
-        "OllamaFunction": 1,
-        "OllamaToolCall": 1,
-        "OllamaToolCallFunction": 1,
-        "OpenAiChoice": 1,
-        "OpenAiMessage": 1,
-        "OpenAiResponseMessage": 1,
-        "OpenAiToolCall": 1,
-        "OpenAiToolCallFunction": 1,
-        "OpenAiUsage": 1,
-        "PromptBuilder": 1,
-        "RequestValidator": 1
+        "CompletionRequest": 6,
+        "CompletionResponse": 5,
+        "ChatMessage": 1,
+        "Usage": 1
       },
       "types_consumed": {
-        "ProviderId": 11,
-        "ProviderCapabilities": 9,
-        "ZpError": 8,
-        "ProviderHealth": 6,
-        "ToolDefinition": 3,
-        "ToolCall": 2,
-        "Capability": 1,
-        "InferenceTier": 1,
-        "Message": 1,
+        "ZpError": 7,
+        "ProviderId": 6,
+        "ProviderHealth": 5,
+        "ProviderCapabilities": 4,
+        "OperatorIdentity": 2,
+        "ToolDefinition": 2,
         "ModelPreference": 1,
-        "OperatorIdentity": 1
+        "Capability": 1,
+        "Message": 1,
+        "ToolCall": 1
       },
-      "type_flow_signal": 95,
-      "types_produced_total": 51,
-      "types_consumed_total": 44
+      "type_flow_signal": 43,
+      "types_produced_total": 13,
+      "types_consumed_total": 30
     },
     {
       "name": "zp-memory",
       "files": 9,
-      "loc": 3588,
+      "loc": 3665,
       "deps": [
         "zp-core",
         "zp-observation",
@@ -2000,47 +1961,46 @@
       ],
       "type_defs_count": 27,
       "types_produced": {
-        "MemoryStage": 30,
-        "MemoryEntry": 24,
-        "QuarantineReason": 6,
-        "PromotionEngine": 5,
-        "QuarantineRecord": 5,
-        "QuarantineStore": 4,
+        "MemoryEntry": 22,
+        "MemoryStage": 17,
+        "PromotionEngine": 4,
+        "QuarantineReason": 4,
         "SharingContext": 4,
-        "IngestionConfig": 3,
-        "PendingPromotion": 3,
-        "PromotionRequest": 3,
-        "PromotionThresholds": 3,
-        "ReviewQueueConfig": 3,
+        "QuarantineStore": 3,
+        "QuarantineRecord": 3,
         "SharedMemory": 3,
-        "CompletedReview": 2,
-        "CompromiseQuarantineResult": 2,
-        "IngestionResult": 2,
-        "ReviewAction": 2,
-        "ReviewDecision": 2,
-        "ReviewQueue": 2,
-        "BatchIngestionResult": 1,
-        "BulkQuarantineResult": 1,
+        "IngestionConfig": 2,
+        "PromotionRequest": 2,
+        "PendingPromotion": 2,
         "CompromiseReport": 1,
+        "CompromiseQuarantineResult": 1,
+        "IngestionResult": 1,
+        "BatchIngestionResult": 1,
         "ExpirySweepResult": 1,
-        "MergeResult": 1,
+        "PromotionThresholds": 1,
         "PromotionResult": 1,
+        "BulkQuarantineResult": 1,
         "ReinstatementResult": 1,
-        "ReviewOutcome": 1
+        "ReviewQueueConfig": 1,
+        "ReviewDecision": 1,
+        "ReviewOutcome": 1,
+        "CompletedReview": 1,
+        "ReviewQueue": 1,
+        "MergeResult": 1
       },
       "types_consumed": {
-        "Receipt": 8,
+        "Receipt": 5,
         "Observation": 3,
-        "ObservationPriority": 3
+        "ObservationPriority": 2
       },
-      "type_flow_signal": 130,
-      "types_produced_total": 116,
-      "types_consumed_total": 14
+      "type_flow_signal": 91,
+      "types_produced_total": 81,
+      "types_consumed_total": 10
     },
     {
       "name": "zp-memory-index",
       "files": 3,
-      "loc": 409,
+      "loc": 436,
       "deps": [],
       "sign_count": 0,
       "gate_count": 0,
@@ -2061,19 +2021,18 @@
       "type_defs_count": 4,
       "types_produced": {
         "MemoryIndexError": 10,
-        "IndexConfig": 5,
-        "SearchResult": 2,
-        "TurboVecIndex": 2
+        "IndexConfig": 3,
+        "SearchResult": 2
       },
       "types_consumed": {},
-      "type_flow_signal": 19,
-      "types_produced_total": 19,
+      "type_flow_signal": 15,
+      "types_produced_total": 15,
       "types_consumed_total": 0
     },
     {
       "name": "zp-mesh",
       "files": 25,
-      "loc": 17954,
+      "loc": 18092,
       "deps": [
         "zp-audit",
         "zp-core",
@@ -2084,9 +2043,14 @@
       "gate_count": 0,
       "chain_count": 0,
       "verify_count": 50,
-      "receipt_families": {},
-      "receipt_slugs_sample": [],
-      "receipt_slug_total": 0,
+      "receipt_families": {
+        "governance": 5
+      },
+      "receipt_slugs_sample": [
+        "governance:propose",
+        "governance:vote"
+      ],
+      "receipt_slug_total": 5,
       "info_flow_signal": 130,
       "primary_role": "signing",
       "consumed_by": [
@@ -2152,6 +2116,7 @@
         "NodeHeartbeat",
         "NodeRegistry",
         "NodeStatus",
+        "NonceCache",
         "OutboundCommand",
         "Packet",
         "PacketContext",
@@ -2202,127 +2167,95 @@
         "WebDiscoveryConfig",
         "WebRelayServer"
       ],
-      "type_defs_count": 105,
+      "type_defs_count": 106,
       "types_produced": {
         "MeshResult": 113,
-        "MeshIdentity": 31,
-        "Packet": 22,
-        "AgentCapabilities": 19,
+        "MeshIdentity": 27,
+        "Packet": 19,
         "StoreResult": 19,
-        "DiscoverySource": 13,
-        "InterfaceConfig": 13,
-        "DestinationHash": 12,
-        "MeshNode": 10,
+        "AgentCapabilities": 14,
         "CapabilityRequest": 9,
-        "InterfaceStats": 9,
-        "PeerIdentity": 9,
-        "ReputationSignal": 9,
-        "DiscoveredPeer": 8,
-        "MeshEnvelope": 8,
-        "LoopbackInterface": 7,
-        "NodeHeartbeat": 6,
-        "PeerReputation": 6,
-        "PolicyAgreement": 6,
-        "SignedAnnounce": 6,
-        "CapabilityPolicy": 5,
-        "CompactReputationSummary": 5,
-        "ConsensusOutcome": 5,
-        "FleetNode": 5,
-        "InboundEnvelope": 5,
-        "LinkRequestData": 5,
-        "PolicyModuleInfo": 5,
-        "Proposal": 5,
-        "RuntimeStats": 5,
-        "SessionKeys": 5,
-        "Stats": 5,
-        "Destination": 4,
-        "InterfaceType": 4,
-        "Link": 4,
-        "MeshError": 4,
+        "ReputationSignal": 8,
+        "InterfaceConfig": 7,
+        "InterfaceStats": 7,
+        "DiscoverySource": 6,
+        "MeshNode": 6,
+        "MeshEnvelope": 6,
+        "PeerIdentity": 6,
+        "DiscoveredPeer": 5,
+        "SignedAnnounce": 5,
+        "DestinationHash": 5,
+        "CapabilityPolicy": 4,
         "NegotiationResult": 4,
-        "NodeRegistry": 4,
-        "ReputationGrade": 4,
-        "ReputationScore": 4,
-        "Vote": 4,
-        "CompactDelegation": 3,
-        "CompactReceipt": 3,
-        "ConsensusRound": 3,
-        "DestinationType": 3,
-        "DiscoveryManager": 3,
-        "Libp2pInterface": 3,
-        "LinkProofData": 3,
-        "MeshStore": 3,
-        "PacketContext": 3,
-        "PolicyAdvertisement": 3,
+        "ConsensusOutcome": 4,
+        "LinkRequestData": 4,
+        "NodeHeartbeat": 4,
+        "FleetNode": 4,
+        "PolicyModuleInfo": 4,
+        "PolicyAgreement": 4,
+        "InboundEnvelope": 4,
+        "RuntimeStats": 4,
+        "LoopbackInterface": 4,
+        "Proposal": 3,
         "PolicyChunk": 3,
-        "RegistryConfig": 3,
-        "RelayConnection": 3,
-        "ReputationWeights": 3,
-        "ReticulumDiscovery": 3,
-        "RuntimeConfig": 3,
-        "SignalCategory": 3,
-        "TcpClientInterface": 3,
-        "TcpServerInterface": 3,
-        "TransferState": 3,
-        "WebDiscoveryConfig": 3,
-        "CaptureInterface": 2,
-        "DeliveryStatus": 2,
-        "DeniedCapability": 2,
-        "EnvelopeType": 2,
-        "GrantableCapability": 2,
-        "HdlcDecoder": 2,
-        "InMemoryPeerKeyStore": 2,
-        "LinkState": 2,
-        "MembershipStatus": 2,
-        "MeshRuntime": 2,
-        "MockBackend": 2,
-        "NodeStatus": 2,
-        "PacketHeader": 2,
-        "PacketType": 2,
-        "PeerInfo": 2,
-        "PolicyDenial": 2,
+        "CompactReputationSummary": 3,
+        "ReputationScore": 3,
+        "NonceCache": 3,
+        "Vote": 2,
+        "ValidatedDiscovery": 2,
+        "CompactReceipt": 2,
+        "CompactDelegation": 2,
+        "PolicyAdvertisement": 2,
+        "LinkProofData": 2,
+        "SessionKeys": 2,
+        "Link": 2,
+        "SignedHeartbeat": 2,
         "PolicyProposal": 2,
         "PolicyVote": 2,
-        "PropagationType": 2,
-        "SignedHeartbeat": 2,
-        "ValidatedDiscovery": 2,
-        "WebDiscovery": 2,
-        "WebRelayServer": 2,
+        "ReputationGrade": 2,
+        "RuntimeConfig": 2,
+        "PeerReputation": 2,
+        "MeshStore": 2,
+        "Stats": 2,
+        "PeerInfo": 2,
+        "RelayConnection": 2,
         "CapabilityResponse": 1,
-        "CategoryScore": 1,
-        "ConnectionBehavior": 1,
-        "ConsensusCoordinator": 1,
-        "DiscoveryConfig": 1,
-        "FleetSummary": 1,
+        "GrantableCapability": 1,
+        "ConsensusRound": 1,
+        "MeshError": 1,
+        "SignatureStatus": 1,
+        "EnvelopeType": 1,
+        "InterfaceType": 1,
+        "RegistryConfig": 1,
         "HeartbeatError": 1,
-        "InterfaceMode": 1,
-        "NodeDelivery": 1,
-        "OutboundCommand": 1,
-        "PeerDiscoveryRecord": 1,
-        "PolicyDistributor": 1,
-        "PolicyPullRequest": 1,
-        "PolicyPullResponse": 1,
-        "PolicyRollout": 1,
+        "FleetSummary": 1,
+        "PacketContext": 1,
+        "NodeRegistry": 1,
         "RolloutSummary": 1,
-        "SignalPolarity": 1,
-        "SignatureStatus": 1
+        "PolicyPullRequest": 1,
+        "TransferState": 1,
+        "SignalCategory": 1,
+        "ReputationWeights": 1,
+        "Destination": 1,
+        "WebDiscoveryConfig": 1,
+        "ConnectionBehavior": 1,
+        "WebRelayServer": 1
       },
       "types_consumed": {
-        "CapabilityGrant": 16,
-        "GrantedCapability": 13,
-        "PeerAuditAttestation": 11,
+        "CapabilityGrant": 11,
+        "PeerAuditAttestation": 8,
+        "GrantedCapability": 7,
         "Receipt": 7,
-        "TrustTier": 7,
+        "TrustTier": 3,
         "AuditChallenge": 3,
         "AuditResponse": 3,
-        "ConsensusThreshold": 3,
-        "Constraint": 2,
+        "ConsensusThreshold": 2,
         "Signer": 2,
-        "StoreError": 2
+        "StoreError": 1
       },
-      "type_flow_signal": 622,
-      "types_produced_total": 553,
-      "types_consumed_total": 69
+      "type_flow_signal": 425,
+      "types_produced_total": 378,
+      "types_consumed_total": 47
     },
     {
       "name": "zp-net",
@@ -2342,6 +2275,7 @@
         "zp-cli",
         "zp-configure",
         "zp-hardening-tests",
+        "zp-regent",
         "zp-server"
       ],
       "type_defs": [
@@ -2350,18 +2284,20 @@
       ],
       "type_defs_count": 2,
       "types_produced": {
-        "DualStackListener": 2,
-        "GrpcServeHandles": 2
+        "GrpcServeHandles": 2,
+        "DualStackListener": 1
       },
-      "types_consumed": {},
-      "type_flow_signal": 4,
-      "types_produced_total": 4,
-      "types_consumed_total": 0
+      "types_consumed": {
+        "Router": 2
+      },
+      "type_flow_signal": 5,
+      "types_produced_total": 3,
+      "types_consumed_total": 2
     },
     {
       "name": "zp-observation",
       "files": 9,
-      "loc": 3105,
+      "loc": 3088,
       "deps": [
         "zp-core",
         "zp-receipt"
@@ -2399,67 +2335,66 @@
       ],
       "type_defs_count": 16,
       "types_produced": {
-        "ObservationPriority": 10,
-        "ObservationStore": 7,
-        "SourceRange": 7,
-        "ObservationConfig": 5,
-        "ObservationData": 4,
-        "Reflection": 4,
+        "ObservationPriority": 5,
+        "ObservationStore": 5,
         "ObservationCandidate": 3,
-        "ObserverResult": 2,
-        "RawObservationData": 2,
+        "SourceRange": 3,
+        "ObservationConfig": 2,
+        "Reflection": 2,
         "ReflectorAction": 2,
-        "CognitionPipeline": 1,
-        "ReflectorResult": 1
+        "ObserverResult": 1,
+        "ReflectorResult": 1,
+        "RawObservationData": 1,
+        "ObservationData": 1
       },
       "types_consumed": {
-        "Observation": 20,
         "StoreError": 17,
-        "Receipt": 7,
+        "Observation": 16,
+        "Receipt": 5,
         "GovernanceEvent": 3,
         "GovernanceDecision": 2,
         "GovernanceActor": 1,
         "GovernanceEventType": 1
       },
-      "type_flow_signal": 99,
-      "types_produced_total": 48,
-      "types_consumed_total": 51
+      "type_flow_signal": 71,
+      "types_produced_total": 26,
+      "types_consumed_total": 45
     },
     {
       "name": "zp-officers",
-      "files": 14,
-      "loc": 6781,
+      "files": 15,
+      "loc": 8301,
       "deps": [
         "zp-audit",
         "zp-core",
         "zp-receipt"
       ],
-      "sign_count": 0,
+      "sign_count": 1,
       "gate_count": 0,
       "chain_count": 0,
       "verify_count": 3,
       "receipt_families": {
-        "officer": 19,
-        "gate": 6,
-        "delegation": 4,
+        "officer": 28,
+        "gate": 14,
+        "delegation": 8,
         "governance": 1
       },
       "receipt_slugs_sample": [
-        "delegation:granted:ironclaw",
+        "delegation:granted:mytool",
+        "gate:allowed:mytool",
         "officer:aegis:trajectory:awaiting_cadre_history",
-        "officer:aegis:trajectory:coherent",
-        "officer:aegis:trajectory:divergent:critical",
-        "officer:aegis:trajectory:divergent:warning",
         "officer:std:integrity:integrity_verified",
-        "delegation:granted:bar",
-        "gate:allowed:chain_render",
-        "gate:allowed:tool_a",
-        "gate:allowed:tool_b",
-        "gate:allowed:tool_c",
-        "gate:denied:chain_render"
+        "officer:aegis:trajectory:coherent",
+        "officer:aegis:trajectory:divergent:warning",
+        "officer:aegis:trajectory:divergent:critical",
+        "officer:cleo",
+        "gate:denied:badtool",
+        "officer:aegis:trajectory:silent_officer:sen",
+        "officer:sen:security:shadow_credential",
+        "officer:forge:tool_lifecycle_delta"
       ],
-      "receipt_slug_total": 30,
-      "info_flow_signal": 3,
+      "receipt_slug_total": 51,
+      "info_flow_signal": 4,
       "primary_role": "receipt-authoring",
       "consumed_by": [
         "zp-cli",
@@ -2473,11 +2408,17 @@
         "ChainStory",
         "Cleo",
         "Concern",
+        "DelegationEvent",
+        "DelegationKind",
         "Finding",
         "Forge",
+        "GateEvent",
+        "GateOutcome",
         "GovernanceFacet",
         "GovernanceRequest",
+        "OfficerAttestation",
         "OfficerDelegation",
+        "OfficerOperationsWithTool",
         "OfficerSweepResult",
         "PostureScore",
         "PostureTrend",
@@ -2485,6 +2426,7 @@
         "ProposalStatus",
         "ProposedMutation",
         "RegisteredToolInfo",
+        "RequestGroup",
         "SegmentKind",
         "Sentinel",
         "Severity",
@@ -2493,63 +2435,153 @@
         "Subject",
         "SweepCycle",
         "SweepResult",
+        "SystemLifecycleEvent",
+        "SystemLifecycleKind",
         "ToolChainEvidence",
         "ToolGovernancePosture",
+        "ToolLifecycleEvent",
+        "ToolLifecycleKind",
         "ToolRegistrySnapshot",
         "UnregisteredTools",
         "VaultKeyLister"
       ],
-      "type_defs_count": 31,
+      "type_defs_count": 42,
       "types_produced": {
-        "Finding": 41,
-        "ChainReader": 28,
-        "VaultKeyLister": 11,
-        "StorySegment": 6,
-        "ChainReadError": 5,
-        "Forge": 4,
-        "ProposedMutation": 4,
-        "SegmentKind": 4,
-        "Severity": 4,
-        "Aegis": 3,
-        "Cleo": 3,
-        "GovernanceFacet": 3,
-        "PostureScore": 3,
-        "Subject": 3,
-        "GovernanceRequest": 2,
-        "Sentinel": 2,
-        "Steward": 2,
-        "SweepCycle": 2,
-        "ToolGovernancePosture": 2,
-        "ChainStory": 1,
-        "Concern": 1,
-        "OfficerDelegation": 1,
-        "OfficerSweepResult": 1,
-        "PostureTrend": 1,
-        "RegisteredToolInfo": 1,
-        "SweepResult": 1,
-        "ToolChainEvidence": 1,
+        "ChainReader": 33,
+        "ChainReadError": 11,
+        "VaultKeyLister": 10,
+        "StorySegment": 5,
+        "ToolLifecycleEvent": 2,
+        "DelegationEvent": 2,
+        "GateEvent": 2,
+        "SegmentKind": 2,
+        "ToolLifecycleKind": 1,
+        "DelegationKind": 1,
+        "OfficerAttestation": 1,
+        "OfficerOperationsWithTool": 1,
+        "GateOutcome": 1,
+        "SystemLifecycleKind": 1,
+        "SystemLifecycleEvent": 1,
+        "GovernanceFacet": 1,
         "ToolRegistrySnapshot": 1,
-        "UnregisteredTools": 1
+        "UnregisteredTools": 1,
+        "ToolGovernancePosture": 1,
+        "ToolChainEvidence": 1,
+        "PostureScore": 1,
+        "ProposedMutation": 1,
+        "GovernanceRequest": 1,
+        "Subject": 1,
+        "SweepCycle": 1,
+        "SweepResult": 1
       },
       "types_consumed": {
-        "AuditEntry": 13,
-        "Proposal": 6,
-        "AuditStore": 5,
+        "Finding": 37,
+        "AuditEntry": 21,
+        "AuditStore": 7,
+        "Proposal": 5,
         "CapabilityGrant": 3,
-        "ActorId": 1,
-        "AuditId": 1,
+        "Severity": 2,
         "PolicyDecision": 1,
-        "ProposalStatus": 1,
-        "VerificationReport": 1
+        "VerificationReport": 1,
+        "ActorId": 1
       },
-      "type_flow_signal": 174,
-      "types_produced_total": 142,
-      "types_consumed_total": 32
+      "type_flow_signal": 163,
+      "types_produced_total": 85,
+      "types_consumed_total": 78
+    },
+    {
+      "name": "zp-ontology",
+      "files": 7,
+      "loc": 3121,
+      "deps": [
+        "zp-core"
+      ],
+      "sign_count": 0,
+      "gate_count": 0,
+      "chain_count": 0,
+      "verify_count": 0,
+      "receipt_families": {
+        "officer": 30,
+        "delegation": 7,
+        "chain": 2
+      },
+      "receipt_slugs_sample": [
+        "officer:std",
+        "officer:std:heartbeat",
+        "officer:sen",
+        "delegation:granted:foo",
+        "delegation:granted",
+        "chain:canary:written",
+        "chain:canary",
+        "officer:forge",
+        "officer:sen:finding",
+        "officer:cleo:governance"
+      ],
+      "receipt_slug_total": 39,
+      "info_flow_signal": 0,
+      "primary_role": "receipt-authoring",
+      "consumed_by": [
+        "zp-regent",
+        "zp-server"
+      ],
+      "type_defs": [
+        "Artifact",
+        "ArtifactStatus",
+        "ArtifactType",
+        "BoundaryConfig",
+        "BoundaryDecision",
+        "BoundaryInput",
+        "BoundaryReason",
+        "BoundarySignals",
+        "Decision",
+        "DecisionStatus",
+        "ExplicitMarkerKind",
+        "Friction",
+        "FrictionSeverity",
+        "FrictionStatus",
+        "Insight",
+        "ObjectId",
+        "ObjectRef",
+        "ObjectType",
+        "OntologyStore",
+        "ReadError",
+        "Relationship",
+        "RelationshipKind",
+        "StoreError",
+        "Trajectory",
+        "TrajectoryContext",
+        "TrajectoryStatus"
+      ],
+      "type_defs_count": 26,
+      "types_produced": {
+        "ObjectId": 21,
+        "BoundaryInput": 7,
+        "TrajectoryContext": 6,
+        "ObjectType": 5,
+        "ObjectRef": 4,
+        "BoundaryConfig": 3,
+        "Trajectory": 3,
+        "Relationship": 3,
+        "ExplicitMarkerKind": 1,
+        "BoundaryDecision": 1,
+        "BoundarySignals": 1,
+        "RelationshipKind": 1,
+        "ReadError": 1,
+        "OntologyStore": 1
+      },
+      "types_consumed": {
+        "StoreError": 18,
+        "ConversationId": 6,
+        "AuditId": 3
+      },
+      "type_flow_signal": 85,
+      "types_produced_total": 58,
+      "types_consumed_total": 27
     },
     {
       "name": "zp-pipeline",
       "files": 5,
-      "loc": 6928,
+      "loc": 7159,
       "deps": [
         "execution-engine",
         "zp-audit",
@@ -2560,17 +2592,16 @@
         "zp-mesh",
         "zp-policy",
         "zp-receipt",
-        "zp-skills",
         "zp-trust"
       ],
-      "sign_count": 8,
+      "sign_count": 14,
       "gate_count": 21,
       "chain_count": 1,
       "verify_count": 6,
       "receipt_families": {},
       "receipt_slugs_sample": [],
       "receipt_slug_total": 0,
-      "info_flow_signal": 36,
+      "info_flow_signal": 42,
       "primary_role": "gating",
       "consumed_by": [
         "course-examples",
@@ -2587,81 +2618,77 @@
         "Pipeline",
         "PipelineConfig",
         "PipelineError",
-        "ReceivedReceipt"
+        "ReceivedReceipt",
+        "TestSigner"
       ],
-      "type_defs_count": 10,
+      "type_defs_count": 11,
       "types_produced": {
-        "PipelineError": 5,
-        "MeshBridge": 4,
-        "MeshBridgeConfig": 4,
-        "PipelineConfig": 4,
-        "ReceivedReceipt": 4,
-        "CrossoverInterface": 3,
-        "MeshConfig": 3,
-        "AuthState": 2,
+        "PipelineError": 6,
+        "ReceivedReceipt": 3,
+        "MeshBridgeConfig": 2,
+        "MeshBridge": 2,
+        "CrossoverInterface": 2,
+        "AuthState": 1,
         "PeerTrustSnapshot": 1,
-        "Pipeline": 1
+        "PipelineConfig": 1,
+        "MeshConfig": 1
       },
       "types_consumed": {
         "CapabilityGrant": 10,
-        "MeshNode": 10,
-        "CompactReceipt": 6,
+        "MeshNode": 9,
+        "CompactReceipt": 5,
         "CompactAuditEntry": 4,
-        "ConversationId": 4,
-        "PeerAuditAttestation": 4,
         "AuditChallenge": 3,
         "AuditResponse": 3,
-        "OperatorIdentity": 3,
-        "ReputationScore": 3,
-        "ActionType": 2,
-        "AuditStore": 2,
-        "CapabilityRequest": 2,
-        "CompactDelegation": 2,
-        "ExecutionReceipt": 2,
-        "InterfaceConfig": 2,
-        "MeshAction": 2,
-        "MeshResult": 2,
-        "MeshRuntime": 2,
-        "MeshStore": 2,
-        "Message": 2,
-        "Packet": 2,
-        "PolicyDecision": 2,
+        "PeerAuditAttestation": 3,
+        "ConversationId": 3,
         "Receipt": 2,
-        "ReputationGrade": 2,
+        "ReputationScore": 2,
+        "CompactDelegation": 2,
+        "ActionType": 2,
+        "CapabilityRequest": 2,
+        "MeshAction": 2,
         "Request": 2,
         "Response": 2,
-        "TrustTier": 2,
+        "ExecutionReceipt": 2,
+        "PolicyDecision": 2,
+        "InterfaceConfig": 2,
+        "Packet": 2,
+        "MeshResult": 2,
+        "OperatorIdentity": 1,
+        "TrustTier": 1,
+        "ReputationGrade": 1,
+        "DelegationChain": 1,
+        "ChainError": 1,
+        "ConstraintContext": 1,
+        "AuditEntry": 1,
+        "MeshIdentity": 1,
+        "CapabilityPolicy": 1,
+        "NegotiationResult": 1,
+        "CategoryScore": 1,
+        "CompactReputationSummary": 1,
+        "ReputationWeights": 1,
+        "MeshPeerContext": 1,
+        "ProviderPool": 1,
+        "AuditStore": 1,
+        "MeshRuntime": 1,
+        "InboundEnvelope": 1,
+        "MeshStore": 1,
+        "Runtime": 1,
+        "Message": 1,
         "ActorId": 1,
         "AuditAction": 1,
-        "AuditEntry": 1,
-        "CapabilityPolicy": 1,
-        "CategoryScore": 1,
-        "ChainError": 1,
-        "CompactReputationSummary": 1,
-        "ConstraintContext": 1,
-        "DelegationChain": 1,
-        "EpisodeStore": 1,
-        "ExecutionEngine": 1,
-        "InboundEnvelope": 1,
-        "InterfaceStats": 1,
-        "MeshIdentity": 1,
-        "MeshPeerContext": 1,
-        "NegotiationResult": 1,
         "PolicyContext": 1,
-        "PolicyEngine": 1,
-        "ProviderPool": 1,
-        "ReputationWeights": 1,
-        "Runtime": 1,
-        "SkillRegistry": 1
+        "InterfaceStats": 1
       },
-      "type_flow_signal": 139,
-      "types_produced_total": 31,
-      "types_consumed_total": 108
+      "type_flow_signal": 110,
+      "types_produced_total": 19,
+      "types_consumed_total": 91
     },
     {
       "name": "zp-policy",
       "files": 7,
-      "loc": 4538,
+      "loc": 4614,
       "deps": [
         "zp-audit",
         "zp-core"
@@ -2684,6 +2711,8 @@
         "zp-server"
       ],
       "type_defs": [
+        "AlwaysBlockRule",
+        "AlwaysWarnRule",
         "BulkOperationRule",
         "CatastrophicActionRule",
         "DefaultAllowRule",
@@ -2710,52 +2739,40 @@
         "WasmPolicyModule",
         "WasmRuntime"
       ],
-      "type_defs_count": 25,
+      "type_defs_count": 27,
       "types_produced": {
-        "PolicyVersion": 11,
-        "WasmPolicyError": 9,
-        "PolicyModuleRegistry": 7,
-        "PolicyEngine": 6,
-        "WasmModuleMetadata": 6,
-        "WasmPolicyModule": 6,
-        "Guard": 5,
-        "WasmRuntime": 4,
-        "BulkOperationRule": 3,
-        "CatastrophicActionRule": 3,
-        "DefaultAllowRule": 3,
-        "DowngradeError": 3,
-        "GateResult": 3,
-        "HarmPrincipleRule": 3,
-        "ModuleStatus": 3,
-        "ReputationGateRule": 3,
-        "ReputationThresholds": 3,
-        "SovereigntyRule": 3,
-        "TrustTierEnforcementRule": 3,
-        "DowngradeGuard": 2,
-        "InferenceGateResult": 2,
-        "VersionTransition": 2,
-        "GovernanceGate": 1,
+        "WasmPolicyError": 7,
+        "WasmModuleMetadata": 5,
+        "PolicyVersion": 4,
+        "PolicyModuleRegistry": 4,
+        "PolicyEngine": 3,
+        "Guard": 2,
+        "ModuleStatus": 2,
+        "DowngradeError": 1,
+        "VersionTransition": 1,
+        "GateResult": 1,
         "InferencePolicyState": 1,
-        "RegisteredModule": 1
+        "InferenceGateResult": 1,
+        "WasmRuntime": 1,
+        "ReputationThresholds": 1,
+        "WasmPolicyModule": 1
       },
       "types_consumed": {
-        "PolicyContext": 23,
-        "PolicyDecision": 18,
-        "ActorId": 9,
+        "PolicyContext": 26,
+        "PolicyDecision": 19,
+        "ActorId": 7,
         "ActionType": 5,
-        "TrustTier": 4,
         "MeshAction": 3,
-        "Store": 3,
+        "TrustTier": 2,
+        "Store": 2,
         "Capability": 1,
-        "CapabilityGrant": 1,
-        "IssuanceError": 1,
         "ModelPreference": 1,
-        "RiskLevel": 1,
-        "UnsealedEntry": 1
+        "CapabilityGrant": 1,
+        "IssuanceError": 1
       },
-      "type_flow_signal": 167,
-      "types_produced_total": 96,
-      "types_consumed_total": 71
+      "type_flow_signal": 103,
+      "types_produced_total": 35,
+      "types_consumed_total": 68
     },
     {
       "name": "zp-preflight",
@@ -2785,25 +2802,23 @@
       ],
       "type_defs_count": 9,
       "types_produced": {
-        "CheckResult": 16,
-        "PreflightReport": 6,
-        "Os": 4,
-        "PackageManager": 3,
-        "Arch": 2,
-        "ReportSummary": 1,
-        "Status": 1
+        "CheckResult": 14,
+        "PreflightReport": 5,
+        "Os": 3,
+        "PackageManager": 2,
+        "Arch": 1
       },
       "types_consumed": {
-        "Platform": 15
+        "Platform": 13
       },
-      "type_flow_signal": 48,
-      "types_produced_total": 33,
-      "types_consumed_total": 15
+      "type_flow_signal": 38,
+      "types_produced_total": 25,
+      "types_consumed_total": 13
     },
     {
       "name": "zp-receipt",
-      "files": 17,
-      "loc": 7348,
+      "files": 18,
+      "loc": 7731,
       "deps": [
         "zp-verify"
       ],
@@ -2832,6 +2847,7 @@
         "zp-pipeline",
         "zp-regent",
         "zp-server",
+        "zp-trace",
         "zp-verify"
       ],
       "type_defs": [
@@ -2845,6 +2861,7 @@
         "ConfigurationSource",
         "Decision",
         "Direction",
+        "Doc",
         "Epoch",
         "EpochCompactor",
         "EpochError",
@@ -2890,100 +2907,87 @@
         "VerificationResult",
         "VerifyError"
       ],
-      "type_defs_count": 54,
+      "type_defs_count": 55,
       "types_produced": {
-        "ReceiptBuilder": 28,
-        "ReceiptType": 13,
-        "ClaimSemantics": 11,
-        "Signer": 7,
-        "ClaimMetadata": 6,
-        "PqSigner": 6,
+        "ReceiptBuilder": 27,
+        "ReceiptType": 7,
+        "ClaimSemantics": 6,
         "Epoch": 5,
-        "EpochError": 5,
-        "MerkleNode": 5,
-        "ReceiptChainEntry": 5,
-        "VerificationError": 5,
-        "VerificationResult": 5,
-        "Action": 4,
-        "VerifyError": 4,
-        "ExecutorType": 3,
-        "IoHashes": 3,
-        "Resources": 3,
-        "SignatureAlgorithm": 3,
-        "SignatureBlock": 3,
-        "TrustGrade": 3,
-        "ValidationError": 3,
-        "ChainMetadata": 2,
-        "Decision": 2,
-        "ErrorDetail": 2,
-        "HybridSigner": 2,
-        "MerkleProof": 2,
-        "OutputArtifact": 2,
-        "ProofStep": 2,
-        "ReceiptEntry": 2,
-        "Redaction": 2,
-        "RedactionType": 2,
-        "Signable": 2,
-        "Timing": 2,
-        "ActionType": 1,
-        "CanonicalDomain": 1,
-        "ConfigurationSource": 1,
-        "Direction": 1,
-        "EpochCompactor": 1,
-        "Executor": 1,
-        "InferenceFailureClass": 1,
-        "MerkleTree": 1,
-        "ReceiptChain": 1,
-        "ReceiptVerifier": 1,
-        "RevocationIndex": 1,
-        "RoutingReason": 1,
-        "SchemaFormat": 1,
-        "TestSignable": 1,
-        "TypeRules": 1,
-        "VerificationCheck": 1
+        "ClaimMetadata": 4,
+        "ReceiptChainEntry": 4,
+        "VerificationResult": 4,
+        "EpochError": 3,
+        "Signer": 3,
+        "VerificationError": 3,
+        "ValidationError": 2,
+        "MerkleNode": 2,
+        "PqSigner": 2,
+        "VerifyError": 2,
+        "TrustGrade": 1,
+        "ExecutorType": 1,
+        "Action": 1,
+        "Resources": 1,
+        "IoHashes": 1,
+        "RedactionType": 1,
+        "MerkleProof": 1,
+        "ProofStep": 1,
+        "SignatureBlock": 1,
+        "SignatureAlgorithm": 1,
+        "TypeRules": 1
       },
       "types_consumed": {
-        "Receipt": 26,
-        "ChainError": 4,
-        "PolicyDecision": 3,
-        "Status": 3,
-        "SignatureBlockView": 1,
-        "TrustTier": 1
+        "Receipt": 22,
+        "ChainError": 2,
+        "Status": 1,
+        "Decision": 1,
+        "PolicyDecision": 1,
+        "SignatureBlockView": 1
       },
-      "type_flow_signal": 208,
-      "types_produced_total": 170,
-      "types_consumed_total": 38
+      "type_flow_signal": 113,
+      "types_produced_total": 85,
+      "types_consumed_total": 28
     },
     {
       "name": "zp-regent",
-      "files": 18,
-      "loc": 11177,
+      "files": 25,
+      "loc": 19499,
       "deps": [
         "zp-audit",
         "zp-config",
         "zp-core",
+        "zp-emission-coherence",
+        "zp-net",
         "zp-officers",
+        "zp-ontology",
         "zp-receipt"
       ],
-      "sign_count": 0,
+      "sign_count": 5,
       "gate_count": 0,
-      "chain_count": 5,
+      "chain_count": 13,
       "verify_count": 1,
       "receipt_families": {
-        "cognitive": 4,
-        "regent": 1,
-        "officer": 1
+        "regent": 11,
+        "cognitive": 8,
+        "artifact": 3,
+        "officer": 2,
+        "substrate": 1
       },
       "receipt_slugs_sample": [
-        "cognitive:correction:revoked",
-        "cognitive:correction:standing",
-        "cognitive:correction:violated",
+        "regent:intent:request_approval",
         "cognitive:observer:verified",
-        "officer:std:integrity:chain_link_broken",
-        "regent:tool:completed:something"
+        "regent:dispatch",
+        "regent:approval:granted",
+        "regent:approval:denied",
+        "regent:approval:enacted",
+        "cognitive:correction:violated",
+        "cognitive:claim:unbacked",
+        "cognitive:correction:standing",
+        "cognitive:correction:revoked",
+        "regent:tool:completed:something",
+        "officer:std:integrity:chain_link_broken"
       ],
-      "receipt_slug_total": 6,
-      "info_flow_signal": 6,
+      "receipt_slug_total": 25,
+      "info_flow_signal": 19,
       "primary_role": "receipt-authoring",
       "consumed_by": [
         "zp-server"
@@ -2991,8 +2995,11 @@
       "type_defs": [
         "ActiveStandingCorrection",
         "ApiKeySource",
+        "ApprovalIndex",
+        "ApprovalRequest",
         "AuthStrategy",
         "AuthorClass",
+        "AuthorizedModel",
         "BackgroundTask",
         "BackgroundTaskKind",
         "BackgroundTaskStatus",
@@ -3003,8 +3010,9 @@
         "ChainSnapshot",
         "ChainStateClaim",
         "ChatMessage",
-        "ChatMessageResponse",
+        "ClaimKind",
         "ClassAuthorship",
+        "ClassifierDecision",
         "CloudMandate",
         "CockpitSource",
         "CognitiveContext",
@@ -3019,35 +3027,42 @@
         "CorrectionScope",
         "CorrectionType",
         "CycleOutcome",
+        "DefaultClassifier",
         "DelegationSummary",
+        "DestinationHypothesis",
         "DossierCorpus",
         "DurationHit",
+        "EnactedActs",
+        "Enactment",
+        "EntropyBaselineSpec",
         "EvaluationReport",
         "EvaluationTier",
         "EventTx",
         "FallbackEvent",
         "FindingSummary",
+        "GroundFinding",
         "HexHit",
         "InferenceBackend",
+        "InferenceEnvelope",
         "InferenceProtocol",
         "InferenceRequest",
-        "InferenceResponse",
         "InferenceTier",
         "Intent",
         "IntentCategory",
         "IntentOutcome",
         "LoadedModel",
+        "MapError",
+        "MapReceipt",
         "MemoryEntry",
         "MemoryFragment",
         "MemoryPressure",
         "MemoryStore",
         "ModelDossier",
         "ModelEvaluator",
+        "ModelRole",
         "NumberHit",
         "ObserverPattern",
         "ObserverReport",
-        "OllamaChatMessage",
-        "OllamaResponse",
         "OpenAIChatMessage",
         "OpenAIChoice",
         "OpenAIResponse",
@@ -3058,26 +3073,37 @@
         "Persona",
         "Phase",
         "PinStatus",
+        "Precedent",
+        "PrecedentIndex",
         "PressureLevel",
         "PriorResponse",
         "ProbeTier",
+        "ProposalKind",
         "ProviderProfile",
         "PubkeyClaim",
+        "QueryHint",
         "ReceiptEmitter",
         "Regent",
         "RegentConfig",
         "RegentError",
         "RegentHandle",
         "RegentMessage",
+        "RegentTool",
         "RelationalStyle",
+        "Resolution",
         "ResponseCheck",
         "RouteDecision",
         "Router",
+        "Sample",
+        "SelectionReason",
         "SemanticClaim",
         "SemanticClaimClass",
         "SemanticClaimPayload",
         "SemanticClassCounts",
         "SemanticExtractionReport",
+        "ServedModel",
+        "SessionProfile",
+        "SettlementState",
         "ShadowBatteryResult",
         "ShadowCandidate",
         "ShadowCandidateState",
@@ -3089,138 +3115,142 @@
         "SweepResult",
         "SystemAwareness",
         "SystemMonitor",
+        "SystemTrends",
         "TestCase",
         "TestCategory",
         "TestResult",
         "ThinkMechanismResult",
         "ToolResult",
+        "TopicTouch",
+        "TrajectorySummary",
+        "UnbackedClaim",
         "Violation",
         "ViolationSeverity",
         "VoiceCharacteristics",
+        "Wake",
+        "Waypoint",
+        "WaypointKind",
+        "WaypointResolution",
         "WorkArc"
       ],
-      "type_defs_count": 109,
+      "type_defs_count": 139,
       "types_produced": {
-        "RegentError": 27,
-        "InferenceBackend": 22,
-        "ActiveStandingCorrection": 10,
-        "CognitiveContext": 8,
-        "DossierCorpus": 8,
-        "Intent": 8,
-        "RegentConfig": 8,
-        "IntentCategory": 7,
-        "SystemAwareness": 7,
-        "ApiKeySource": 6,
-        "InferenceRequest": 6,
-        "OperatorInput": 6,
-        "ClassAuthorship": 5,
-        "CorrectionType": 5,
+        "RegentError": 25,
+        "InferenceBackend": 18,
+        "CognitiveContext": 14,
+        "Intent": 9,
+        "ActiveStandingCorrection": 8,
+        "MapReceipt": 8,
+        "MapError": 8,
+        "RegentConfig": 7,
+        "SystemAwareness": 6,
+        "Waypoint": 6,
+        "DossierCorpus": 6,
+        "IntentCategory": 6,
+        "InferenceRequest": 5,
         "DelegationSummary": 5,
-        "ProbeTier": 5,
-        "ShadowCheckResult": 5,
-        "Suitability": 5,
-        "CancelFlag": 4,
-        "CockpitSource": 4,
-        "CognitiveEvent": 4,
-        "CollapseDimension": 4,
-        "CompositionSummary": 4,
-        "EventTx": 4,
-        "MemoryPressure": 4,
-        "ModelDossier": 4,
-        "Persona": 4,
-        "SemanticClaim": 4,
-        "SovereignIdentity": 4,
-        "StandingCorrection": 4,
-        "SystemMonitor": 4,
+        "OperatorInput": 5,
+        "ApprovalRequest": 4,
+        "EnactedActs": 4,
+        "DestinationHypothesis": 4,
         "WorkArc": 4,
-        "BackgroundTask": 3,
-        "BackgroundTaskKind": 3,
-        "CloudMandate": 3,
-        "CollapseProbe": 3,
-        "EvaluationReport": 3,
-        "EvaluationTier": 3,
-        "FindingSummary": 3,
-        "InferenceProtocol": 3,
-        "ObserverReport": 3,
-        "PatternExtraction": 3,
-        "Phase": 3,
-        "PriorResponse": 3,
+        "CancelFlag": 4,
+        "ProbeTier": 4,
+        "EventTx": 4,
+        "ShadowCheckResult": 4,
+        "SessionProfile": 3,
+        "MemoryPressure": 3,
+        "SystemMonitor": 3,
+        "SemanticClaim": 3,
+        "TestCase": 3,
+        "CollapseDimension": 3,
+        "ClassifierDecision": 3,
         "Regent": 3,
         "RouteDecision": 3,
-        "TestCase": 3,
-        "TestCategory": 3,
-        "ViolationSeverity": 3,
-        "AuthStrategy": 2,
-        "BackgroundTaskStatus": 2,
-        "ChainSnapshot": 2,
-        "CollapseTest": 2,
-        "CorrectionScope": 2,
-        "FallbackEvent": 2,
-        "LoadedModel": 2,
-        "MemoryFragment": 2,
-        "MemoryStore": 2,
+        "ObserverReport": 2,
+        "StandingCorrection": 2,
         "ObserverPattern": 2,
-        "OllamaChatMessage": 2,
-        "OperatorModelPin": 2,
-        "RegentHandle": 2,
-        "ResponseCheck": 2,
-        "SemanticExtractionReport": 2,
-        "ShadowCandidate": 2,
-        "TestResult": 2,
-        "VoiceCharacteristics": 2,
-        "AuthorClass": 1,
-        "CapabilityClaim": 1,
-        "ChainStateClaim": 1,
-        "CollapseCheck": 1,
-        "CorrectionContent": 1,
-        "CorrectionIndex": 1,
-        "CycleOutcome": 1,
-        "DurationHit": 1,
-        "HexHit": 1,
-        "IntentOutcome": 1,
-        "ModelEvaluator": 1,
+        "CorrectionType": 2,
+        "UnbackedClaim": 2,
+        "ClassAuthorship": 2,
+        "CollapseProbe": 2,
+        "CollapseTest": 2,
+        "CognitiveEvent": 2,
+        "ApiKeySource": 2,
+        "ServedModel": 2,
+        "InferenceEnvelope": 2,
+        "QueryHint": 2,
+        "CockpitSource": 2,
+        "PriorResponse": 2,
+        "CompositionSummary": 2,
+        "Precedent": 2,
+        "TrajectorySummary": 2,
+        "Suitability": 2,
+        "ModelDossier": 2,
+        "EvaluationTier": 2,
+        "Enactment": 1,
+        "BackgroundTaskStatus": 1,
+        "BackgroundTask": 1,
+        "BackgroundTaskKind": 1,
+        "SystemTrends": 1,
+        "LoadedModel": 1,
+        "PatternExtraction": 1,
+        "ViolationSeverity": 1,
+        "SemanticExtractionReport": 1,
         "NumberHit": 1,
-        "OpenAIChatMessage": 1,
-        "OpenAIChoice": 1,
-        "OpenAIUsage": 1,
-        "PinStatus": 1,
-        "PressureLevel": 1,
-        "PubkeyClaim": 1,
-        "ReceiptEmitter": 1,
-        "RegentMessage": 1,
-        "RelationalStyle": 1,
-        "Router": 1,
-        "SemanticClaimClass": 1,
-        "SemanticClaimPayload": 1,
-        "SemanticClassCounts": 1,
-        "ShadowBatteryResult": 1,
-        "ShadowCandidateState": 1,
+        "DurationHit": 1,
         "SubjectHit": 1,
-        "ThinkMechanismResult": 1
+        "HexHit": 1,
+        "AuthorClass": 1,
+        "GroundFinding": 1,
+        "FindingSummary": 1,
+        "WaypointResolution": 1,
+        "TestResult": 1,
+        "ResponseCheck": 1,
+        "ReceiptEmitter": 1,
+        "Phase": 1,
+        "InferenceProtocol": 1,
+        "FallbackEvent": 1,
+        "CloudMandate": 1,
+        "ModelRole": 1,
+        "AuthorizedModel": 1,
+        "IntentOutcome": 1,
+        "CycleOutcome": 1,
+        "SovereignIdentity": 1,
+        "ShadowCandidate": 1,
+        "Wake": 1,
+        "ProposalKind": 1,
+        "MemoryFragment": 1,
+        "Persona": 1,
+        "OperatorModelPin": 1,
+        "ShadowBatteryResult": 1
       },
       "types_consumed": {
-        "AuditStore": 6,
-        "Finding": 6,
-        "MemoryEntry": 5,
-        "InferenceTier": 4,
-        "ToolResult": 4,
-        "AuditEntry": 3,
-        "ProviderProfile": 3,
+        "AuditStore": 12,
+        "Finding": 8,
+        "AuditEntry": 5,
+        "ProviderProfile": 4,
+        "MemoryEntry": 4,
+        "Resolution": 2,
+        "EmissionAnalyzer": 2,
+        "InferenceTier": 2,
         "ChainReader": 2,
-        "Violation": 2,
-        "CategoryScore": 1,
-        "ChatMessage": 1,
-        "OllamaResponse": 1,
-        "SweepResult": 1
+        "Violation": 1,
+        "ZpConfig": 1,
+        "Severity": 1,
+        "SweepResult": 1,
+        "OntologyStore": 1,
+        "ToolResult": 1,
+        "EntropyBaseline": 1
       },
-      "type_flow_signal": 364,
-      "types_produced_total": 325,
-      "types_consumed_total": 39
+      "type_flow_signal": 321,
+      "types_produced_total": 273,
+      "types_consumed_total": 48
     },
     {
       "name": "zp-sensors",
       "files": 6,
-      "loc": 1407,
+      "loc": 1527,
       "deps": [],
       "sign_count": 0,
       "gate_count": 0,
@@ -3238,6 +3268,7 @@
         "DiscoveredPort",
         "DiscoveryConfig",
         "KnownBinding",
+        "KqGuard",
         "KqueueCommand",
         "KqueueError",
         "KqueueFd",
@@ -3249,41 +3280,37 @@
         "SensorLayerConfig",
         "SensorLayerHandle",
         "WatchedFile",
-        "WatchedProcess",
-        "proc_bsdinfo"
+        "WatchedProcess"
       ],
       "type_defs_count": 16,
       "types_produced": {
-        "SensorEvent": 6,
-        "ProcessContext": 5,
-        "KnownBinding": 4,
+        "SensorEvent": 4,
+        "KnownBinding": 3,
         "WatchedFile": 3,
         "WatchedProcess": 3,
-        "KqueueCommand": 2,
+        "ProcessContext": 3,
         "KqueueError": 2,
-        "SensorLayerConfig": 2,
-        "SensorLayerHandle": 2,
-        "DiscoveredPort": 1,
-        "KqueueFd": 1,
-        "ProcInfo": 1,
-        "ProcessEventKind": 1,
-        "SensorLayer": 1
+        "KqueueCommand": 1,
+        "SensorLayerConfig": 1,
+        "SensorLayerHandle": 1,
+        "ProcInfo": 1
       },
       "types_consumed": {
-        "DiscoveryConfig": 4
+        "DiscoveryConfig": 2
       },
-      "type_flow_signal": 38,
-      "types_produced_total": 34,
-      "types_consumed_total": 4
+      "type_flow_signal": 24,
+      "types_produced_total": 22,
+      "types_consumed_total": 2
     },
     {
       "name": "zp-server",
-      "files": 48,
-      "loc": 37906,
+      "files": 53,
+      "loc": 44649,
       "deps": [
         "mle-star-engine",
         "monte-carlo-engine",
         "zp-anchor",
+        "zp-anchor-ots",
         "zp-artifacts",
         "zp-audit",
         "zp-config",
@@ -3293,12 +3320,14 @@
         "zp-engine",
         "zp-gate-envelope",
         "zp-host",
+        "zp-inference-observer",
         "zp-keys",
         "zp-memory",
         "zp-mesh",
         "zp-net",
         "zp-observation",
         "zp-officers",
+        "zp-ontology",
         "zp-pipeline",
         "zp-policy",
         "zp-receipt",
@@ -3307,37 +3336,37 @@
         "zp-trust",
         "zp-verbs"
       ],
-      "sign_count": 134,
+      "sign_count": 140,
       "gate_count": 2,
-      "chain_count": 27,
+      "chain_count": 34,
       "verify_count": 79,
       "receipt_families": {
-        "regent": 15,
-        "chain": 13,
-        "cognitive": 9,
+        "regent": 35,
+        "chain": 14,
+        "cognitive": 11,
         "officer": 8,
         "delegation": 6,
         "gate": 5,
+        "artifact": 4,
         "coherence": 4,
-        "artifact": 1,
-        "substrate": 1
+        "policy": 1
       },
       "receipt_slugs_sample": [
         "chain:canary:verified",
-        "chain:canary:missed",
         "chain:canary:written",
-        "cognitive:correction:violated",
-        "cognitive:input:composed",
-        "cognitive:observer:verified",
-        "coherence:diverged:class1_chain_readers",
-        "coherence:verified:class1_chain_readers",
+        "chain:canary:missed",
         "gate:allowed:foo",
-        "officer:std:heartbeat",
-        "officer:std:integrity:integrity_verified",
-        "regent:config:inference"
+        "artifact:signed",
+        "coherence:verified:class1_chain_readers",
+        "coherence:diverged:class1_chain_readers",
+        "regent:precedent:cited",
+        "regent:config:inference:shadow_start",
+        "regent:config:inference",
+        "artifact:library:candidate",
+        "regent:tool:refused:unsigned"
       ],
-      "receipt_slug_total": 62,
-      "info_flow_signal": 242,
+      "receipt_slug_total": 88,
+      "info_flow_signal": 255,
       "primary_role": "signing",
       "consumed_by": [
         "zp-cli",
@@ -3359,17 +3388,22 @@
         "AuditEntriesResponse",
         "AuditReceiptsQuery",
         "AuditReceiptsResponse",
+        "BedrockInputs",
         "BlastRadiusRegisterResponse",
         "BlastRadiusRegistration",
         "CanaryRuntime",
         "CanonMetadata",
         "CapabilityChainState",
         "CapabilityResult",
+        "CartographerConfig",
+        "CartographerNotifier",
         "ChainHeadResponse",
         "ChainVerifyResponse",
         "ChannelError",
         "ChannelStatus",
         "ChannelStatusResponse",
+        "ChartSeries",
+        "ChartSpec",
         "CheckStatus",
         "CmdResult",
         "CockpitLaunch",
@@ -3402,6 +3436,7 @@
         "ExpertiseQuery",
         "FailedAuthLimiter",
         "FileContent",
+        "Finding",
         "FindingSeverity",
         "GateToolCallRequest",
         "GenerateReceiptRequest",
@@ -3499,11 +3534,13 @@
         "RegistrySnapshot",
         "RegistrySnapshotEntry",
         "ReleaseReason",
+        "ReportFragment",
         "ReversibilityGate",
         "ReviewDecisionRequest",
         "ReviewDecisionResponse",
         "RoutingConfig",
         "RoutingFile",
+        "S2Outcome",
         "ScanFinding",
         "ScannedCanonicalization",
         "Scratch",
@@ -3522,6 +3559,7 @@
         "ServerRegentConfig",
         "SessionAuth",
         "SetupInstall",
+        "Severity",
         "SimulateRequest",
         "SlackEvent",
         "SlackWebhookPayload",
@@ -3558,350 +3596,222 @@
         "UsageMetrics",
         "ValidatedCommand",
         "VaultConfiguredTools",
+        "VaultKeyRequest",
+        "VaultPutRequest",
         "VaultStoreParams",
         "Verdict",
         "VerificationResult",
         "VerifyChainRequest",
         "VerifyChainResponse"
       ],
-      "type_defs_count": 219,
+      "type_defs_count": 230,
       "types_produced": {
-        "OnboardEvent": 22,
-        "OnboardState": 16,
-        "ToolBinding": 15,
-        "CommandError": 12,
+        "OnboardEvent": 21,
+        "OnboardState": 15,
         "OnboardAction": 12,
-        "EventStreamItem": 11,
+        "ToolBinding": 12,
+        "CommandError": 11,
+        "EventStreamItem": 8,
+        "ChartSpec": 8,
         "RegistryError": 7,
-        "ServerConfig": 7,
-        "PortRegistry": 6,
-        "AppStateInner": 5,
-        "EndpointRateLimiter": 5,
-        "EnvelopeVerifier": 5,
-        "InternalAuthority": 5,
-        "TierRoute": 5,
-        "ToolState": 5,
-        "AnchorPipeline": 4,
-        "FailedAuthLimiter": 4,
-        "LeaseHeartbeatConfig": 4,
-        "LeaseHeartbeatState": 4,
-        "ListenProcess": 4,
-        "PreferenceSource": 4,
-        "PreflightResults": 4,
-        "ServerIdentity": 4,
-        "SessionAuth": 4,
-        "ToolPhase": 4,
-        "TreeEntry": 4,
-        "UsageMetrics": 4,
+        "ServerConfig": 5,
+        "AppStateInner": 4,
         "VaultConfiguredTools": 4,
-        "AnalysisEngines": 3,
-        "AttributedProcess": 3,
-        "CmdResult": 3,
-        "EnvelopeReject": 3,
-        "InternalAuthError": 3,
-        "NetworkTopology": 3,
-        "PricingConfig": 3,
-        "ReleaseReason": 3,
-        "RoutingConfig": 3,
+        "UsageMetrics": 4,
+        "ToolState": 4,
         "SealError": 3,
-        "SeenIntents": 3,
-        "SystemState": 3,
-        "ToolArchetype": 3,
+        "EnvelopeVerifier": 3,
+        "LeaseHeartbeatConfig": 3,
+        "ServerIdentity": 3,
+        "NetworkTopology": 3,
+        "PreflightResults": 3,
         "ToolChainState": 3,
-        "ToolVersionInfo": 3,
-        "ValidatedCommand": 3,
-        "AnchorNotifier": 2,
-        "Attestation": 2,
-        "ChannelError": 2,
-        "CodebaseQuery": 2,
+        "PreferenceSource": 3,
+        "ReleaseReason": 3,
+        "PortRegistry": 3,
+        "ListenProcess": 3,
+        "SessionAuth": 2,
+        "EndpointRateLimiter": 2,
+        "BedrockInputs": 2,
+        "TreeEntry": 2,
         "CoherenceReport": 2,
+        "EnvelopeReject": 2,
+        "InternalAuthError": 2,
+        "InternalAuthority": 2,
+        "LeaseHeartbeatState": 2,
         "ComposeCredentials": 2,
-        "DeepScanResult": 2,
-        "HealthKind": 2,
-        "HealthSampler": 2,
-        "ListQuery": 2,
         "LocalRuntime": 2,
-        "MemorySummary": 2,
-        "ModelRecommendation": 2,
-        "ModuleCompletion": 2,
-        "NodeStatusHandler": 2,
-        "NonceStore": 2,
-        "PendingReviewSummary": 2,
-        "PersistedSession": 2,
-        "ProbeResult": 2,
-        "PubkeyRegistry": 2,
-        "Scratch": 2,
-        "SearchMatch": 2,
-        "SecurityCheck": 2,
-        "SecurityPosture": 2,
-        "ServerIntentExecutor": 2,
-        "ServerRegentConfig": 2,
         "SystemResources": 2,
-        "ToolPreflight": 2,
-        "Verdict": 2,
-        "ActionTypeInput": 1,
-        "AnalyticsEvent": 1,
-        "AnomalyDetail": 1,
-        "AttestationSummary": 1,
-        "AuditEntriesQuery": 1,
-        "AuditEntriesResponse": 1,
-        "AuditReceiptsQuery": 1,
-        "AuditReceiptsResponse": 1,
-        "BlastRadiusRegisterResponse": 1,
-        "BlastRadiusRegistration": 1,
-        "CanaryRuntime": 1,
-        "CanonMetadata": 1,
-        "CapabilityChainState": 1,
-        "CapabilityResult": 1,
-        "ChainHeadResponse": 1,
-        "ChainVerifyResponse": 1,
-        "ChannelStatus": 1,
-        "ChannelStatusResponse": 1,
-        "CheckStatus": 1,
-        "CockpitLaunch": 1,
-        "CognitionStatus": 1,
-        "CoherenceRuntime": 1,
-        "ComposeRequest": 1,
-        "CompromiseReportResponse": 1,
-        "CompromiseRequest": 1,
-        "ConfigParameterSnapshot": 1,
-        "CourseAnalytics": 1,
-        "CreateGrantRequest": 1,
-        "CredentialsQuery": 1,
-        "DelegateRequest": 1,
-        "DelegateResponse": 1,
-        "DepState": 1,
-        "DepStateBuilder": 1,
-        "EnvCorrection": 1,
-        "ExpertiseQuery": 1,
-        "FindingSeverity": 1,
-        "GateToolCallRequest": 1,
-        "GenerateReceiptRequest": 1,
-        "GenerateReceiptResponse": 1,
-        "GetQuery": 1,
-        "GrantResponse": 1,
-        "GuardEvaluateRequest": 1,
-        "GuardEvaluateResponse": 1,
-        "HostPricingConfig": 1,
-        "IdentityResponse": 1,
-        "InboundMessage": 1,
-        "IndexQuery": 1,
-        "IssueAttestationRequest": 1,
-        "LaunchOverride": 1,
-        "LaunchOverrideBody": 1,
-        "LeaseRenewRequest": 1,
-        "LookupQuery": 1,
-        "MemoriesResponse": 1,
-        "MemoryStats": 1,
-        "MemorySweepResponse": 1,
-        "ModelAlt": 1,
-        "ModelPreferenceRequest": 1,
-        "ModelRoutedRequest": 1,
-        "ModuleAnalytics": 1,
-        "NonceStoreInner": 1,
-        "ObservationSummary": 1,
-        "ObserveRequest": 1,
-        "ObserveResponse": 1,
-        "OfficerSweepQuery": 1,
-        "OfficersConfig": 1,
-        "OnboardQuery": 1,
-        "OnboardWsQuery": 1,
-        "OutboundMessage": 1,
-        "PipelineState": 1,
-        "PolicyAckRequest": 1,
-        "PolicyAdvanceRequest": 1,
-        "PolicyPushRequest": 1,
-        "PolicyRuleInfo": 1,
-        "PolicyRulesResponse": 1,
-        "PolicyVersionResponse": 1,
-        "PortConflict": 1,
-        "PostureSnapshot": 1,
-        "PreflightCheck": 1,
-        "PricingRefreshRequest": 1,
-        "ProbeOutcome": 1,
-        "ProcessAttribution": 1,
-        "PubkeyRegistryArc": 1,
-        "ReceiptIntent": 1,
-        "ReconstitutionResponse": 1,
-        "ReflectRequest": 1,
-        "ReflectResponse": 1,
-        "RegisterAgentRequest": 1,
-        "RegistryEntry": 1,
-        "RegistrySnapshot": 1,
-        "RegistrySnapshotEntry": 1,
-        "ReversibilityGate": 1,
-        "ReviewDecisionRequest": 1,
-        "ReviewDecisionResponse": 1,
-        "ScannedCanonicalization": 1,
+        "ModelRecommendation": 2,
+        "CmdResult": 2,
+        "ProbeResult": 2,
+        "ReportFragment": 2,
+        "ToolVersionInfo": 2,
+        "SystemState": 2,
+        "ToolPhase": 2,
         "SealOutcome": 1,
-        "SearchQuery": 1,
-        "SeenIntentsArc": 1,
-        "SimulateRequest": 1,
-        "SlackEvent": 1,
-        "StatsResponse": 1,
-        "StoredLaunchCommand": 1,
-        "SubmitRequest": 1,
-        "SubmitReviewRequest": 1,
-        "SubmitReviewResponse": 1,
-        "SweepReviewsResponse": 1,
-        "ToolAnalysisSummary": 1,
-        "ToolEvent": 1,
+        "AnchorPipeline": 1,
+        "PersistedSession": 1,
+        "FailedAuthLimiter": 1,
+        "ValidatedCommand": 1,
+        "ProbeOutcome": 1,
+        "CartographerConfig": 1,
+        "CartographerNotifier": 1,
+        "InboundMessage": 1,
+        "ChannelError": 1,
+        "OutboundMessage": 1,
+        "SearchMatch": 1,
+        "Verdict": 1,
+        "LaunchOverride": 1,
+        "PolicyRulesResponse": 1,
         "ToolLaunch": 1,
-        "ToolLaunchRequest": 1,
-        "ToolReceiptRequest": 1,
-        "ToolReceiptResponse": 1,
-        "ToolSpec": 1,
+        "OfficersConfig": 1,
+        "DeepScanResult": 1,
+        "ToolArchetype": 1,
+        "ToolPreflight": 1,
+        "RoutingConfig": 1,
+        "PricingConfig": 1,
+        "ServerRegentConfig": 1,
+        "SecurityPosture": 1,
+        "SecurityCheck": 1,
+        "S2Outcome": 1,
+        "ReversibilityGate": 1,
+        "ScannedCanonicalization": 1,
+        "CanonMetadata": 1,
+        "ConfigParameterSnapshot": 1,
         "ToolSpecError": 1,
-        "ToolStateBuilder": 1,
-        "ToolsAnalysisResponse": 1,
-        "TopologyNode": 1,
-        "VerifyChainRequest": 1,
-        "VerifyChainResponse": 1
+        "HealthKind": 1,
+        "HealthSampler": 1
       },
       "types_consumed": {
-        "AppState": 119,
-        "AuditStore": 70,
-        "Response": 34,
-        "Request": 16,
-        "ProviderProfile": 10,
+        "AuditStore": 72,
+        "Response": 21,
+        "AppState": 17,
+        "Request": 15,
+        "AuditEntry": 14,
+        "RegentError": 13,
         "Status": 10,
-        "AuditEntry": 9,
-        "ResolvedVaultKey": 9,
-        "ConversationId": 6,
-        "GovernanceGate": 4,
-        "PromotionEngine": 4,
-        "Reversibility": 4,
-        "ReviewQueue": 4,
-        "ActorId": 3,
-        "CapabilityGrant": 3,
-        "InternalCapabilityToken": 3,
-        "OfficerDelegation": 3,
-        "OperatorKey": 3,
-        "Router": 3,
-        "ScanFinding": 3,
+        "ConversationId": 7,
+        "ResolvedVaultKey": 7,
+        "Finding": 6,
+        "ProviderProfile": 6,
+        "ActorId": 4,
+        "OntologyStore": 4,
+        "BoundaryConfig": 3,
+        "BoundaryInput": 3,
         "TailProbes": 3,
+        "Router": 3,
         "TrustTier": 3,
-        "AcknowledgedListener": 2,
+        "OfficerDelegation": 3,
         "AnchorTrigger": 2,
-        "BlastRadius": 2,
         "EnvelopeClaims": 2,
+        "InternalCapabilityToken": 2,
+        "OperatorKey": 2,
         "GateResult": 2,
-        "InferenceBackend": 2,
-        "MemoryEntry": 2,
-        "PathError": 2,
-        "Regent": 2,
-        "RegentError": 2,
-        "RegentHandle": 2,
-        "SensorEvent": 2,
-        "SystemMonitor": 2,
+        "CredentialVault": 2,
+        "CapabilityGrant": 2,
+        "ScanFinding": 2,
+        "GovernanceGate": 2,
+        "PromotionEngine": 2,
+        "ReviewQueue": 2,
+        "Reversibility": 2,
         "ToolDefinition": 2,
-        "AnchorReceipt": 1,
-        "ArtifactKind": 1,
-        "AuditAction": 1,
-        "BlastRadiusTracker": 1,
-        "CanonicalDomain": 1,
-        "ChainNarrationComposition": 1,
-        "ChainReader": 1,
-        "ChainType": 1,
-        "CognitionPipeline": 1,
-        "CompromiseResponse": 1,
-        "CredentialVault": 1,
-        "DetectedProvider": 1,
-        "DowngradeGuard": 1,
-        "Finding": 1,
-        "GovernanceRequest": 1,
-        "HealthResponse": 1,
-        "HeartbeatError": 1,
-        "InferenceTier": 1,
-        "Intent": 1,
-        "IntentOutcome": 1,
-        "Keyring": 1,
-        "LeaseFailureMode": 1,
-        "LibraryError": 1,
-        "LibraryStateFilter": 1,
-        "LocalArtifactLibrary": 1,
-        "MLEStarEngine": 1,
-        "MemoryStage": 1,
-        "MonteCarloEngine": 1,
-        "NodeRegistry": 1,
-        "NodeStatus": 1,
-        "NormalizedReceipt": 1,
         "Observation": 1,
-        "ObservationStore": 1,
-        "OfficerSweepResult": 1,
-        "ParseError": 1,
+        "ArtifactKind": 1,
+        "LibraryStateFilter": 1,
+        "LibraryError": 1,
+        "PathError": 1,
+        "Trajectory": 1,
+        "TrajectoryContext": 1,
         "PendingPromotion": 1,
-        "Pipeline": 1,
-        "PolicyDecision": 1,
-        "PolicyDistributor": 1,
+        "MemoryStage": 1,
+        "ReviewAction": 1,
+        "MemoryEntry": 1,
+        "ParseError": 1,
+        "HeartbeatError": 1,
+        "LeaseFailureMode": 1,
+        "ZpConfig": 1,
+        "Keyring": 1,
+        "AuditAction": 1,
+        "OfficerSweepResult": 1,
         "PostureScore": 1,
         "Proposal": 1,
-        "QuarantineStore": 1,
-        "Receipt": 1,
-        "ReviewAction": 1,
-        "RevocationClaim": 1,
-        "ScanVerdict": 1,
-        "SensorLayerHandle": 1,
-        "SignedHeartbeat": 1,
-        "StoreError": 1,
-        "ToolContentScanResult": 1,
+        "GovernanceRequest": 1,
+        "ChainReader": 1,
+        "SensorEvent": 1,
+        "DetectedProvider": 1,
         "ToolManifest": 1,
         "VerificationConfig": 1,
         "VerificationResult": 1,
-        "ZpConfig": 1
+        "InferenceTier": 1,
+        "InferenceBackend": 1,
+        "SystemMonitor": 1,
+        "Regent": 1,
+        "Enactment": 1,
+        "Intent": 1,
+        "IntentOutcome": 1,
+        "RegentHandle": 1,
+        "RevocationClaim": 1,
+        "CanonicalDomain": 1,
+        "PolicyDecision": 1,
+        "Receipt": 1
       },
-      "type_flow_signal": 822,
-      "types_produced_total": 414,
-      "types_consumed_total": 408
+      "type_flow_signal": 498,
+      "types_produced_total": 219,
+      "types_consumed_total": 279
     },
     {
-      "name": "zp-skills",
-      "files": 3,
-      "loc": 731,
+      "name": "zp-trace",
+      "files": 2,
+      "loc": 581,
       "deps": [
-        "zp-core"
+        "zp-core",
+        "zp-receipt"
       ],
-      "sign_count": 0,
+      "sign_count": 5,
       "gate_count": 0,
-      "chain_count": 0,
+      "chain_count": 2,
       "verify_count": 0,
       "receipt_families": {},
       "receipt_slugs_sample": [],
       "receipt_slug_total": 0,
-      "info_flow_signal": 0,
-      "primary_role": "utility",
-      "consumed_by": [
-        "zp-pipeline"
-      ],
+      "info_flow_signal": 7,
+      "primary_role": "signing",
+      "consumed_by": [],
       "type_defs": [
-        "RegisteredSkill",
-        "RegistryError",
-        "RegistryResult",
-        "SkillMatcher",
-        "SkillRegistry"
+        "DenyAllGate",
+        "FailureMode",
+        "GateVerdict",
+        "PolicyError",
+        "PolicyOutcome",
+        "ToolCallCtx",
+        "ToolOutcome",
+        "ZeroPointGate",
+        "ZeroPointGateConfig"
       ],
-      "type_defs_count": 5,
+      "type_defs_count": 9,
       "types_produced": {
-        "RegistryResult": 5,
-        "RegisteredSkill": 3,
-        "SkillRegistry": 3,
-        "SkillMatcher": 1
+        "ToolCallCtx": 5,
+        "GateVerdict": 3,
+        "ToolOutcome": 3,
+        "PolicyOutcome": 1,
+        "PolicyError": 1,
+        "ZeroPointGateConfig": 1
       },
       "types_consumed": {
-        "SkillId": 11,
-        "SkillManifest": 4,
-        "SkillOrigin": 4,
-        "RegistryError": 1,
-        "SkillStats": 1
+        "Signer": 1,
+        "ReceiptChain": 1,
+        "Decision": 1,
+        "Status": 1
       },
-      "type_flow_signal": 33,
-      "types_produced_total": 12,
-      "types_consumed_total": 21
+      "type_flow_signal": 18,
+      "types_produced_total": 14,
+      "types_consumed_total": 4
     },
     {
       "name": "zp-trust",
       "files": 4,
-      "loc": 2313,
+      "loc": 2377,
       "deps": [
         "zp-core"
       ],
@@ -3943,28 +3853,23 @@
       ],
       "type_defs_count": 16,
       "types_produced": {
-        "VaultResult": 25,
-        "VaultTier": 7,
-        "CredentialVault": 6,
-        "InjectorResult": 6,
-        "VaultEntry": 4,
-        "EncryptedCredential": 3,
-        "VaultScope": 3,
-        "VaultScopeRef": 3,
-        "PolicyCheckFn": 2,
+        "VaultResult": 24,
+        "InjectorResult": 5,
+        "VaultTier": 3,
+        "VaultEntry": 3,
         "SignerResult": 2,
-        "VaultError": 2,
-        "CredentialInjector": 1,
-        "InjectorError": 1,
-        "SignerError": 1
+        "EncryptedCredential": 2,
+        "CredentialVault": 1,
+        "PolicyCheckFn": 1,
+        "VaultScope": 1,
+        "VaultScopeRef": 1
       },
       "types_consumed": {
-        "PolicyContext": 7,
-        "Signer": 2
+        "PolicyContext": 5
       },
-      "type_flow_signal": 75,
-      "types_produced_total": 66,
-      "types_consumed_total": 9
+      "type_flow_signal": 48,
+      "types_produced_total": 43,
+      "types_consumed_total": 5
     },
     {
       "name": "zp-verbs",
@@ -3994,7 +3899,7 @@
     {
       "name": "zp-verify",
       "files": 3,
-      "loc": 1385,
+      "loc": 1379,
       "deps": [
         "zp-receipt"
       ],
@@ -4030,252 +3935,232 @@
       ],
       "type_defs_count": 12,
       "types_produced": {
-        "FoundationEntry": 6,
-        "VerifyReport": 5,
-        "ReceiptStatus": 3,
-        "Verifier": 2,
-        "VerifyFinding": 2,
-        "FoundationSignature": 1,
-        "ReceiptStatusReport": 1,
+        "FoundationEntry": 5,
+        "VerifyReport": 4,
         "SignatureBlockView": 1,
-        "TestEntry": 1
+        "VerifyFinding": 1,
+        "ReceiptStatus": 1,
+        "ReceiptStatusReport": 1
       },
       "types_consumed": {
         "Receipt": 4,
-        "RevocationIndex": 2,
-        "FindingSeverity": 1
+        "RevocationIndex": 2
       },
-      "type_flow_signal": 29,
-      "types_produced_total": 22,
-      "types_consumed_total": 7
+      "type_flow_signal": 19,
+      "types_produced_total": 13,
+      "types_consumed_total": 6
     }
   ],
   "counts": {
-    "total_crates": 42,
-    "total_deps_edges": 121,
-    "total_sign_sites": 801,
+    "total_crates": 47,
+    "total_deps_edges": 132,
+    "total_sign_sites": 863,
     "total_gate_crossings": 89,
-    "total_chain_emits": 53,
-    "total_verifications": 407,
-    "total_receipt_slugs": 104,
-    "total_type_flow_signal": 4996,
-    "total_type_defs": 1188,
-    "total_type_flow_edges": 118
+    "total_chain_emits": 72,
+    "total_verifications": 410,
+    "total_receipt_slugs": 223,
+    "total_type_flow_signal": 3461,
+    "total_type_defs": 1323,
+    "total_type_flow_edges": 108
   },
   "type_flow_edges": [
     {
-      "from": "trust-triangle",
-      "to": "zp-server",
-      "weight": 120,
-      "types": {
-        "AppState": 119,
-        "HealthResponse": 1
-      }
-    },
-    {
       "from": "zp-core",
       "to": "zp-server",
-      "weight": 87,
+      "weight": 77,
       "types": {
-        "Response": 34,
-        "Request": 16,
-        "AuditEntry": 9,
-        "ConversationId": 6,
-        "ActorId": 3,
-        "CapabilityGrant": 3,
-        "InternalCapabilityToken": 3,
+        "Response": 21,
+        "Request": 15,
+        "AuditEntry": 14,
+        "ConversationId": 7,
+        "ActorId": 4,
         "TrustTier": 3,
-        "PathError": 2,
+        "InternalCapabilityToken": 2,
+        "CapabilityGrant": 2,
         "ToolDefinition": 2,
-        "AuditAction": 1,
-        "InferenceTier": 1
+        "PathError": 1,
+        "LeaseFailureMode": 1,
+        "AuditAction": 1
       }
     },
     {
       "from": "zp-audit",
       "to": "zp-server",
-      "weight": 74,
+      "weight": 75,
       "types": {
-        "AuditStore": 70,
-        "TailProbes": 3,
-        "StoreError": 1
+        "AuditStore": 72,
+        "TailProbes": 3
       }
     },
     {
       "from": "zp-core",
       "to": "zp-policy",
-      "weight": 61,
+      "weight": 66,
       "types": {
-        "PolicyContext": 23,
-        "PolicyDecision": 18,
-        "ActorId": 9,
-        "TrustTier": 4,
+        "PolicyContext": 26,
+        "PolicyDecision": 19,
+        "ActorId": 7,
+        "ActionType": 5,
         "MeshAction": 3,
+        "TrustTier": 2,
         "Capability": 1,
-        "CapabilityGrant": 1,
-        "IssuanceError": 1,
-        "ModelPreference": 1
-      }
-    },
-    {
-      "from": "zp-core",
-      "to": "zp-mesh",
-      "weight": 48,
-      "types": {
-        "CapabilityGrant": 16,
-        "GrantedCapability": 13,
-        "Receipt": 7,
-        "TrustTier": 7,
-        "ConsensusThreshold": 3,
-        "Constraint": 2
-      }
-    },
-    {
-      "from": "zp-core",
-      "to": "zp-llm",
-      "weight": 44,
-      "types": {
-        "ProviderId": 11,
-        "ProviderCapabilities": 9,
-        "ZpError": 8,
-        "ProviderHealth": 6,
-        "ToolDefinition": 3,
-        "ToolCall": 2,
-        "Capability": 1,
-        "InferenceTier": 1,
-        "Message": 1,
         "ModelPreference": 1,
-        "OperatorIdentity": 1
+        "CapabilityGrant": 1,
+        "IssuanceError": 1
+      }
+    },
+    {
+      "from": "zp-emission-coherence",
+      "to": "zp-officers",
+      "weight": 39,
+      "types": {
+        "Finding": 37,
+        "Severity": 2
       }
     },
     {
       "from": "zp-core",
       "to": "zp-audit",
-      "weight": 43,
+      "weight": 37,
       "types": {
-        "AuditEntry": 26,
-        "AuditAction": 4,
+        "AuditEntry": 25,
+        "AuditAction": 3,
         "AuditId": 3,
-        "ConversationId": 3,
-        "PolicyDecision": 3,
-        "ActorId": 2,
-        "Receipt": 2
+        "ConversationId": 2,
+        "PolicyDecision": 2,
+        "ActorId": 1,
+        "Receipt": 1
       }
     },
     {
       "from": "zp-mesh",
       "to": "zp-pipeline",
-      "weight": 43,
+      "weight": 37,
       "types": {
-        "MeshNode": 10,
-        "CompactReceipt": 6,
-        "ReputationScore": 3,
-        "CapabilityRequest": 2,
+        "MeshNode": 9,
+        "CompactReceipt": 5,
+        "ReputationScore": 2,
         "CompactDelegation": 2,
+        "CapabilityRequest": 2,
         "InterfaceConfig": 2,
-        "MeshResult": 2,
-        "MeshRuntime": 2,
-        "MeshStore": 2,
         "Packet": 2,
-        "ReputationGrade": 2,
-        "CapabilityPolicy": 1
+        "MeshResult": 2,
+        "ReputationGrade": 1,
+        "MeshIdentity": 1,
+        "CapabilityPolicy": 1,
+        "NegotiationResult": 1
       }
     },
     {
       "from": "zp-core",
       "to": "zp-pipeline",
-      "weight": 39,
+      "weight": 36,
       "types": {
         "CapabilityGrant": 10,
-        "ConversationId": 4,
-        "OperatorIdentity": 3,
-        "MeshAction": 2,
-        "Message": 2,
-        "PolicyDecision": 2,
+        "ConversationId": 3,
         "Receipt": 2,
+        "ActionType": 2,
+        "MeshAction": 2,
         "Request": 2,
         "Response": 2,
-        "TrustTier": 2,
-        "ActorId": 1,
-        "AuditAction": 1
+        "PolicyDecision": 2,
+        "OperatorIdentity": 1,
+        "TrustTier": 1,
+        "DelegationChain": 1,
+        "ChainError": 1
       }
     },
     {
       "from": "zp-core",
-      "to": "zp-receipt",
-      "weight": 34,
+      "to": "zp-llm",
+      "weight": 30,
       "types": {
-        "Receipt": 26,
-        "ChainError": 4,
-        "PolicyDecision": 3,
-        "TrustTier": 1
-      }
-    },
-    {
-      "from": "zp-engine",
-      "to": "zp-server",
-      "weight": 22,
-      "types": {
-        "ProviderProfile": 10,
-        "Reversibility": 4,
-        "ScanFinding": 3,
-        "DetectedProvider": 1,
-        "ScanVerdict": 1,
-        "ToolContentScanResult": 1,
-        "ToolManifest": 1,
-        "VerificationConfig": 1
-      }
-    },
-    {
-      "from": "mle-star-engine",
-      "to": "zp-observation",
-      "weight": 20,
-      "types": {
-        "Observation": 20
+        "ZpError": 7,
+        "ProviderId": 6,
+        "ProviderHealth": 5,
+        "ProviderCapabilities": 4,
+        "OperatorIdentity": 2,
+        "ToolDefinition": 2,
+        "ModelPreference": 1,
+        "Capability": 1,
+        "Message": 1,
+        "ToolCall": 1
       }
     },
     {
       "from": "zp-core",
-      "to": "zp-skills",
-      "weight": 20,
-      "types": {
-        "SkillId": 11,
-        "SkillManifest": 4,
-        "SkillOrigin": 4,
-        "SkillStats": 1
-      }
-    },
-    {
-      "from": "zp-audit",
       "to": "zp-mesh",
-      "weight": 19,
+      "weight": 30,
       "types": {
-        "PeerAuditAttestation": 11,
-        "AuditChallenge": 3,
-        "AuditResponse": 3,
-        "StoreError": 2
+        "CapabilityGrant": 11,
+        "GrantedCapability": 7,
+        "Receipt": 7,
+        "TrustTier": 3,
+        "ConsensusThreshold": 2
       }
     },
     {
       "from": "zp-core",
       "to": "zp-officers",
-      "weight": 19,
+      "weight": 26,
       "types": {
-        "AuditEntry": 13,
+        "AuditEntry": 21,
         "CapabilityGrant": 3,
-        "ActorId": 1,
-        "AuditId": 1,
+        "PolicyDecision": 1,
+        "ActorId": 1
+      }
+    },
+    {
+      "from": "zp-core",
+      "to": "zp-receipt",
+      "weight": 25,
+      "types": {
+        "Receipt": 22,
+        "ChainError": 2,
         "PolicyDecision": 1
+      }
+    },
+    {
+      "from": "zp-regent",
+      "to": "zp-server",
+      "weight": 23,
+      "types": {
+        "RegentError": 13,
+        "Router": 3,
+        "InferenceBackend": 1,
+        "SystemMonitor": 1,
+        "Regent": 1,
+        "Enactment": 1,
+        "Intent": 1,
+        "IntentOutcome": 1,
+        "RegentHandle": 1
       }
     },
     {
       "from": "zp-trust",
       "to": "zp-configure",
-      "weight": 19,
+      "weight": 20,
       "types": {
         "CredentialVault": 15,
         "PolicyCheckFn": 3,
+        "InjectorError": 1,
         "InjectorResult": 1
+      }
+    },
+    {
+      "from": "zp-audit",
+      "to": "zp-ontology",
+      "weight": 18,
+      "types": {
+        "StoreError": 18
+      }
+    },
+    {
+      "from": "trust-triangle",
+      "to": "zp-server",
+      "weight": 17,
+      "types": {
+        "AppState": 17
       }
     },
     {
@@ -4284,6 +4169,24 @@
       "weight": 17,
       "types": {
         "StoreError": 17
+      }
+    },
+    {
+      "from": "zp-core",
+      "to": "zp-cli",
+      "weight": 17,
+      "types": {
+        "AuditEntry": 4,
+        "Receipt": 2,
+        "PolicyContext": 2,
+        "CapabilityGrant": 2,
+        "ActionType": 1,
+        "LeaseFailureMode": 1,
+        "CascadePolicy": 1,
+        "RevocationReason": 1,
+        "AuthorityRef": 1,
+        "GrantedCapability": 1,
+        "TrustTier": 1
       }
     },
     {
@@ -4298,117 +4201,47 @@
       }
     },
     {
-      "from": "zp-keys",
-      "to": "zp-server",
-      "weight": 17,
+      "from": "mle-star-engine",
+      "to": "zp-observation",
+      "weight": 16,
       "types": {
-        "ResolvedVaultKey": 9,
-        "OperatorKey": 3,
-        "BlastRadius": 2,
-        "BlastRadiusTracker": 1,
-        "CompromiseResponse": 1,
-        "Keyring": 1
+        "Observation": 16
+      }
+    },
+    {
+      "from": "zp-audit",
+      "to": "zp-mesh",
+      "weight": 15,
+      "types": {
+        "PeerAuditAttestation": 8,
+        "AuditChallenge": 3,
+        "AuditResponse": 3,
+        "StoreError": 1
+      }
+    },
+    {
+      "from": "zp-keys",
+      "to": "zp-cli",
+      "weight": 15,
+      "types": {
+        "Keyring": 6,
+        "KeyError": 4,
+        "RotationCertificate": 2,
+        "OperatorKey": 1,
+        "GenesisKey": 1,
+        "KeyringStatus": 1
       }
     },
     {
       "from": "zp-audit",
       "to": "zp-pipeline",
-      "weight": 16,
+      "weight": 14,
       "types": {
         "CompactAuditEntry": 4,
-        "PeerAuditAttestation": 4,
         "AuditChallenge": 3,
         "AuditResponse": 3,
-        "AuditStore": 2
-      }
-    },
-    {
-      "from": "zp-keys",
-      "to": "zp-cli",
-      "weight": 16,
-      "types": {
-        "Keyring": 6,
-        "KeyError": 4,
-        "RotationCertificate": 2,
-        "GenesisKey": 1,
-        "KeyringStatus": 1,
-        "OperatorKey": 1,
-        "SovereigntyMode": 1
-      }
-    },
-    {
-      "from": "zp-core",
-      "to": "zp-cli",
-      "weight": 15,
-      "types": {
-        "AuditEntry": 4,
-        "CapabilityGrant": 3,
-        "Receipt": 2,
-        "AuthorityRef": 1,
-        "CascadePolicy": 1,
-        "GrantedCapability": 1,
-        "LeaseFailureMode": 1,
-        "RevocationReason": 1,
-        "TrustTier": 1
-      }
-    },
-    {
-      "from": "zp-keys",
-      "to": "zp-preflight",
-      "weight": 15,
-      "types": {
-        "Platform": 15
-      }
-    },
-    {
-      "from": "zp-regent",
-      "to": "zp-server",
-      "weight": 15,
-      "types": {
-        "Router": 3,
-        "InferenceBackend": 2,
-        "Regent": 2,
-        "RegentError": 2,
-        "RegentHandle": 2,
-        "SystemMonitor": 2,
-        "Intent": 1,
-        "IntentOutcome": 1
-      }
-    },
-    {
-      "from": "zp-core",
-      "to": "zp-keys",
-      "weight": 14,
-      "types": {
-        "ProviderCapabilities": 7,
-        "RevocationReason": 5,
-        "Receipt": 2
-      }
-    },
-    {
-      "from": "zp-core",
-      "to": "zp-observation",
-      "weight": 14,
-      "types": {
-        "Receipt": 7,
-        "GovernanceEvent": 3,
-        "GovernanceDecision": 2,
-        "GovernanceActor": 1,
-        "GovernanceEventType": 1
-      }
-    },
-    {
-      "from": "zp-memory",
-      "to": "zp-server",
-      "weight": 14,
-      "types": {
-        "PromotionEngine": 4,
-        "ReviewQueue": 4,
-        "MemoryEntry": 2,
-        "MemoryStage": 1,
-        "PendingPromotion": 1,
-        "QuarantineStore": 1,
-        "ReviewAction": 1
+        "PeerAuditAttestation": 3,
+        "AuditStore": 1
       }
     },
     {
@@ -4422,33 +4255,88 @@
     {
       "from": "zp-engine",
       "to": "zp-configure",
-      "weight": 12,
+      "weight": 13,
       "types": {
-        "CapabilityRequirement": 5,
+        "CapabilityRequirement": 6,
         "ResolvedTool": 2,
         "ToolManifest": 2,
-        "CapabilityResolution": 1,
+        "ProviderProfile": 1,
         "ProviderOverride": 1,
-        "ProviderProfile": 1
+        "CapabilityResolution": 1
       }
     },
     {
-      "from": "zp-core",
-      "to": "zp-engine",
-      "weight": 11,
+      "from": "zp-engine",
+      "to": "zp-server",
+      "weight": 13,
       "types": {
-        "ToolDefinition": 7,
-        "Capability": 4
+        "ProviderProfile": 6,
+        "ScanFinding": 2,
+        "Reversibility": 2,
+        "DetectedProvider": 1,
+        "ToolManifest": 1,
+        "VerificationConfig": 1
       }
     },
     {
-      "from": "zp-core",
+      "from": "zp-keys",
+      "to": "zp-preflight",
+      "weight": 13,
+      "types": {
+        "Platform": 13
+      }
+    },
+    {
+      "from": "zp-audit",
       "to": "zp-regent",
-      "weight": 11,
+      "weight": 12,
       "types": {
-        "InferenceTier": 4,
-        "ToolResult": 4,
-        "AuditEntry": 3
+        "AuditStore": 12
+      }
+    },
+    {
+      "from": "zp-core",
+      "to": "zp-observation",
+      "weight": 12,
+      "types": {
+        "Receipt": 5,
+        "GovernanceEvent": 3,
+        "GovernanceDecision": 2,
+        "GovernanceActor": 1,
+        "GovernanceEventType": 1
+      }
+    },
+    {
+      "from": "zp-emission-coherence",
+      "to": "zp-regent",
+      "weight": 12,
+      "types": {
+        "Finding": 8,
+        "EmissionAnalyzer": 2,
+        "Severity": 1,
+        "EntropyBaseline": 1
+      }
+    },
+    {
+      "from": "zp-ontology",
+      "to": "zp-server",
+      "weight": 12,
+      "types": {
+        "OntologyStore": 4,
+        "BoundaryConfig": 3,
+        "BoundaryInput": 3,
+        "Trajectory": 1,
+        "TrajectoryContext": 1
+      }
+    },
+    {
+      "from": "zp-keys",
+      "to": "zp-server",
+      "weight": 10,
+      "types": {
+        "ResolvedVaultKey": 7,
+        "OperatorKey": 2,
+        "Keyring": 1
       }
     },
     {
@@ -4460,21 +4348,23 @@
       }
     },
     {
-      "from": "trust-triangle",
-      "to": "zp-config",
+      "from": "zp-anchor",
+      "to": "zp-anchor-ots",
       "weight": 9,
       "types": {
-        "NodeRole": 9
+        "AnchorReceipt": 5,
+        "AnchorCommitment": 3,
+        "AnchorVerification": 1
       }
     },
     {
       "from": "zp-core",
-      "to": "trust-triangle",
+      "to": "course-examples",
       "weight": 9,
       "types": {
-        "Receipt": 6,
-        "PolicyDecision": 2,
-        "PolicyContext": 1
+        "ActionType": 3,
+        "TrustTier": 3,
+        "PolicyContext": 3
       }
     },
     {
@@ -4489,209 +4379,143 @@
       }
     },
     {
-      "from": "zp-officers",
-      "to": "zp-regent",
+      "from": "zp-core",
+      "to": "zp-ontology",
       "weight": 9,
       "types": {
-        "Finding": 6,
-        "ChainReader": 2,
-        "SweepResult": 1
+        "ConversationId": 6,
+        "AuditId": 3
       }
     },
     {
-      "from": "zp-core",
-      "to": "zp-memory",
+      "from": "trust-triangle",
+      "to": "zp-config",
       "weight": 8,
       "types": {
-        "Receipt": 8
-      }
-    },
-    {
-      "from": "zp-keys",
-      "to": "trust-triangle",
-      "weight": 8,
-      "types": {
-        "CertificateChain": 3,
-        "Certificate": 2,
-        "AgentKey": 1,
-        "GenesisKey": 1,
-        "OperatorKey": 1
-      }
-    },
-    {
-      "from": "zp-officers",
-      "to": "zp-server",
-      "weight": 8,
-      "types": {
-        "OfficerDelegation": 3,
-        "ChainReader": 1,
-        "Finding": 1,
-        "GovernanceRequest": 1,
-        "OfficerSweepResult": 1,
-        "PostureScore": 1
-      }
-    },
-    {
-      "from": "zp-core",
-      "to": "zp-trust",
-      "weight": 7,
-      "types": {
-        "PolicyContext": 7
-      }
-    },
-    {
-      "from": "zp-keys",
-      "to": "zp-introduction",
-      "weight": 7,
-      "types": {
-        "Certificate": 4,
-        "CertificateChain": 1,
-        "KeyError": 1,
-        "KeyRole": 1
-      }
-    },
-    {
-      "from": "zp-policy",
-      "to": "zp-server",
-      "weight": 7,
-      "types": {
-        "GovernanceGate": 4,
-        "GateResult": 2,
-        "DowngradeGuard": 1
-      }
-    },
-    {
-      "from": "zp-artifacts",
-      "to": "zp-server",
-      "weight": 6,
-      "types": {
-        "ArtifactKind": 1,
-        "ChainNarrationComposition": 1,
-        "LibraryError": 1,
-        "LibraryStateFilter": 1,
-        "LocalArtifactLibrary": 1,
-        "NormalizedReceipt": 1
+        "NodeRole": 8
       }
     },
     {
       "from": "zp-audit",
       "to": "zp-officers",
-      "weight": 6,
+      "weight": 8,
       "types": {
-        "AuditStore": 5,
+        "AuditStore": 7,
         "VerificationReport": 1
       }
     },
     {
-      "from": "zp-audit",
+      "from": "zp-core",
       "to": "zp-regent",
-      "weight": 6,
+      "weight": 8,
       "types": {
-        "AuditStore": 6
-      }
-    },
-    {
-      "from": "zp-core",
-      "to": "course-examples",
-      "weight": 6,
-      "types": {
-        "PolicyContext": 3,
-        "TrustTier": 3
-      }
-    },
-    {
-      "from": "zp-mesh",
-      "to": "zp-officers",
-      "weight": 6,
-      "types": {
-        "Proposal": 6
-      }
-    },
-    {
-      "from": "zp-mesh",
-      "to": "zp-server",
-      "weight": 6,
-      "types": {
-        "HeartbeatError": 1,
-        "NodeRegistry": 1,
-        "NodeStatus": 1,
-        "PolicyDistributor": 1,
-        "Proposal": 1,
-        "SignedHeartbeat": 1
-      }
-    },
-    {
-      "from": "zp-receipt",
-      "to": "zp-core",
-      "weight": 6,
-      "types": {
-        "ActionType": 3,
-        "Signable": 2,
-        "SignatureBlock": 1
-      }
-    },
-    {
-      "from": "zp-audit",
-      "to": "zp-hardening-tests",
-      "weight": 5,
-      "types": {
-        "AuditStore": 3,
-        "AuditResponse": 1,
-        "UnsealedEntry": 1
-      }
-    },
-    {
-      "from": "zp-core",
-      "to": "zp-introduction",
-      "weight": 5,
-      "types": {
-        "PolicyContext": 2,
-        "TrustTier": 2,
-        "Channel": 1
+        "AuditEntry": 5,
+        "InferenceTier": 2,
+        "ToolResult": 1
       }
     },
     {
       "from": "zp-memory",
-      "to": "zp-regent",
-      "weight": 5,
+      "to": "zp-server",
+      "weight": 8,
       "types": {
-        "MemoryEntry": 5
+        "PromotionEngine": 2,
+        "ReviewQueue": 2,
+        "PendingPromotion": 1,
+        "MemoryStage": 1,
+        "ReviewAction": 1,
+        "MemoryEntry": 1
       }
     },
     {
-      "from": "zp-receipt",
-      "to": "zp-policy",
-      "weight": 5,
+      "from": "zp-core",
+      "to": "zp-engine",
+      "weight": 7,
       "types": {
-        "ActionType": 5
+        "ToolDefinition": 7
+      }
+    },
+    {
+      "from": "zp-core",
+      "to": "zp-keys",
+      "weight": 7,
+      "types": {
+        "ProviderCapabilities": 4,
+        "Receipt": 2,
+        "RevocationReason": 1
+      }
+    },
+    {
+      "from": "zp-officers",
+      "to": "zp-server",
+      "weight": 7,
+      "types": {
+        "OfficerDelegation": 3,
+        "OfficerSweepResult": 1,
+        "PostureScore": 1,
+        "GovernanceRequest": 1,
+        "ChainReader": 1
       }
     },
     {
       "from": "zp-trust",
       "to": "zp-cli",
+      "weight": 7,
+      "types": {
+        "CredentialVault": 5,
+        "InjectorError": 2
+      }
+    },
+    {
+      "from": "zp-core",
+      "to": "trust-triangle",
+      "weight": 6,
+      "types": {
+        "Receipt": 3,
+        "PolicyDecision": 2,
+        "PolicyContext": 1
+      }
+    },
+    {
+      "from": "zp-emission-coherence",
+      "to": "zp-server",
+      "weight": 6,
+      "types": {
+        "Finding": 6
+      }
+    },
+    {
+      "from": "zp-core",
+      "to": "zp-memory",
       "weight": 5,
       "types": {
-        "CredentialVault": 5
+        "Receipt": 5
       }
     },
     {
-      "from": "execution-engine",
-      "to": "zp-pipeline",
-      "weight": 4,
+      "from": "zp-core",
+      "to": "zp-trust",
+      "weight": 5,
       "types": {
-        "ExecutionReceipt": 2,
-        "ExecutionEngine": 1,
-        "Runtime": 1
+        "PolicyContext": 5
       }
     },
     {
-      "from": "zp-anchor",
-      "to": "zp-server",
+      "from": "zp-mesh",
+      "to": "zp-officers",
+      "weight": 5,
+      "types": {
+        "Proposal": 5
+      }
+    },
+    {
+      "from": "zp-audit",
+      "to": "zp-hardening-tests",
       "weight": 4,
       "types": {
-        "AnchorTrigger": 2,
-        "AnchorReceipt": 1,
-        "ChainType": 1
+        "AuditStore": 2,
+        "UnsealedEntry": 1,
+        "AuditResponse": 1
       }
     },
     {
@@ -4703,12 +4527,13 @@
       }
     },
     {
-      "from": "zp-content",
-      "to": "zp-artifacts",
+      "from": "zp-core",
+      "to": "zp-introduction",
       "weight": 4,
       "types": {
-        "ContentError": 2,
-        "ContentId": 2
+        "TrustTier": 2,
+        "Channel": 1,
+        "PolicyContext": 1
       }
     },
     {
@@ -4720,20 +4545,37 @@
       }
     },
     {
-      "from": "zp-introduction",
-      "to": "trust-triangle",
+      "from": "zp-engine",
+      "to": "zp-regent",
       "weight": 4,
       "types": {
-        "IntroductionRequest": 2,
-        "IntroductionResponse": 2
+        "ProviderProfile": 4
       }
     },
     {
-      "from": "zp-mesh",
-      "to": "zp-sensors",
+      "from": "zp-memory",
+      "to": "zp-regent",
       "weight": 4,
       "types": {
-        "DiscoveryConfig": 4
+        "MemoryEntry": 4
+      }
+    },
+    {
+      "from": "zp-policy",
+      "to": "zp-server",
+      "weight": 4,
+      "types": {
+        "GateResult": 2,
+        "GovernanceGate": 2
+      }
+    },
+    {
+      "from": "execution-engine",
+      "to": "zp-pipeline",
+      "weight": 3,
+      "types": {
+        "ExecutionReceipt": 2,
+        "Runtime": 1
       }
     },
     {
@@ -4745,20 +4587,13 @@
       }
     },
     {
-      "from": "zp-audit",
-      "to": "zp-learning",
-      "weight": 3,
-      "types": {
-        "StoreError": 3
-      }
-    },
-    {
-      "from": "zp-config",
+      "from": "zp-artifacts",
       "to": "zp-server",
       "weight": 3,
       "types": {
-        "AcknowledgedListener": 2,
-        "ZpConfig": 1
+        "ArtifactKind": 1,
+        "LibraryStateFilter": 1,
+        "LibraryError": 1
       }
     },
     {
@@ -4770,11 +4605,12 @@
       }
     },
     {
-      "from": "zp-content",
-      "to": "zp-policy",
+      "from": "zp-core",
+      "to": "zp-emission-coherence",
       "weight": 3,
       "types": {
-        "Store": 3
+        "Response": 2,
+        "Outcome": 1
       }
     },
     {
@@ -4783,14 +4619,6 @@
       "weight": 3,
       "types": {
         "Response": 3
-      }
-    },
-    {
-      "from": "zp-engine",
-      "to": "zp-regent",
-      "weight": 3,
-      "types": {
-        "ProviderProfile": 3
       }
     },
     {
@@ -4803,27 +4631,30 @@
       }
     },
     {
-      "from": "zp-observation",
-      "to": "zp-memory",
+      "from": "zp-keys",
+      "to": "trust-triangle",
       "weight": 3,
       "types": {
-        "ObservationPriority": 3
+        "CertificateChain": 2,
+        "Certificate": 1
       }
     },
     {
-      "from": "zp-preflight",
-      "to": "zp-receipt",
+      "from": "zp-keys",
+      "to": "zp-introduction",
       "weight": 3,
       "types": {
-        "Status": 3
+        "Certificate": 2,
+        "KeyRole": 1
       }
     },
     {
-      "from": "zp-receipt",
-      "to": "course-examples",
+      "from": "zp-officers",
+      "to": "zp-regent",
       "weight": 3,
       "types": {
-        "ActionType": 3
+        "ChainReader": 2,
+        "SweepResult": 1
       }
     },
     {
@@ -4835,21 +4666,11 @@
       }
     },
     {
-      "from": "zp-sensors",
-      "to": "zp-server",
-      "weight": 3,
-      "types": {
-        "SensorEvent": 2,
-        "SensorLayerHandle": 1
-      }
-    },
-    {
-      "from": "mle-star-engine",
+      "from": "zp-anchor",
       "to": "zp-server",
       "weight": 2,
       "types": {
-        "MLEStarEngine": 1,
-        "Observation": 1
+        "AnchorTrigger": 2
       }
     },
     {
@@ -4857,7 +4678,8 @@
       "to": "zp-host",
       "weight": 2,
       "types": {
-        "AuditStore": 2
+        "AuditStore": 1,
+        "UnsealedEntry": 1
       }
     },
     {
@@ -4869,46 +4691,70 @@
       }
     },
     {
-      "from": "zp-discipline",
+      "from": "zp-configure",
       "to": "zp-regent",
       "weight": 2,
       "types": {
-        "Violation": 2
+        "Resolution": 2
       }
     },
     {
-      "from": "zp-engine",
-      "to": "zp-cli",
+      "from": "zp-content",
+      "to": "zp-artifacts",
       "weight": 2,
       "types": {
-        "ProviderProfile": 1,
-        "ScannedTool": 1
+        "ContentError": 1,
+        "ContentId": 1
       }
     },
     {
-      "from": "zp-llm",
-      "to": "zp-regent",
+      "from": "zp-content",
+      "to": "zp-policy",
       "weight": 2,
       "types": {
-        "ChatMessage": 1,
-        "OllamaResponse": 1
+        "Store": 2
+      }
+    },
+    {
+      "from": "zp-core",
+      "to": "zp-configure",
+      "weight": 2,
+      "types": {
+        "PolicyContext": 2
+      }
+    },
+    {
+      "from": "zp-introduction",
+      "to": "trust-triangle",
+      "weight": 2,
+      "types": {
+        "IntroductionRequest": 1,
+        "IntroductionResponse": 1
+      }
+    },
+    {
+      "from": "zp-mesh",
+      "to": "zp-sensors",
+      "weight": 2,
+      "types": {
+        "DiscoveryConfig": 2
+      }
+    },
+    {
+      "from": "zp-mesh",
+      "to": "zp-server",
+      "weight": 2,
+      "types": {
+        "HeartbeatError": 1,
+        "Proposal": 1
       }
     },
     {
       "from": "zp-observation",
-      "to": "zp-server",
+      "to": "zp-memory",
       "weight": 2,
       "types": {
-        "CognitionPipeline": 1,
-        "ObservationStore": 1
-      }
-    },
-    {
-      "from": "zp-policy",
-      "to": "zp-host",
-      "weight": 2,
-      "types": {
-        "GovernanceGate": 2
+        "ObservationPriority": 2
       }
     },
     {
@@ -4921,27 +4767,20 @@
     },
     {
       "from": "zp-receipt",
-      "to": "zp-pipeline",
-      "weight": 2,
-      "types": {
-        "ActionType": 2
-      }
-    },
-    {
-      "from": "zp-receipt",
       "to": "zp-server",
       "weight": 2,
       "types": {
-        "CanonicalDomain": 1,
-        "VerificationResult": 1
+        "VerificationResult": 1,
+        "CanonicalDomain": 1
       }
     },
     {
       "from": "zp-receipt",
-      "to": "zp-trust",
+      "to": "zp-trace",
       "weight": 2,
       "types": {
-        "Signer": 2
+        "Signer": 1,
+        "ReceiptChain": 1
       }
     },
     {
@@ -4954,18 +4793,18 @@
     },
     {
       "from": "zp-regent",
-      "to": "zp-hardening-tests",
+      "to": "zp-net",
       "weight": 2,
       "types": {
         "Router": 2
       }
     },
     {
-      "from": "zp-server",
-      "to": "zp-hardening-tests",
+      "from": "zp-trust",
+      "to": "zp-server",
       "weight": 2,
       "types": {
-        "ServerConfig": 2
+        "CredentialVault": 2
       }
     },
     {
@@ -4978,11 +4817,11 @@
       }
     },
     {
-      "from": "monte-carlo-engine",
+      "from": "mle-star-engine",
       "to": "zp-server",
       "weight": 1,
       "types": {
-        "MonteCarloEngine": 1
+        "Observation": 1
       }
     },
     {
@@ -4995,26 +4834,26 @@
     },
     {
       "from": "zp-audit",
-      "to": "zp-policy",
+      "to": "zp-learning",
       "weight": 1,
       "types": {
-        "UnsealedEntry": 1
+        "StoreError": 1
       }
     },
     {
-      "from": "zp-cli",
-      "to": "zp-core",
+      "from": "zp-config",
+      "to": "zp-regent",
       "weight": 1,
       "types": {
-        "RiskLevel": 1
+        "ZpConfig": 1
       }
     },
     {
-      "from": "zp-cli",
-      "to": "zp-policy",
+      "from": "zp-config",
+      "to": "zp-server",
       "weight": 1,
       "types": {
-        "RiskLevel": 1
+        "ZpConfig": 1
       }
     },
     {
@@ -5026,27 +4865,19 @@
       }
     },
     {
-      "from": "zp-core",
-      "to": "zp-configure",
+      "from": "zp-discipline",
+      "to": "zp-regent",
       "weight": 1,
       "types": {
-        "PolicyContext": 1
+        "Violation": 1
       }
     },
     {
-      "from": "zp-learning",
-      "to": "zp-officers",
+      "from": "zp-engine",
+      "to": "zp-cli",
       "weight": 1,
       "types": {
-        "ProposalStatus": 1
-      }
-    },
-    {
-      "from": "zp-learning",
-      "to": "zp-pipeline",
-      "weight": 1,
-      "types": {
-        "EpisodeStore": 1
+        "ProviderProfile": 1
       }
     },
     {
@@ -5058,14 +4889,6 @@
       }
     },
     {
-      "from": "zp-mesh",
-      "to": "zp-regent",
-      "weight": 1,
-      "types": {
-        "CategoryScore": 1
-      }
-    },
-    {
       "from": "zp-observation",
       "to": "mle-star-engine",
       "weight": 1,
@@ -5074,19 +4897,27 @@
       }
     },
     {
-      "from": "zp-pipeline",
-      "to": "zp-server",
+      "from": "zp-ontology",
+      "to": "zp-receipt",
       "weight": 1,
       "types": {
-        "Pipeline": 1
+        "Decision": 1
       }
     },
     {
-      "from": "zp-policy",
-      "to": "trust-triangle",
+      "from": "zp-ontology",
+      "to": "zp-regent",
       "weight": 1,
       "types": {
-        "PolicyEngine": 1
+        "OntologyStore": 1
+      }
+    },
+    {
+      "from": "zp-ontology",
+      "to": "zp-trace",
+      "weight": 1,
+      "types": {
+        "Decision": 1
       }
     },
     {
@@ -5099,18 +4930,26 @@
     },
     {
       "from": "zp-policy",
-      "to": "zp-pipeline",
+      "to": "zp-host",
       "weight": 1,
       "types": {
-        "PolicyEngine": 1
+        "GovernanceGate": 1
       }
     },
     {
-      "from": "zp-receipt",
-      "to": "trust-triangle",
+      "from": "zp-preflight",
+      "to": "zp-receipt",
       "weight": 1,
       "types": {
-        "Signer": 1
+        "Status": 1
+      }
+    },
+    {
+      "from": "zp-preflight",
+      "to": "zp-trace",
+      "weight": 1,
+      "types": {
+        "Status": 1
       }
     },
     {
@@ -5122,27 +4961,19 @@
       }
     },
     {
-      "from": "zp-receipt",
-      "to": "zp-cli",
-      "weight": 1,
-      "types": {
-        "ActionType": 1
-      }
-    },
-    {
-      "from": "zp-receipt",
-      "to": "zp-gate-envelope",
-      "weight": 1,
-      "types": {
-        "Signable": 1
-      }
-    },
-    {
       "from": "zp-regent",
       "to": "trust-triangle",
       "weight": 1,
       "types": {
         "Router": 1
+      }
+    },
+    {
+      "from": "zp-sensors",
+      "to": "zp-server",
+      "weight": 1,
+      "types": {
+        "SensorEvent": 1
       }
     },
     {
@@ -5154,40 +4985,8 @@
       }
     },
     {
-      "from": "zp-server",
-      "to": "zp-skills",
-      "weight": 1,
-      "types": {
-        "RegistryError": 1
-      }
-    },
-    {
-      "from": "zp-server",
-      "to": "zp-verify",
-      "weight": 1,
-      "types": {
-        "FindingSeverity": 1
-      }
-    },
-    {
-      "from": "zp-skills",
-      "to": "zp-pipeline",
-      "weight": 1,
-      "types": {
-        "SkillRegistry": 1
-      }
-    },
-    {
       "from": "zp-trust",
       "to": "zp-engine",
-      "weight": 1,
-      "types": {
-        "CredentialVault": 1
-      }
-    },
-    {
-      "from": "zp-trust",
-      "to": "zp-server",
       "weight": 1,
       "types": {
         "CredentialVault": 1

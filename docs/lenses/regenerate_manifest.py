@@ -45,6 +45,22 @@ import time
 from collections import Counter, defaultdict
 from pathlib import Path
 
+def _head_commit():
+    """Short HEAD sha, or None outside a git tree.
+
+    Provenance for the freshness check: what the walk actually read.
+    """
+    import subprocess
+    from pathlib import Path as _P
+    try:
+        r = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                           cwd=_P(__file__).resolve().parents[2],
+                           capture_output=True, text=True, timeout=10)
+        return r.stdout.strip() or None
+    except Exception:
+        return None
+
+
 
 # --- Config ---------------------------------------------------------------
 
@@ -445,6 +461,12 @@ def build_manifest(
     total_edges = sum(len(d['cw']) for d in docs_out)
 
     manifest = {
+        # Stamped so the connection-map derived_artifact detector can
+        # check freshness against repo state instead of wall-clock time.
+        # Without this the manifest reports drift measured from the last
+        # commit that touched the file, which is not the question --
+        # a manifest regenerated seconds ago read as 165 commits stale.
+        'generated_from_commit': _head_commit(),
         'generated_at': int(time.time()),
         'docs': docs_out,
         'counts': {

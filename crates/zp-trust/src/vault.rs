@@ -286,22 +286,12 @@ impl CredentialVault {
     }
 
     /// Store a credential encrypted with a specific tier's derived key.
-    pub fn store_tiered(
-        &mut self,
-        name: &str,
-        value: &[u8],
-        tier: VaultTier,
-    ) -> VaultResult<()> {
+    pub fn store_tiered(&mut self, name: &str, value: &[u8], tier: VaultTier) -> VaultResult<()> {
         self.store_with_tier(name, value, tier)
     }
 
     /// Internal: encrypt and store with the given tier's key.
-    fn store_with_tier(
-        &mut self,
-        name: &str,
-        value: &[u8],
-        tier: VaultTier,
-    ) -> VaultResult<()> {
+    fn store_with_tier(&mut self, name: &str, value: &[u8], tier: VaultTier) -> VaultResult<()> {
         let key = tier.derive_key(&self.master_key);
         let encrypted = Self::encrypt_value(&key, value)?;
 
@@ -358,15 +348,14 @@ impl CredentialVault {
             }
             VaultEntry::Ref { target } => {
                 // Chase the reference
-                self.retrieve_resolved(target, depth + 1).map_err(|e| {
-                    match e {
+                self.retrieve_resolved(target, depth + 1)
+                    .map_err(|e| match e {
                         VaultError::CredentialNotFound(_) => VaultError::BrokenRef {
                             from: name.to_string(),
                             to: target.clone(),
                         },
                         other => other,
-                    }
-                })
+                    })
             }
         }
     }
@@ -507,12 +496,7 @@ impl CredentialVault {
     /// Store a provider credential.
     ///
     /// Stores at `providers/{provider}/{field}` with the Providers tier key.
-    pub fn store_provider(
-        &mut self,
-        provider: &str,
-        field: &str,
-        value: &[u8],
-    ) -> VaultResult<()> {
+    pub fn store_provider(&mut self, provider: &str, field: &str, value: &[u8]) -> VaultResult<()> {
         let path = format!("providers/{}/{}", provider, field);
         self.store_tiered(&path, value, VaultTier::Providers)
     }
@@ -530,12 +514,7 @@ impl CredentialVault {
     /// Store a tool environment variable (direct value).
     ///
     /// Stores at `tools/{tool}/{var}` with the Tools tier key.
-    pub fn store_tool_env(
-        &mut self,
-        tool: &str,
-        var: &str,
-        value: &[u8],
-    ) -> VaultResult<()> {
+    pub fn store_tool_env(&mut self, tool: &str, var: &str, value: &[u8]) -> VaultResult<()> {
         let path = format!("tools/{}/{}", tool, var);
         self.store_tiered(&path, value, VaultTier::Tools)
     }
@@ -602,8 +581,8 @@ impl CredentialVault {
         let mut nonce_bytes = [0u8; 12];
         rand::thread_rng().fill_bytes(&mut nonce_bytes);
 
-        let cipher = ChaCha20Poly1305::new_from_slice(key)
-            .map_err(|_| VaultError::InvalidKeyMaterial)?;
+        let cipher =
+            ChaCha20Poly1305::new_from_slice(key).map_err(|_| VaultError::InvalidKeyMaterial)?;
 
         let nonce = Nonce::from_slice(&nonce_bytes);
         let ciphertext = cipher
@@ -617,8 +596,8 @@ impl CredentialVault {
     }
 
     fn decrypt_value(key: &[u8; 32], encrypted: &EncryptedCredential) -> VaultResult<Vec<u8>> {
-        let cipher = ChaCha20Poly1305::new_from_slice(key)
-            .map_err(|_| VaultError::InvalidKeyMaterial)?;
+        let cipher =
+            ChaCha20Poly1305::new_from_slice(key).map_err(|_| VaultError::InvalidKeyMaterial)?;
 
         let nonce = Nonce::from_slice(&encrypted.nonce);
         cipher
@@ -640,6 +619,31 @@ impl CredentialVault {
 
         let tmp_path = path.with_extension("json.tmp");
         std::fs::write(&tmp_path, json.as_bytes())?;
+
+        // Owner-only, set on the temp file before the rename so the vault is
+        // never briefly world-readable at its real path.
+        //
+        // Until 2026-08-06 this was left to the process umask, which produced
+        // mode 644. The contents are ChaCha20-Poly1305 encrypted, so this was
+        // not an exposure of the secrets themselves — but the credential store
+        // was more permissive than the plaintext `.env` files it replaced,
+        // which were 600. Noticed on the `ls` immediately after the first real
+        // migration wrote 176 credentials into it.
+        //
+        // Defence in depth rather than the primary control: an attacker who
+        // can read the file still cannot decrypt without the sovereign root.
+        // The mode matters because it removes the file from the set any local
+        // process can copy and take away to attack offline at leisure.
+        //
+        // `zp-server/src/security.rs` already checks for `0o600` on sensitive
+        // files, and `zp-cli/src/secure.rs` already sets it elsewhere. The
+        // pattern existed; the vault simply never used it.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o600))?;
+        }
+
         std::fs::rename(&tmp_path, path)?;
 
         info!(
@@ -737,7 +741,6 @@ impl CredentialVault {
     pub fn entries_mut(&mut self) -> &mut HashMap<String, VaultEntry> {
         &mut self.entries
     }
-
 }
 
 // ============================================================================
@@ -1261,10 +1264,16 @@ mod tests {
 
     #[test]
     fn test_tier_from_path() {
-        assert_eq!(VaultTier::from_path("providers/openai/api_key"), VaultTier::Providers);
+        assert_eq!(
+            VaultTier::from_path("providers/openai/api_key"),
+            VaultTier::Providers
+        );
         assert_eq!(VaultTier::from_path("tools/ember/MODEL"), VaultTier::Tools);
         assert_eq!(VaultTier::from_path("system/relay/key"), VaultTier::System);
-        assert_eq!(VaultTier::from_path("ephemeral/oauth/token"), VaultTier::Ephemeral);
+        assert_eq!(
+            VaultTier::from_path("ephemeral/oauth/token"),
+            VaultTier::Ephemeral
+        );
         assert_eq!(VaultTier::from_path("openai/api_key"), VaultTier::Legacy);
         assert_eq!(VaultTier::from_path("flat-key"), VaultTier::Legacy);
     }
@@ -1279,7 +1288,11 @@ mod tests {
         let mut vault = CredentialVault::new(&master_key);
 
         vault
-            .store_tiered("providers/openai/api_key", b"sk-tiered", VaultTier::Providers)
+            .store_tiered(
+                "providers/openai/api_key",
+                b"sk-tiered",
+                VaultTier::Providers,
+            )
             .unwrap();
 
         let retrieved = vault.retrieve("providers/openai/api_key").unwrap();
@@ -1292,7 +1305,9 @@ mod tests {
         let mut vault = CredentialVault::new(&master_key);
 
         // store() auto-detects tier from path
-        vault.store("providers/anthropic/api_key", b"sk-auto").unwrap();
+        vault
+            .store("providers/anthropic/api_key", b"sk-auto")
+            .unwrap();
 
         let entry = vault.entries.get("providers/anthropic/api_key").unwrap();
         match entry {
@@ -1342,7 +1357,9 @@ mod tests {
         let master_key = [0x42u8; 32];
         let mut vault = CredentialVault::new(&master_key);
 
-        vault.store_ref("tools/ember/MISSING", "providers/nonexistent/key").unwrap();
+        vault
+            .store_ref("tools/ember/MISSING", "providers/nonexistent/key")
+            .unwrap();
 
         let result = vault.retrieve("tools/ember/MISSING");
         assert!(matches!(result, Err(VaultError::BrokenRef { .. })));
@@ -1395,8 +1412,12 @@ mod tests {
         let master_key = [0x42u8; 32];
         let mut vault = CredentialVault::new(&master_key);
 
-        vault.store_provider("anthropic", "api_key", b"sk-ant-test").unwrap();
-        vault.store_provider("openai", "api_key", b"sk-oai-test").unwrap();
+        vault
+            .store_provider("anthropic", "api_key", b"sk-ant-test")
+            .unwrap();
+        vault
+            .store_provider("openai", "api_key", b"sk-oai-test")
+            .unwrap();
 
         assert_eq!(
             vault.retrieve_provider("anthropic", "api_key").unwrap(),
@@ -1418,10 +1439,14 @@ mod tests {
         let mut vault = CredentialVault::new(&master_key);
 
         // Provider credentials
-        vault.store_provider("openai", "api_key", b"sk-tool-test").unwrap();
+        vault
+            .store_provider("openai", "api_key", b"sk-tool-test")
+            .unwrap();
 
         // Tool config: mix of refs and local values
-        vault.store_tool_ref("ember", "OPENAI_API_KEY", "openai", "api_key").unwrap();
+        vault
+            .store_tool_ref("ember", "OPENAI_API_KEY", "openai", "api_key")
+            .unwrap();
         vault.store_tool_env("ember", "MODEL", b"gpt-4o").unwrap();
         vault.store_tool_env("ember", "PORT", b"3000").unwrap();
 
@@ -1453,11 +1478,17 @@ mod tests {
         let mut vault = CredentialVault::new(&master_key);
 
         // Ember has good config
-        vault.store_provider("openai", "api_key", b"sk-good").unwrap();
-        vault.store_tool_ref("ember", "KEY", "openai", "api_key").unwrap();
+        vault
+            .store_provider("openai", "api_key", b"sk-good")
+            .unwrap();
+        vault
+            .store_tool_ref("ember", "KEY", "openai", "api_key")
+            .unwrap();
 
         // Shannon has a broken ref — should NOT affect Ember
-        vault.store_ref("tools/shannon/KEY", "providers/missing/key").unwrap();
+        vault
+            .store_ref("tools/shannon/KEY", "providers/missing/key")
+            .unwrap();
 
         let env = vault.resolve_tool_env("ember").unwrap();
         assert_eq!(env.get("KEY").unwrap(), b"sk-good");
@@ -1511,8 +1542,12 @@ mod tests {
         let master_key = [0x42u8; 32];
         let mut vault = CredentialVault::new(&master_key);
 
-        vault.store_provider("openai", "api_key", b"sk-scope-test").unwrap();
-        vault.store_tool_ref("ember", "OPENAI_API_KEY", "openai", "api_key").unwrap();
+        vault
+            .store_provider("openai", "api_key", b"sk-scope-test")
+            .unwrap();
+        vault
+            .store_tool_ref("ember", "OPENAI_API_KEY", "openai", "api_key")
+            .unwrap();
         vault.store_tool_env("ember", "MODEL", b"gpt-4o").unwrap();
 
         let scope = vault.scope_ref("tools/ember/");
@@ -1582,17 +1617,27 @@ mod tests {
         let master_key = [0x42u8; 32];
         let mut vault = CredentialVault::new(&master_key);
 
-        vault.store_provider("anthropic", "api_key", b"sk-scope-ref").unwrap();
+        vault
+            .store_provider("anthropic", "api_key", b"sk-scope-ref")
+            .unwrap();
 
         {
             let mut scope = vault.scope("tools/shannon");
-            scope.store_ref("ANTHROPIC_API_KEY", "providers/anthropic/api_key").unwrap();
+            scope
+                .store_ref("ANTHROPIC_API_KEY", "providers/anthropic/api_key")
+                .unwrap();
             scope.store("MODEL", b"claude-sonnet-4-20250514").unwrap();
         }
 
         let scope = vault.scope_ref("tools/shannon/");
-        assert_eq!(scope.retrieve("ANTHROPIC_API_KEY").unwrap(), b"sk-scope-ref");
-        assert_eq!(scope.retrieve("MODEL").unwrap(), b"claude-sonnet-4-20250514");
+        assert_eq!(
+            scope.retrieve("ANTHROPIC_API_KEY").unwrap(),
+            b"sk-scope-ref"
+        );
+        assert_eq!(
+            scope.retrieve("MODEL").unwrap(),
+            b"claude-sonnet-4-20250514"
+        );
     }
 
     // ====================================================================
@@ -1610,8 +1655,12 @@ mod tests {
 
         {
             let mut vault = CredentialVault::new(&master_key);
-            vault.store_provider("openai", "api_key", b"sk-persist").unwrap();
-            vault.store_tool_ref("ember", "KEY", "openai", "api_key").unwrap();
+            vault
+                .store_provider("openai", "api_key", b"sk-persist")
+                .unwrap();
+            vault
+                .store_tool_ref("ember", "KEY", "openai", "api_key")
+                .unwrap();
             vault.store_tool_env("ember", "MODEL", b"gpt-4o").unwrap();
             vault.save(&vault_path).unwrap();
         }
@@ -1627,16 +1676,10 @@ mod tests {
             );
 
             // Ref chases to provider
-            assert_eq!(
-                vault.retrieve("tools/ember/KEY").unwrap(),
-                b"sk-persist"
-            );
+            assert_eq!(vault.retrieve("tools/ember/KEY").unwrap(), b"sk-persist");
 
             // Tool local value
-            assert_eq!(
-                vault.retrieve("tools/ember/MODEL").unwrap(),
-                b"gpt-4o"
-            );
+            assert_eq!(vault.retrieve("tools/ember/MODEL").unwrap(), b"gpt-4o");
         }
 
         let _ = std::fs::remove_file(&vault_path);
@@ -1676,10 +1719,7 @@ mod tests {
         // Load should auto-detect legacy format
         let vault = CredentialVault::load_or_create(&master_key, &vault_path).unwrap();
         assert_eq!(vault.count(), 1);
-        assert_eq!(
-            vault.retrieve("openai/api_key").unwrap(),
-            b"legacy-value"
-        );
+        assert_eq!(vault.retrieve("openai/api_key").unwrap(), b"legacy-value");
 
         // Verify the entry was wrapped as Value with tier: None
         match vault.entries.get("openai/api_key").unwrap() {
@@ -1701,32 +1741,56 @@ mod tests {
         let mut vault = CredentialVault::new(&master_key);
 
         // Initial provider credential
-        vault.store_provider("openai", "api_key", b"sk-old-key").unwrap();
+        vault
+            .store_provider("openai", "api_key", b"sk-old-key")
+            .unwrap();
 
         // Two tools reference the same provider
-        vault.store_tool_ref("ember", "OPENAI_API_KEY", "openai", "api_key").unwrap();
-        vault.store_tool_ref("shannon", "OPENAI_API_KEY", "openai", "api_key").unwrap();
+        vault
+            .store_tool_ref("ember", "OPENAI_API_KEY", "openai", "api_key")
+            .unwrap();
+        vault
+            .store_tool_ref("shannon", "OPENAI_API_KEY", "openai", "api_key")
+            .unwrap();
 
         // Both tools see old key
         assert_eq!(
-            vault.resolve_tool_env("ember").unwrap().get("OPENAI_API_KEY").unwrap(),
+            vault
+                .resolve_tool_env("ember")
+                .unwrap()
+                .get("OPENAI_API_KEY")
+                .unwrap(),
             b"sk-old-key"
         );
         assert_eq!(
-            vault.resolve_tool_env("shannon").unwrap().get("OPENAI_API_KEY").unwrap(),
+            vault
+                .resolve_tool_env("shannon")
+                .unwrap()
+                .get("OPENAI_API_KEY")
+                .unwrap(),
             b"sk-old-key"
         );
 
         // Rotate the provider credential
-        vault.store_provider("openai", "api_key", b"sk-new-key").unwrap();
+        vault
+            .store_provider("openai", "api_key", b"sk-new-key")
+            .unwrap();
 
         // Both tools now see new key — zero manual intervention
         assert_eq!(
-            vault.resolve_tool_env("ember").unwrap().get("OPENAI_API_KEY").unwrap(),
+            vault
+                .resolve_tool_env("ember")
+                .unwrap()
+                .get("OPENAI_API_KEY")
+                .unwrap(),
             b"sk-new-key"
         );
         assert_eq!(
-            vault.resolve_tool_env("shannon").unwrap().get("OPENAI_API_KEY").unwrap(),
+            vault
+                .resolve_tool_env("shannon")
+                .unwrap()
+                .get("OPENAI_API_KEY")
+                .unwrap(),
             b"sk-new-key"
         );
     }

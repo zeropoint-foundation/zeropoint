@@ -13,8 +13,10 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use zp_audit::{AuditStore, UnsealedEntry};
-use zp_core::{ActorId, AuditAction, CapabilityGrant, ConversationId, GrantedCapability, PolicyDecision};
 use zp_core::policy::ActionType;
+use zp_core::{
+    ActorId, AuditAction, CapabilityGrant, ConversationId, GrantedCapability, PolicyDecision,
+};
 use zp_policy::GovernanceGate;
 
 use zp_regent::config::RegentConfig;
@@ -48,18 +50,57 @@ use zp_regent::regent::Regent;
 /// `ALLOWED_DOMAINS` is a hardcoded const in the dispatch arm. The grant is
 /// genuinely narrow, but narrower than the delegation advertises; moving the
 /// list onto the delegation is the follow-up that makes the scope real.
-const REGENT_TOOLS: &[(&str, &str)] = &[
-    ("chain_query", "audit_chain"),
-    ("governance_posture", "governance"),
-    ("model_evaluate", "inference"),
-    ("system_status", "system"),
-    ("batch_sign", "audit_chain"),
-    ("chain_compact", "audit_chain"),
-    ("self_configure", "inference:endpoint,model,api_key"),
-    ("memory_list", "cognition:memory_promotion"),
-    ("memory_review", "cognition:memory_promotion:review_remembered"),
-    ("substrate_validate", "substrate:validation:regent"),
-    ("browser_use", "web:allowed_domains"),
+// The Regent's granted tool surface now has ONE declaration, in
+// `zp_regent::tools`. This was the copy that actually conferred capability
+// while two more lived in `zp-regent`; all three drifted twice. See that
+// module for the incidents and for the false premise that kept them apart.
+use zp_regent::tools::REGENT_TOOLS;
+
+/// Capabilities the Regent may *propose* but never dispatch on its own.
+///
+/// Delegation says a capability exists and the Regent may reach for it.
+/// This says reaching is not enough — an operator signature is required for
+/// the specific call, every time, until precedent says otherwise.
+///
+/// `browser_use` is here because it is the one tool that acts outside the
+/// substrate. Observed 2026-08-01: a work arc opened on "compact the chain
+/// down to the last 1000 entries" lost the thread, copied fragments of its
+/// own chain receipts into its plan for four cycles, and then dispatched
+/// `browser_use` with `goto_url https://example.com` — a URL nothing in the
+/// conversation had mentioned, in a request that had nothing to do with the
+/// web. The model's own leaked reasoning called it "a placeholder". Only the
+/// harness timing out after 15s stopped the navigation.
+///
+/// The domain allowlist bounds *where* it can go. It says nothing about
+/// whether going was ever asked for, and a confused cycle is exactly the
+/// condition under which that question matters most.
+const APPROVAL_REQUIRED_TOOLS: &[&str] = &["browser_use"];
+
+/// What each capability actually reads: `(tool, required, optional)`.
+///
+/// The dispatch arms below are the only place that knows this, and until now
+/// they were the only place that stated it — so a proposal could name
+/// parameters no arm would ever look at, and the operator would be asked to
+/// sign a call the tool could not perform.
+///
+/// Projected onto `DelegationSummary`, so the Regent validates against what
+/// the server told it rather than against a copy it keeps. A tool absent from
+/// this table is not validated: unknown contract, not empty contract.
+const TOOL_PARAMS: &[(&str, &[&str], &[&str])] = &[
+    (
+        "browser_use",
+        &["action"],
+        &["url", "expression", "selector"],
+    ),
+    (
+        "self_configure",
+        &[],
+        &["endpoint", "model", "api_key", "routing_model", "force"],
+    ),
+    ("chain_query", &[], &["limit", "filter", "since"]),
+    ("chain_compact", &[], &["retain"]),
+    ("memory_list", &[], &["stage"]),
+    ("memory_review", &["action"], &["review_id", "reason"]),
 ];
 
 // ── Conversation namespace ──────────────────────────────────────────────────
@@ -68,6 +109,13 @@ const REGENT_TOOLS: &[(&str, &str)] = &[
 /// UUID `00000000-0002-7000-8001-000000000001` — regent namespace.
 fn regent_conv_id() -> ConversationId {
     ConversationId(Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap())
+}
+
+/// Dedicated `ConversationId` for inference-observer JSONL events per
+/// OBSERVATION-PLANE-2026-07 §"Inference telemetry" (Surface 7).
+/// UUID `00000000-0002-7000-8001-000000000003` — inference-observer namespace.
+fn inference_observer_conv_id() -> ConversationId {
+    ConversationId(Uuid::parse_str("00000000-0002-7000-8001-000000000003").unwrap())
 }
 
 /// Actor identity for the Regent in all gate evaluations and receipts.
@@ -103,6 +151,119 @@ fn emit_receipt_to_store(store: &Arc<std::sync::Mutex<AuditStore>>, event: &str)
     }
 }
 
+// ── Inference-observer receipt emission (OBSERVATION-PLANE §7) ─────────────
+
+/// Append one inference-observer JSONL event to the audit chain under the
+/// inference-observer conversation namespace. Called from the tail loop
+/// spawned by `spawn_inference_observer_tail`.
+///
+/// The `raw` argument is the exact JSONL line the emitter wrote — passed
+/// through verbatim so downstream chain readers can re-parse via
+/// `zp_inference_observer::InferenceObservation` and see byte-identical
+/// evidence to what the Python-side emitter observed.
+fn emit_inference_observer_receipt(store: &Arc<std::sync::Mutex<AuditStore>>, raw: &str) {
+    let mut guard = match store.lock() {
+        Ok(s) => s,
+        Err(e) => {
+            warn!(
+                "inference observer receipt: audit store lock poisoned: {}",
+                e
+            );
+            return;
+        }
+    };
+    let entry = UnsealedEntry {
+        actor: regent_actor(),
+        action: AuditAction::SystemEvent {
+            event: raw.to_string(),
+        },
+        conversation_id: inference_observer_conv_id(),
+        policy_decision: PolicyDecision::Allow {
+            conditions: Vec::new(),
+        },
+        policy_module: "inference-observer".to_string(),
+        receipt: None,
+    };
+    if let Err(e) = guard.append(entry) {
+        warn!("inference observer receipt emission failed: {}", e);
+    }
+}
+
+/// Spawn the inference-observer tail as a background blocking task.
+///
+/// Reads DFlash observation JSONL events produced by
+/// `scripts/dflash-observation-emitter.py` and appends each one as a
+/// `SystemEvent` audit entry under the inference-observer conversation
+/// namespace.
+///
+/// Tolerates a missing observation file (emitter not running, no events
+/// today yet) with a 60-second retry loop. Follows the emitter's daily
+/// UTC rotation — reopens against today's file when the date rolls.
+///
+/// The observation directory defaults to
+/// `~/projects/zeropoint/.observations/inference/` matching the emitter's
+/// default. Override via `ZP_INFERENCE_OBSERVATION_DIR` env for testing.
+fn spawn_inference_observer_tail(audit_store: Arc<std::sync::Mutex<AuditStore>>) {
+    tokio::task::spawn_blocking(move || {
+        let base = std::env::var("ZP_INFERENCE_OBSERVATION_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                // Seam 19: home resolution goes through the paths carrier, not
+                // a raw `HOME` read. `user_home` (the operator's home) rather
+                // than `home` (the ZeroPoint data root, `~/ZeroPoint`) — this
+                // path is a source checkout, not substrate state. Pinned by
+                // `no_raw_home_lookup`, which had been failing on this site
+                // since 2026-08-01.
+                //
+                // Not `user_home_or(fallback)`: the fallback here is a
+                // complete alternative path, not a substitute home, and
+                // joining the suffix onto it would yield
+                // `/tmp/zp-observations/inference/projects/zeropoint/...`.
+                match zp_core::paths::user_home() {
+                    Ok(h) => h.join("projects/zeropoint/.observations/inference"),
+                    Err(_) => std::path::PathBuf::from("/tmp/zp-observations/inference"),
+                }
+            });
+
+        info!(observations_dir = ?base, "inference observer tail: starting");
+
+        loop {
+            // Emitter rotates daily by UTC date; match that.
+            let now = chrono::Utc::now();
+            let filename = format!("drafter_acceptance-{}.jsonl", now.format("%Y%m%d"));
+            let path = base.join(&filename);
+
+            if !path.exists() {
+                // Emitter not running or no events today. Retry.
+                std::thread::sleep(std::time::Duration::from_secs(60));
+                continue;
+            }
+
+            info!(?path, "inference observer tail: opened");
+
+            let audit_store_cb = audit_store.clone();
+            let config = zp_inference_observer::TailConfig {
+                path: path.clone(),
+                poll_interval: std::time::Duration::from_secs(2),
+                from_beginning: false,
+                stop_at_eof: false,
+            };
+
+            let result = zp_inference_observer::tail(config, move |tailed| {
+                emit_inference_observer_receipt(&audit_store_cb, &tailed.raw_line);
+            });
+
+            if let Err(e) = result {
+                warn!(
+                    "inference observer tail returned error, retrying in 60s: {}",
+                    e
+                );
+            }
+            std::thread::sleep(std::time::Duration::from_secs(60));
+        }
+    });
+}
+
 // ── IntentExecutor ──────────────────────────────────────────────────────────
 
 /// Server-side intent executor — bridges Regent intents to chain receipts,
@@ -135,6 +296,10 @@ pub struct ServerIntentExecutor {
 }
 
 impl ServerIntentExecutor {
+    // Twelve collaborators, held for the Regent's lifetime. See the note on
+    // `zp_regent::loop_runner::start_loop` — same construction seam, same
+    // reason it is not folded into a config struct here.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         audit_store: Arc<std::sync::Mutex<AuditStore>>,
         gate: Arc<GovernanceGate>,
@@ -174,6 +339,98 @@ impl ServerIntentExecutor {
             .map(|resolved| *resolved.key)
     }
 
+    /// May this call proceed without asking?
+    ///
+    /// Two ways, and they are different in kind. **Precedent** — the operator
+    /// signed this exact call before, so §III.10's autonomous envelope
+    /// already covers it and it may proceed indefinitely. **A pending
+    /// grant** — the operator signed it just now and it has not yet been
+    /// enacted, which is a single-use authorisation the enactment drain
+    /// consumes.
+    ///
+    /// Precedent is checked first because it is the cheaper answer and the
+    /// more permanent one, and because an act covered by precedent should not
+    /// consume a pending grant that was meant for something else.
+    fn is_authorised_call(&self, tool: &str, params: &serde_json::Value) -> bool {
+        let entries = self.approval_window();
+
+        if let Some(p) =
+            zp_regent::precedent::PrecedentIndex::build(&entries).authorises(tool, params)
+        {
+            // An autonomous act names the signature it relies on. Without
+            // this the envelope grows silently, and §III.10 requires every
+            // extension of autonomous scope to trace to a specific operator
+            // signature at a specific moment — which is only true if the
+            // trace is written down at the moment it is used.
+            info!(
+                tool,
+                granted_request = %zp_regent::text::preview(&p.granted_request, 12),
+                granted_at = %p.granted_at.to_rfc3339(),
+                "regent: acting on operator precedent"
+            );
+            self.emit_receipt(
+                "regent:precedent:cited",
+                Some(&format!(
+                    "tool={} context={} granted_request={}",
+                    tool, p.context_signature, p.granted_request
+                )),
+            );
+            return true;
+        }
+
+        zp_regent::approvals::ApprovalIndex::build(&entries)
+            .enactable()
+            .iter()
+            .any(|r| r.enactment.as_ref().is_some_and(|e| e.tool == tool))
+    }
+
+    /// An unanswered request for this same call, if one is already queued.
+    ///
+    /// Returns the existing request hash. Only *pending* requests count — a
+    /// previously denied call may legitimately be proposed again, since a
+    /// denial answers one moment rather than settling a question forever, and
+    /// a granted one is handled by precedent instead.
+    fn pending_duplicate_of(&self, enactment: &zp_regent::intent::Enactment) -> Option<String> {
+        let sig = zp_regent::precedent::context_signature(&enactment.tool, &enactment.params);
+        let entries = self.approval_window();
+        zp_regent::approvals::ApprovalIndex::build(&entries)
+            .pending()
+            .iter()
+            .find(|r| {
+                r.enactment.as_ref().is_some_and(|e| {
+                    e.tool == enactment.tool
+                        && zp_regent::precedent::context_signature(&e.tool, &e.params) == sig
+                })
+            })
+            .map(|r| r.request_hash.clone())
+    }
+
+    /// The chain slice both the approval index and the precedent index read.
+    fn approval_window(&self) -> Vec<zp_core::AuditEntry> {
+        let store = match self.audit_store.lock() {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("approval window: audit store lock poisoned: {}", e);
+                return Vec::new();
+            }
+        };
+        let mut acc = Vec::new();
+        for prefix in [
+            zp_regent::approvals::EVENT_PREFIX_REQUEST,
+            zp_regent::approvals::EVENT_PREFIX_GRANTED,
+            zp_regent::approvals::EVENT_PREFIX_DENIED,
+            zp_regent::approvals::EVENT_PREFIX_ENACTED,
+            zp_regent::precedent::EVENT_PREFIX_REVOKED,
+        ] {
+            acc.extend(
+                store
+                    .search_chain_by_action_keyword(prefix, 1024)
+                    .unwrap_or_default(),
+            );
+        }
+        acc
+    }
+
     /// Emit a Regent intent as a chain receipt.
     fn emit_receipt(&self, event: &str, detail: Option<&str>) {
         let mut store = match self.audit_store.lock() {
@@ -192,9 +449,7 @@ impl ServerIntentExecutor {
 
         let entry = UnsealedEntry {
             actor: regent_actor(),
-            action: AuditAction::SystemEvent {
-                event: event_str,
-            },
+            action: AuditAction::SystemEvent { event: event_str },
             conversation_id: regent_conv_id(),
             policy_decision: PolicyDecision::Allow {
                 conditions: Vec::new(),
@@ -210,10 +465,21 @@ impl ServerIntentExecutor {
 
     /// Emit a structured remediation receipt.
     ///
-    /// These are the chain's memory of autonomous Regent actions —
-    /// the foundation for the precedent system. Future cycles query
-    /// for `regent:remediation:*` events to determine whether the
-    /// Regent has precedent for autonomous action.
+    /// The chain's memory of autonomous Regent actions: evidence that an act
+    /// happened.
+    ///
+    /// **Not precedent.** This doc used to instruct future cycles to query
+    /// `regent:remediation:*` "to determine whether the Regent has precedent
+    /// for autonomous action", and the emission below logged "precedent
+    /// established". Both were wrong in the same way: this receipt is emitted
+    /// by the Regent, `actor: System("regent")`, about its own act. Reading
+    /// it as authority would let the Regent widen its own envelope by having
+    /// acted once — the inversion of P9, and invisible, because the resulting
+    /// system looks like it works.
+    ///
+    /// KEEL §III.10 and the glossary are explicit that precedent is
+    /// *operator-signed*. See `zp_regent::precedent`, which sources it from
+    /// `regent:approval:granted` (`actor: ActorId::Operator`) instead.
     fn emit_remediation_receipt(
         &self,
         tool: &str,
@@ -224,7 +490,10 @@ impl ServerIntentExecutor {
         let mut store = match self.audit_store.lock() {
             Ok(s) => s,
             Err(e) => {
-                warn!("regent remediation receipt: audit store lock poisoned: {}", e);
+                warn!(
+                    "regent remediation receipt: audit store lock poisoned: {}",
+                    e
+                );
                 return;
             }
         };
@@ -252,9 +521,7 @@ impl ServerIntentExecutor {
         } else {
             info!(
                 tool,
-                finding_type,
-                entries_affected,
-                "regent: remediation receipt emitted — precedent established"
+                finding_type, entries_affected, "regent: remediation receipt emitted"
             );
         }
     }
@@ -304,12 +571,9 @@ impl ServerIntentExecutor {
 
             // Run battery for each candidate.
             for (candidate_model, tier) in &candidates {
-                let result = zp_regent::shadow_validation::run_battery(
-                    &inference,
-                    candidate_model,
-                    *tier,
-                )
-                .await;
+                let result =
+                    zp_regent::shadow_validation::run_battery(&inference, candidate_model, *tier)
+                        .await;
 
                 // Emit per-check receipts.
                 for check in &result.checks {
@@ -331,10 +595,7 @@ impl ServerIntentExecutor {
                         "shadow battery: candidate PASSED"
                     );
                 } else {
-                    regent_guard.reject_shadow_candidate(
-                        candidate_model,
-                        result.summary.clone(),
-                    );
+                    regent_guard.reject_shadow_candidate(candidate_model, result.summary.clone());
                     let event = format!(
                         "regent:config:inference:shadow_rejected | candidate={} reason={}",
                         candidate_model, result.summary,
@@ -392,13 +653,8 @@ impl ServerIntentExecutor {
     ) -> Result<serde_json::Value, RegentError> {
         match tool {
             "chain_query" => {
-                let limit = params
-                    .get("limit")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(20) as usize;
-                let filter = params
-                    .get("filter")
-                    .and_then(|v| v.as_str());
+                let limit = params.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+                let filter = params.get("filter").and_then(|v| v.as_str());
                 let store = self
                     .audit_store
                     .lock()
@@ -489,12 +745,7 @@ impl ServerIntentExecutor {
 
                 // Emit structured remediation receipt — the chain's memory of
                 // this autonomous action. Future cycles query these for precedent.
-                self.emit_remediation_receipt(
-                    "batch_sign",
-                    "unsigned_entries",
-                    signed,
-                    "signed",
-                );
+                self.emit_remediation_receipt("batch_sign", "unsigned_entries", signed, "signed");
 
                 Ok(serde_json::json!({
                     "signed": signed,
@@ -516,7 +767,7 @@ impl ServerIntentExecutor {
                 let total = store
                     .entry_count()
                     .map_err(|e| RegentError::ChainRead(e.to_string()))?;
-                if (total as usize) <= retain {
+                if total <= retain {
                     return Ok(serde_json::json!({
                         "archived": 0,
                         "retained": total,
@@ -527,7 +778,10 @@ impl ServerIntentExecutor {
                     .compact_chain(retain)
                     .map_err(|e| RegentError::Execution(format!("chain_compact failed: {}", e)))?;
                 drop(store);
-                info!(archived, retain, "regent: chain_compact maintenance completed");
+                info!(
+                    archived,
+                    retain, "regent: chain_compact maintenance completed"
+                );
 
                 self.emit_remediation_receipt(
                     "chain_compact",
@@ -567,39 +821,82 @@ impl ServerIntentExecutor {
                 /// through the same path before its expression is allowed to
                 /// run — the domain gate has to be enforced substrate-side,
                 /// not by the generated Python.
-                fn run_harness(py_code: &str) -> std::io::Result<std::process::Output> {
-                    std::process::Command::new("browser-harness")
-                    .stdin(std::process::Stdio::piped())
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped())
-                    .spawn()
-                    .and_then(|mut child| {
-                        use std::io::Write;
-                        // Write script then DROP stdin to signal EOF.
-                        // Without this, browser-harness waits for more input.
-                        {
-                            let stdin = child.stdin.take().unwrap();
-                            let mut writer = std::io::BufWriter::new(stdin);
-                            writer.write_all(py_code.as_bytes())?;
-                            // writer + stdin dropped here → EOF sent
+                async fn run_harness(py_code: &str) -> std::io::Result<std::process::Output> {
+                    use tokio::io::AsyncWriteExt;
+
+                    // Longer than `browser-harness` takes to fail on its own,
+                    // which is the whole point.
+                    //
+                    // Measured 2026-08-04: with no debuggable browser
+                    // reachable, the harness spends ~61s trying to bring up
+                    // its daemon and then exits with a precise diagnosis —
+                    // `DevToolsActivePort not found`, naming every profile
+                    // directory it searched and the setting to enable. At 15s,
+                    // and then at 60s, this timeout killed it just before it
+                    // could say any of that, and the operator got "timed out"
+                    // instead. A supervisor that cuts its child off
+                    // mid-sentence turns every diagnosable failure into an
+                    // undiagnosable one.
+                    //
+                    // So the ceiling sits above the harness's own, and the
+                    // harness's own stderr is what reaches the operator.
+                    // Configurable because the right number is a property of
+                    // the operator's machine, not of this substrate.
+                    let secs = std::env::var("ZP_BROWSER_TIMEOUT_SECS")
+                        .ok()
+                        .and_then(|v| v.parse::<u64>().ok())
+                        .unwrap_or(90);
+
+                    // Async spawn, not `std::process`. The previous form
+                    // polled `try_wait` with `thread::sleep` inside an async
+                    // fn, which parks a tokio worker for the entire timeout —
+                    // so a slow browser stalled the cognitive loop rather than
+                    // just the call. Raising the timeout without fixing that
+                    // would have made the substrate less responsive the more
+                    // patience it was given.
+                    //
+                    // `kill_on_drop` is what makes the timeout real: when the
+                    // timeout future is dropped it takes the child with it,
+                    // so no orphaned browser survives a slow call.
+                    let mut child = tokio::process::Command::new("browser-harness")
+                        .stdin(std::process::Stdio::piped())
+                        .stdout(std::process::Stdio::piped())
+                        .stderr(std::process::Stdio::piped())
+                        .kill_on_drop(true)
+                        .spawn()?;
+
+                    {
+                        let mut stdin = child.stdin.take().ok_or_else(|| {
+                            std::io::Error::other("browser-harness stdin was not piped")
+                        })?;
+                        stdin.write_all(py_code.as_bytes()).await?;
+                        // EOF — without it browser-harness waits for more input.
+                        stdin.shutdown().await?;
+                    }
+
+                    let started = std::time::Instant::now();
+                    match tokio::time::timeout(
+                        std::time::Duration::from_secs(secs),
+                        child.wait_with_output(),
+                    )
+                    .await
+                    {
+                        Ok(result) => {
+                            debug!(
+                                elapsed_ms = started.elapsed().as_millis() as u64,
+                                "browser-harness completed"
+                            );
+                            result
                         }
-                        // Timeout: 15 seconds max for any browser action.
-                        let start = std::time::Instant::now();
-                        let timeout = std::time::Duration::from_secs(15);
-                        loop {
-                            match child.try_wait()? {
-                                Some(_) => return child.wait_with_output(),
-                                None if start.elapsed() > timeout => {
-                                    let _ = child.kill();
-                                    return Err(std::io::Error::new(
-                                        std::io::ErrorKind::TimedOut,
-                                        "browser-harness timed out after 15s",
-                                    ));
-                                }
-                                None => std::thread::sleep(std::time::Duration::from_millis(100)),
-                            }
-                        }
-                    })
+                        Err(_) => Err(std::io::Error::new(
+                            std::io::ErrorKind::TimedOut,
+                            format!(
+                                "browser-harness did not finish within {secs}s. \
+                                 Raise ZP_BROWSER_TIMEOUT_SECS if this machine \
+                                 needs longer to start a browser."
+                            ),
+                        )),
+                    }
                 }
 
                 /// Encode a parameter as a Python string literal.
@@ -643,10 +940,7 @@ impl ServerIntentExecutor {
                 // {"intent":"execute","tool":"browser_use"} with no params
                 // even when the operator said "navigate to X". Default to
                 // goto_url when a URL is present, page_info otherwise.
-                let raw_action = params
-                    .get("action")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                let raw_action = params.get("action").and_then(|v| v.as_str()).unwrap_or("");
                 let raw_url = params.get("url").and_then(|v| v.as_str()).unwrap_or("");
 
                 // If model didn't provide action but we have a URL, infer goto_url.
@@ -666,17 +960,15 @@ impl ServerIntentExecutor {
                 };
 
                 // Domain gate: if action involves a URL, validate it.
-                if !url.is_empty() {
-                    if !domain_allowed(&url, ALLOWED_DOMAINS) {
-                        return Ok(serde_json::json!({
-                            "error": "domain_blocked",
-                            "message": format!("URL '{}' is not in allowed_domains", url),
-                            "allowed": ALLOWED_DOMAINS
-                                .iter()
-                                .map(|(d, p)| format!("{}{}", d, p))
-                                .collect::<Vec<_>>(),
-                        }));
-                    }
+                if !url.is_empty() && !domain_allowed(&url, ALLOWED_DOMAINS) {
+                    return Ok(serde_json::json!({
+                        "error": "domain_blocked",
+                        "message": format!("URL '{}' is not in allowed_domains", url),
+                        "allowed": ALLOWED_DOMAINS
+                            .iter()
+                            .map(|(d, p)| format!("{}{}", d, p))
+                            .collect::<Vec<_>>(),
+                    }));
                 }
 
                 // Build the Python snippet for browser-harness.
@@ -705,7 +997,8 @@ impl ServerIntentExecutor {
                         // host-anchored allowlist every other action obeys.
                         let probe = run_harness(
                             "ensure_real_tab()\ncdp(\"Page.bringToFront\")\ninfo = page_info()\nimport json; print(json.dumps(info))",
-                        );
+                        )
+                        .await;
                         let current_url = match probe {
                             Ok(out) if out.status.success() => {
                                 let stdout = String::from_utf8_lossy(&out.stdout);
@@ -762,7 +1055,7 @@ impl ServerIntentExecutor {
                     }
                 };
 
-                let output = run_harness(&py_code);
+                let output = run_harness(&py_code).await;
 
                 match output {
                     Ok(out) => {
@@ -774,24 +1067,60 @@ impl ServerIntentExecutor {
                                 .unwrap_or_else(|_| serde_json::json!({"output": stdout}));
                             Ok(result)
                         } else {
+                            // Name the remedy, don't just relay the traceback.
+                            //
+                            // The harness's stderr for the common failure is a
+                            // Python traceback ending in `DevToolsActivePort
+                            // not found in [...]` with twenty-five profile
+                            // paths inline. Passed verbatim into the model's
+                            // context it crowds out everything else and gets
+                            // narrated as a story about directories — the
+                            // operator hears that something failed and not
+                            // what to do about it.
+                            //
+                            // Exactly one browser_use failure has a remedy the
+                            // operator can act on in ten seconds, so that one
+                            // gets said plainly and the traceback is kept,
+                            // truncated, underneath it.
+                            //
+                            // Truncated through `text::preview` rather than a
+                            // byte slice: this stderr is Python output and
+                            // carries typographic quotes — "Can't get
+                            // application" arrived with a multi-byte
+                            // apostrophe on 2026-08-04, which is precisely
+                            // the shape that panicked the evaluation sweep 54
+                            // times before `preview` existed.
+                            let remedy = if stderr.contains("DevToolsActivePort not found")
+                                || stderr.contains("remote-debugging")
+                            {
+                                Some(
+                                    "No debuggable browser is reachable. In your browser, \
+                                     open chrome://inspect/#remote-debugging, enable \
+                                     \"Allow remote debugging for this browser instance\", \
+                                     and accept the prompt. Alternatively set BU_CDP_WS to \
+                                     a remote browser's websocket URL.",
+                                )
+                            } else {
+                                None
+                            };
                             Ok(serde_json::json!({
                                 "error": "browser_harness_failed",
-                                "stderr": stderr,
+                                "remedy": remedy,
+                                "stderr": zp_regent::text::preview(&stderr, 600),
                                 "exit_code": out.status.code(),
                             }))
                         }
                     }
-                    Err(e) => {
-                        Err(RegentError::Execution(format!("browser-harness spawn failed: {}", e)))
-                    }
+                    Err(e) => Err(RegentError::Execution(format!(
+                        "browser-harness spawn failed: {}",
+                        e
+                    ))),
                 }
             }
 
             "memory_list" => {
                 // Query the memory promotion engine — stage filter, stats, review-due.
-                let stage_filter = params
-                    .get("stage")
-                    .and_then(|v| v.as_str());
+                let stage_filter = params.get("stage").and_then(|v| v.as_str());
 
                 let engine = self
                     .promotion_engine
@@ -808,15 +1137,16 @@ impl ServerIntentExecutor {
                 };
 
                 let now = chrono::Utc::now();
-                let mut by_stage: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+                let mut by_stage: std::collections::HashMap<String, usize> =
+                    std::collections::HashMap::new();
                 let mut expired = 0usize;
                 let mut review_due = 0usize;
                 for m in &all {
                     *by_stage.entry(m.stage.to_string()).or_default() += 1;
-                    if m.expires_at.map_or(false, |e| e <= now) {
+                    if m.expires_at.is_some_and(|e| e <= now) {
                         expired += 1;
                     }
-                    if m.review_due_at.map_or(false, |r| r <= now) {
+                    if m.review_due_at.is_some_and(|r| r <= now) {
                         review_due += 1;
                     }
                 }
@@ -890,7 +1220,9 @@ impl ServerIntentExecutor {
                             .get("review_id")
                             .and_then(|v| v.as_str())
                             .ok_or_else(|| {
-                                RegentError::Execution("review_id required for approve/deny".to_string())
+                                RegentError::Execution(
+                                    "review_id required for approve/deny".to_string(),
+                                )
                             })?;
                         let reason = params
                             .get("reason")
@@ -939,11 +1271,13 @@ impl ServerIntentExecutor {
                         let outcome = queue.process_decision(review_id, decision);
 
                         // If approved, execute the promotion from the returned request.
-                        if let zp_memory::ReviewOutcome::Approved { ref promotion_request } = outcome {
-                            let mut engine = self
-                                .promotion_engine
-                                .lock()
-                                .map_err(|e| RegentError::ChainRead(format!("promotion engine lock: {}", e)))?;
+                        if let zp_memory::ReviewOutcome::Approved {
+                            ref promotion_request,
+                        } = outcome
+                        {
+                            let mut engine = self.promotion_engine.lock().map_err(|e| {
+                                RegentError::ChainRead(format!("promotion engine lock: {}", e))
+                            })?;
                             let promote_result = engine.promote(promotion_request);
                             drop(engine);
 
@@ -985,13 +1319,29 @@ impl ServerIntentExecutor {
             "self_configure" => {
                 // Self-modification tool: the Regent changes her own inference config.
                 // API keys go to vault — never in cognitive context or chain receipts.
-                let new_endpoint = params.get("endpoint").and_then(|v| v.as_str()).map(String::from);
+                let new_endpoint = params
+                    .get("endpoint")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
                 let new_api_key = params.get("api_key").and_then(|v| v.as_str());
-                let new_reasoning = params.get("model").and_then(|v| v.as_str()).map(String::from);
-                let new_routing = params.get("routing_model").and_then(|v| v.as_str()).map(String::from);
-                let force = params.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
+                let new_reasoning = params
+                    .get("model")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
+                let new_routing = params
+                    .get("routing_model")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
+                let force = params
+                    .get("force")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
 
-                if new_endpoint.is_none() && new_api_key.is_none() && new_reasoning.is_none() && new_routing.is_none() {
+                if new_endpoint.is_none()
+                    && new_api_key.is_none()
+                    && new_reasoning.is_none()
+                    && new_routing.is_none()
+                {
                     // No changes — return current config.
                     let regent_guard = self.regent.lock().await;
                     let cfg = regent_guard.config();
@@ -1007,21 +1357,30 @@ impl ServerIntentExecutor {
                                 zp_regent::PinStatus::Active => serde_json::json!({
                                     "state": "active",
                                 }),
-                                zp_regent::PinStatus::Evaluating { candidates, active_model } => {
-                                    let candidate_list: Vec<serde_json::Value> = candidates.iter().map(|c| {
-                                        serde_json::json!({
-                                            "model": c.model,
-                                            "state": format!("{:?}", c.state),
+                                zp_regent::PinStatus::Evaluating {
+                                    candidates,
+                                    active_model,
+                                } => {
+                                    let candidate_list: Vec<serde_json::Value> = candidates
+                                        .iter()
+                                        .map(|c| {
+                                            serde_json::json!({
+                                                "model": c.model,
+                                                "state": format!("{:?}", c.state),
+                                            })
                                         })
-                                    }).collect();
+                                        .collect();
                                     serde_json::json!({
                                         "state": "evaluating",
                                         "candidates": candidate_list,
                                         "serving": active_model,
                                         "note": "shadow validation in progress — groomed model stays active",
                                     })
-                                },
-                                zp_regent::PinStatus::Rejected { candidate_model, reason } => serde_json::json!({
+                                }
+                                zp_regent::PinStatus::Rejected {
+                                    candidate_model,
+                                    reason,
+                                } => serde_json::json!({
                                     "state": "rejected",
                                     "candidate": candidate_model,
                                     "reason": reason,
@@ -1067,29 +1426,35 @@ impl ServerIntentExecutor {
                                     raw_key.as_bytes(),
                                     zp_trust::vault::VaultTier::System,
                                 ) {
-                                    return Err(RegentError::Execution(
-                                        format!("failed to store API key in vault: {}", e)
-                                    ));
+                                    return Err(RegentError::Execution(format!(
+                                        "failed to store API key in vault: {}",
+                                        e
+                                    )));
                                 }
                                 if let Err(e) = vault.save(&self.vault_path) {
-                                    return Err(RegentError::Execution(
-                                        format!("failed to persist vault: {}", e)
-                                    ));
+                                    return Err(RegentError::Execution(format!(
+                                        "failed to persist vault: {}",
+                                        e
+                                    )));
                                 }
                                 new_key_source = Some(zp_regent::config::ApiKeySource::Vault(
-                                    vault_store_path.to_string()
+                                    vault_store_path.to_string(),
                                 ));
-                                info!("self_configure: API key stored in vault at {}", vault_store_path);
+                                info!(
+                                    "self_configure: API key stored in vault at {}",
+                                    vault_store_path
+                                );
                             }
                             Err(e) => {
-                                return Err(RegentError::Execution(
-                                    format!("failed to open vault for API key storage: {}", e)
-                                ));
+                                return Err(RegentError::Execution(format!(
+                                    "failed to open vault for API key storage: {}",
+                                    e
+                                )));
                             }
                         }
                     } else {
                         return Err(RegentError::Execution(
-                            "vault key not available — cannot store API key securely".to_string()
+                            "vault key not available — cannot store API key securely".to_string(),
                         ));
                     }
                 }
@@ -1116,11 +1481,15 @@ impl ServerIntentExecutor {
                 // If key was stored in vault, resolve it into the inference backend.
                 if let Some(zp_regent::config::ApiKeySource::Vault(ref path)) = new_key_source {
                     if let Some(vmk) = self.vault_master_key() {
-                        if let Ok(vault) = zp_trust::CredentialVault::load_or_create(&vmk, &self.vault_path) {
+                        if let Ok(vault) =
+                            zp_trust::CredentialVault::load_or_create(&vmk, &self.vault_path)
+                        {
                             if let Ok(key_bytes) = vault.retrieve(path) {
                                 if let Ok(key_str) = std::str::from_utf8(&key_bytes) {
                                     let mut regent_guard = self.regent.lock().await;
-                                    regent_guard.inference_mut().set_resolved_key(key_str.to_string());
+                                    regent_guard
+                                        .inference_mut()
+                                        .set_resolved_key(key_str.to_string());
                                 }
                             }
                         }
@@ -1144,10 +1513,20 @@ impl ServerIntentExecutor {
                     receipt_event,
                     Some(&format!(
                         "reasoning={} routing={} api_key_source={} via={}",
-                        result["changes"]["reasoning_model"]["to"].as_str().unwrap_or("?"),
-                        result["changes"]["routing_model"]["to"].as_str().unwrap_or("?"),
+                        result["changes"]["reasoning_model"]["to"]
+                            .as_str()
+                            .unwrap_or("?"),
+                        result["changes"]["routing_model"]["to"]
+                            .as_str()
+                            .unwrap_or("?"),
                         key_source_label,
-                        if force { "force_cut" } else if result["status"].as_str() == Some("evaluating") { "shadow_evaluation" } else { "direct" },
+                        if force {
+                            "force_cut"
+                        } else if result["status"].as_str() == Some("evaluating") {
+                            "shadow_evaluation"
+                        } else {
+                            "direct"
+                        },
                     )),
                 );
 
@@ -1172,24 +1551,435 @@ impl ServerIntentExecutor {
                 // narration judgment per SUBSTRATE-SELF-CONSTRUCTION discipline.
                 // Regent authorized to invoke per standing correction
                 // `regent.authority.substrate_validation`.
-                let report = crate::substrate_validate::run_substrate_validation(
-                    &self.audit_store,
-                );
+                let report = crate::substrate_validate::run_substrate_validation(&self.audit_store);
                 Ok(report)
             }
+
+            // ── Phase 1 tools ─────────────────────────────────────────
+            // Per docs/REGENT-PHASE-0-1-DESIGN-2026-07.md.
+            //
+            // Status split (2026-08):
+            //   - `chart_generate`, `report_assemble`, `save_to_artifacts`
+            //     are wired: they appear in REGENT_TOOLS, the gate
+            //     honours them, and these arms dispatch to real
+            //     implementations. chart_generate and report_assemble
+            //     emit `regent:tool:artifact:*` receipts with a blake3
+            //     content hash for anchoring per design doc §1.6.
+            //     save_to_artifacts persists bytes to
+            //     ~/ZeroPoint/artifacts/<hash>.<ext> and emits an
+            //     `artifact:library:candidate` receipt per
+            //     ARTIFACT-LIBRARY-2026-05 candidate lifecycle.
+            //   - `web_search`, `web_fetch`, `image_generate` remain
+            //     scaffold: NOT in REGENT_TOOLS, so the gate blocks any
+            //     attempt. These arms are belt-and-suspenders "gate
+            //     somehow bypassed" failure mode returning a clear
+            //     scaffold error rather than the confusing "unknown
+            //     tool" fallback.
+            "web_search" => Err(crate::regent_tools::not_yet_implemented("web_search")),
+            "web_fetch" => Err(crate::regent_tools::not_yet_implemented("web_fetch")),
+            "image_generate" => Err(crate::regent_tools::not_yet_implemented("image_generate")),
+            "chart_generate" => self.dispatch_chart_generate(params).await,
+            "report_assemble" => self.dispatch_report_assemble(params).await,
+            "save_to_artifacts" => self.dispatch_save_to_artifacts(params).await,
 
             _ => Err(RegentError::Execution(format!("unknown tool: {}", tool))),
         }
     }
+
+    /// Dispatch `chart_generate`: parse params into `ChartSpec`, produce
+    /// a deterministic SVG chart, emit an `artifact` receipt carrying
+    /// the blake3 hash of the SVG so the chain records the exact bytes
+    /// produced. Returns `{ "svg": <string>, "content_hash": <hex>,
+    /// "type": <string> }` to Regent.
+    ///
+    /// Expected params shape (all fields required unless noted):
+    /// ```json
+    /// {
+    ///   "type": "bar" | "line" | "pie",
+    ///   "title": "optional title string",
+    ///   "labels": ["A", "B", "C"],
+    ///   "series": [
+    ///     {"name": "series 1", "values": [10.0, 20.0, 15.0]},
+    ///     ...
+    ///   ]
+    /// }
+    /// ```
+    async fn dispatch_chart_generate(
+        &self,
+        params: &serde_json::Value,
+    ) -> Result<serde_json::Value, RegentError> {
+        let spec = parse_chart_spec(params)?;
+        let svg = crate::regent_tools::generate_chart_html(&spec)?;
+        let hash = blake3::hash(svg.as_bytes()).to_hex().to_string();
+        self.emit_receipt(
+            "regent:tool:artifact:chart_generate",
+            Some(&format!(
+                "hash={}, type={}, bytes={}",
+                hash,
+                spec.chart_type,
+                svg.len()
+            )),
+        );
+        Ok(serde_json::json!({
+            "svg": svg,
+            "content_hash": hash,
+            "type": spec.chart_type,
+        }))
+    }
+
+    /// Dispatch `report_assemble`: parse params into fragments, produce
+    /// a deterministic dark-themed HTML report, emit an `artifact`
+    /// receipt carrying the blake3 hash of the HTML per design doc §1.6
+    /// content-address-anchoring intent. Returns `{ "html": <string>,
+    /// "content_hash": <hex>, "fragment_count": <number> }` to Regent.
+    ///
+    /// Expected params shape:
+    /// ```json
+    /// {
+    ///   "fragments": [
+    ///     {
+    ///       "heading": "optional",
+    ///       "body_html": "<p>content</p>",
+    ///       "chart_svg": "<svg>...</svg>"  // optional; usually the
+    ///                                       // return of chart_generate
+    ///     },
+    ///     ...
+    ///   ]
+    /// }
+    /// ```
+    async fn dispatch_report_assemble(
+        &self,
+        params: &serde_json::Value,
+    ) -> Result<serde_json::Value, RegentError> {
+        let fragments = parse_report_fragments(params)?;
+        let html = crate::regent_tools::assemble_report_html(&fragments)?;
+        let hash = blake3::hash(html.as_bytes()).to_hex().to_string();
+        self.emit_receipt(
+            "regent:tool:artifact:report_assemble",
+            Some(&format!(
+                "hash={}, fragments={}, bytes={}",
+                hash,
+                fragments.len(),
+                html.len()
+            )),
+        );
+        Ok(serde_json::json!({
+            "html": html,
+            "content_hash": hash,
+            "fragment_count": fragments.len(),
+        }))
+    }
+
+    /// Dispatch `save_to_artifacts`: persist bytes under
+    /// `~/ZeroPoint/artifacts/<hash>.<ext>`, emit an
+    /// `artifact:library:candidate` receipt per ARTIFACT-LIBRARY-2026-05
+    /// candidate lifecycle, return the on-disk path plus hash.
+    ///
+    /// Expected params shape:
+    /// ```json
+    /// {
+    ///   "name": "competitive-analysis.html",  // used only for extension
+    ///                                          // and receipt narration;
+    ///                                          // filename is <hash>.<ext>
+    ///   "content_base64": "PGh0bWw+..."       // OR "content" for raw text
+    /// }
+    /// ```
+    /// Exactly one of `content_base64` or `content` must be present.
+    /// `content_base64` is required for any bytes that are not UTF-8
+    /// (images, PDFs); `content` is a convenience for HTML/SVG/text.
+    ///
+    /// Path safety: `name` must be a bare filename (no `/`, no `..`,
+    /// non-empty). The tool rejects anything else — the file always
+    /// lands directly under `~/ZeroPoint/artifacts/`, never in a
+    /// subdirectory or elsewhere on disk.
+    ///
+    /// Idempotency: filename is `<blake3-hash>.<ext>`. Writing the
+    /// same content twice is a no-op-in-effect; the receipt is emitted
+    /// each time so the chain records every call.
+    ///
+    /// Returns `{ "path": "<abs-path>", "content_hash": "<hex>",
+    ///            "bytes": N, "already_existed": true|false }`.
+    async fn dispatch_save_to_artifacts(
+        &self,
+        params: &serde_json::Value,
+    ) -> Result<serde_json::Value, RegentError> {
+        let (name, content) = parse_save_to_artifacts(params)?;
+        validate_artifact_name(&name)?;
+        let hash = blake3::hash(&content).to_hex().to_string();
+
+        // Resolve destination — canonical ZP data root, no raw home lookup.
+        let dir = zp_core::paths::home()
+            .map_err(|e| {
+                RegentError::Execution(format!(
+                    "save_to_artifacts: could not resolve ZeroPoint home: {}",
+                    e
+                ))
+            })?
+            .join("artifacts");
+        std::fs::create_dir_all(&dir).map_err(|e| {
+            RegentError::Execution(format!("save_to_artifacts: mkdir {:?} failed: {}", dir, e))
+        })?;
+
+        // Filename is content-addressed. Extension comes from `name`
+        // (mime hint); falls back to ".bin" if `name` has none.
+        let ext = std::path::Path::new(&name)
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("bin");
+        let filename = format!("{}.{}", hash, ext);
+        let final_path = dir.join(&filename);
+
+        let already_existed = final_path.exists();
+        let bytes_len = content.len();
+
+        if !already_existed {
+            // Atomic write: tempfile in the same dir (same filesystem)
+            // → rename. Avoids partial-write visibility if the process
+            // is killed mid-write.
+            let tmp_path = dir.join(format!("{}.tmp", filename));
+            std::fs::write(&tmp_path, &content).map_err(|e| {
+                RegentError::Execution(format!(
+                    "save_to_artifacts: write to {:?} failed: {}",
+                    tmp_path, e
+                ))
+            })?;
+            std::fs::rename(&tmp_path, &final_path).map_err(|e| {
+                // Best-effort cleanup of the tempfile on rename failure.
+                let _ = std::fs::remove_file(&tmp_path);
+                RegentError::Execution(format!(
+                    "save_to_artifacts: rename {:?} -> {:?} failed: {}",
+                    tmp_path, final_path, e
+                ))
+            })?;
+        }
+
+        // Chain-anchor the candidate. Receipt name follows
+        // ARTIFACT-LIBRARY-2026-05 candidate lifecycle. The summary
+        // carries hash + filename + bytes + suggested-name so an
+        // operator reading the chain can locate the file and know what
+        // Regent claimed it was.
+        self.emit_receipt(
+            "artifact:library:candidate",
+            Some(&format!(
+                "hash={}, filename={}, bytes={}, name={}, already_existed={}",
+                hash, filename, bytes_len, name, already_existed
+            )),
+        );
+
+        Ok(serde_json::json!({
+            "path": final_path.to_string_lossy(),
+            "content_hash": hash,
+            "bytes": bytes_len,
+            "already_existed": already_existed,
+        }))
+    }
+}
+
+// ── Phase 1 tool parameter parsers ──────────────────────────────────────────
+//
+// serde_json → typed spec. Kept in this file so `regent_tools.rs` stays a
+// pure-function module with no JSON-parsing surface. Rejects malformed input
+// with `RegentError::Execution` carrying a message that names the missing
+// or wrong-shaped field, so Regent gets a diagnostic it can act on rather
+// than a bare "expected string" error.
+
+fn parse_chart_spec(
+    params: &serde_json::Value,
+) -> Result<crate::regent_tools::ChartSpec, RegentError> {
+    let chart_type = params
+        .get("type")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            RegentError::Execution(
+                "chart_generate: missing required 'type' string (bar|line|pie)".to_string(),
+            )
+        })?
+        .to_string();
+    let title = params
+        .get("title")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let labels = params
+        .get("labels")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| {
+            RegentError::Execution("chart_generate: missing required 'labels' array".to_string())
+        })?
+        .iter()
+        .map(|v| v.as_str().unwrap_or("").to_string())
+        .collect::<Vec<_>>();
+    let series_raw = params
+        .get("series")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| {
+            RegentError::Execution(
+                "chart_generate: missing required 'series' array (\
+                 [{\"name\":..., \"values\":[...]}])"
+                    .to_string(),
+            )
+        })?;
+    let mut series = Vec::with_capacity(series_raw.len());
+    for (i, entry) in series_raw.iter().enumerate() {
+        let name = entry
+            .get("name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                RegentError::Execution(format!("chart_generate: series[{}] missing 'name'", i))
+            })?
+            .to_string();
+        let values = entry
+            .get("values")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| {
+                RegentError::Execution(format!(
+                    "chart_generate: series[{}] missing 'values' array",
+                    i
+                ))
+            })?
+            .iter()
+            .map(|v| v.as_f64().unwrap_or(0.0))
+            .collect::<Vec<_>>();
+        series.push(crate::regent_tools::ChartSeries { name, values });
+    }
+    Ok(crate::regent_tools::ChartSpec {
+        chart_type,
+        title,
+        labels,
+        series,
+    })
+}
+
+/// Parse `save_to_artifacts` params. Returns (name, content_bytes).
+///
+/// Accepts either `content_base64` (required for non-UTF-8 bytes) or
+/// `content` (convenience for HTML/SVG/text). If both are present,
+/// `content_base64` wins with a diagnostic — a Regent that provides
+/// both is likely confused about which to send, and picking the more
+/// general form (bytes) is the safer default.
+fn parse_save_to_artifacts(params: &serde_json::Value) -> Result<(String, Vec<u8>), RegentError> {
+    let name = params
+        .get("name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            RegentError::Execution(
+                "save_to_artifacts: missing required 'name' string \
+                 (used for extension + receipt narration; filename is <hash>.<ext>)"
+                    .to_string(),
+            )
+        })?
+        .to_string();
+
+    if let Some(b64) = params.get("content_base64").and_then(|v| v.as_str()) {
+        use base64::Engine as _;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(b64)
+            .map_err(|e| {
+                RegentError::Execution(format!(
+                    "save_to_artifacts: 'content_base64' failed to decode: {}",
+                    e
+                ))
+            })?;
+        return Ok((name, bytes));
+    }
+
+    if let Some(text) = params.get("content").and_then(|v| v.as_str()) {
+        return Ok((name, text.as_bytes().to_vec()));
+    }
+
+    Err(RegentError::Execution(
+        "save_to_artifacts: missing content — provide either \
+         'content_base64' (any bytes, base64-encoded) or 'content' \
+         (UTF-8 text like HTML/SVG)"
+            .to_string(),
+    ))
+}
+
+/// Reject anything other than a bare filename. Guards against path
+/// traversal and against wandering out of the artifact directory. The
+/// content-addressed filename is derived downstream; `name` contributes
+/// only extension + receipt narration.
+fn validate_artifact_name(name: &str) -> Result<(), RegentError> {
+    if name.is_empty() {
+        return Err(RegentError::Execution(
+            "save_to_artifacts: 'name' must not be empty".to_string(),
+        ));
+    }
+    if name.contains('/') || name.contains('\\') {
+        return Err(RegentError::Execution(format!(
+            "save_to_artifacts: 'name' must be a bare filename (no path \
+             separators); got {:?}",
+            name
+        )));
+    }
+    if name == "." || name == ".." || name.starts_with('/') {
+        return Err(RegentError::Execution(format!(
+            "save_to_artifacts: 'name' must be a bare filename; got {:?}",
+            name
+        )));
+    }
+    // Reject NUL byte (would truncate the filename on some platforms).
+    if name.contains('\0') {
+        return Err(RegentError::Execution(
+            "save_to_artifacts: 'name' contains NUL byte".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn parse_report_fragments(
+    params: &serde_json::Value,
+) -> Result<Vec<crate::regent_tools::ReportFragment>, RegentError> {
+    let raw = params
+        .get("fragments")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| {
+            RegentError::Execution(
+                "report_assemble: missing required 'fragments' array".to_string(),
+            )
+        })?;
+    let mut out = Vec::with_capacity(raw.len());
+    for (i, entry) in raw.iter().enumerate() {
+        let heading = entry
+            .get("heading")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let body_html = entry
+            .get("body_html")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                RegentError::Execution(format!(
+                    "report_assemble: fragments[{}] missing 'body_html' string",
+                    i
+                ))
+            })?
+            .to_string();
+        let chart_svg = entry
+            .get("chart_svg")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        out.push(crate::regent_tools::ReportFragment {
+            heading,
+            body_html,
+            chart_svg,
+        });
+    }
+    Ok(out)
 }
 
 #[async_trait::async_trait]
 impl IntentExecutor for ServerIntentExecutor {
     async fn execute(&self, intent: &Intent) -> Result<IntentOutcome, RegentError> {
         match intent {
-            Intent::Respond { content, target_surface } => {
+            Intent::Respond {
+                content,
+                target_surface,
+            } => {
                 let surface = target_surface.as_deref().unwrap_or("default");
-                debug!(surface, content_len = content.len(), "regent: delivering response");
+                debug!(
+                    surface,
+                    content_len = content.len(),
+                    "regent: delivering response"
+                );
                 self.emit_receipt(
                     "regent:intent:respond",
                     Some(&format!("surface={}, len={}", surface, content.len())),
@@ -1211,7 +2001,11 @@ impl IntentExecutor for ServerIntentExecutor {
                 Ok(IntentOutcome::Delivered)
             }
 
-            Intent::Delegate { task, capability, constraints: _ } => {
+            Intent::Delegate {
+                task,
+                capability,
+                constraints: _,
+            } => {
                 debug!(
                     task = task.as_str(),
                     capability = capability.as_str(),
@@ -1229,16 +2023,11 @@ impl IntentExecutor for ServerIntentExecutor {
                 debug!(tool = tool.as_str(), "regent: execute intent");
 
                 // 1. Emit intent receipt
-                self.emit_receipt(
-                    "regent:intent:execute",
-                    Some(&format!("tool={}", tool)),
-                );
+                self.emit_receipt("regent:intent:execute", Some(&format!("tool={}", tool)));
 
                 // 2. Evaluate gate
                 let context = zp_core::policy::PolicyContext {
-                    action: ActionType::ToolCall {
-                        name: tool.clone(),
-                    },
+                    action: ActionType::ToolCall { name: tool.clone() },
                     trust_tier: zp_core::policy::TrustTier::Tier2,
                     channel: zp_core::Channel::Api,
                     conversation_id: regent_conv_id(),
@@ -1268,8 +2057,42 @@ impl IntentExecutor for ServerIntentExecutor {
                         PolicyDecision::Block { reason, .. } => reason.clone(),
                         _ => "policy denied".to_string(),
                     };
-                    debug!(tool = tool.as_str(), reason = reason.as_str(), "regent: gate denied tool");
+                    debug!(
+                        tool = tool.as_str(),
+                        reason = reason.as_str(),
+                        "regent: gate denied tool"
+                    );
                     return Ok(IntentOutcome::ToolDenied {
+                        tool: tool.clone(),
+                        reason,
+                    });
+                }
+
+                // 4.5 Approval-required capabilities.
+                //
+                // Checked against the chain rather than a flag, because the
+                // chain is where the signature lives. A granted, dispatchable,
+                // not-yet-enacted approval naming this tool is the authority;
+                // nothing else is. The enactment drain emits
+                // `regent:approval:enacted` immediately after dispatching,
+                // which closes the window.
+                if APPROVAL_REQUIRED_TOOLS.contains(&tool.as_str())
+                    && !self.is_authorised_call(tool, params)
+                {
+                    let reason = format!(
+                        "{tool} requires an operator signature for the specific call. \
+                         Propose it with request_approval, naming the tool and its \
+                         parameters, and it will run once signed."
+                    );
+                    warn!(
+                        tool = tool.as_str(),
+                        "regent: unsigned dispatch of an approval-required tool refused"
+                    );
+                    self.emit_receipt(
+                        "regent:tool:refused:unsigned",
+                        Some(&format!("tool={}", tool)),
+                    );
+                    return Ok(IntentOutcome::ToolRefusedUnsigned {
                         tool: tool.clone(),
                         reason,
                     });
@@ -1291,24 +2114,202 @@ impl IntentExecutor for ServerIntentExecutor {
                 })
             }
 
-            Intent::Remember { key, content: _ } => {
+            Intent::Remember { key, content } => {
                 debug!(key = key.as_str(), "regent: remember intent");
-                self.emit_receipt(
-                    "regent:intent:remember",
-                    Some(&format!("key={}", key)),
+
+                // This arm used to read `content: _`. It emitted a receipt
+                // naming the key and dropped what the Regent was trying to
+                // remember on the floor — so the substrate could not record
+                // anything it was deliberately told, only what it happened to
+                // observe of itself through the receipt pipeline. Asked to
+                // remember an operator's preferred name on 2026-07-31, it
+                // said it had; nothing was stored, and nothing could be.
+                if content.trim().is_empty() {
+                    warn!(
+                        key = key.as_str(),
+                        "regent: remember with empty content — nothing to record"
+                    );
+                    return Ok(IntentOutcome::Observed);
+                }
+
+                // Receipt first, because the memory cites it. A memory entry
+                // whose provenance receipt does not exist is an assertion, not
+                // a record.
+                let receipt_id = {
+                    let event = format!("regent:intent:remember key={key}");
+                    let entry = UnsealedEntry {
+                        actor: regent_actor(),
+                        action: AuditAction::SystemEvent { event },
+                        conversation_id: regent_conv_id(),
+                        policy_decision: PolicyDecision::Allow {
+                            conditions: Vec::new(),
+                        },
+                        policy_module: "regent".to_string(),
+                        receipt: None,
+                    };
+                    let mut store = self
+                        .audit_store
+                        .lock()
+                        .map_err(|e| RegentError::ChainRead(e.to_string()))?;
+                    match store.append(entry) {
+                        Ok(sealed) => sealed.entry_hash,
+                        Err(e) => {
+                            warn!("remember receipt emission failed: {}", e);
+                            return Ok(IntentOutcome::Observed);
+                        }
+                    }
+                };
+
+                // Through the existing door, not a second one.
+                // `register_from_observation` is how every other memory in the
+                // substrate comes into being; routing this through it means
+                // deliberate memory obeys the same lifecycle, expiry and
+                // promotion rules as observed memory, and `memory_list` sees
+                // it without knowing it is different.
+                //
+                // Enters at `Observed`, which carries a 24h expiry. That is
+                // the honest stage: the Regent heard something once. Durability
+                // is earned the same way authority is — by reinforcement, or by
+                // promotion through the review queue to `IdentityBearing`,
+                // which takes an operator signature. A thing said once and
+                // never again is allowed to fade.
+                //
+                // Confidence 0.5: stated, unverified, unreinforced. Not 1.0 —
+                // the operator saying something makes the *observation*
+                // reliable, not the Regent's rendering of it, and this content
+                // is the Regent's paraphrase of what it heard.
+                const REGENT_STATED_CONFIDENCE: f64 = 0.5;
+                let memory_id = {
+                    let mut engine = self.promotion_engine.lock().map_err(|e| {
+                        RegentError::Execution(format!("promotion engine lock: {e}"))
+                    })?;
+                    engine.register_from_observation(
+                        &receipt_id,
+                        content,
+                        key,
+                        REGENT_STATED_CONFIDENCE,
+                        &receipt_id,
+                    )
+                };
+
+                info!(
+                    key = key.as_str(),
+                    memory_id = memory_id.as_str(),
+                    "regent: recorded a memory at Observed"
                 );
-                Ok(IntentOutcome::Observed)
+                self.emit_receipt(
+                    "regent:memory:recorded",
+                    Some(&format!(
+                        "key={key} memory_id={memory_id} stage=Observed receipt={receipt_id}"
+                    )),
+                );
+
+                Ok(IntentOutcome::ToolCompleted {
+                    tool: "remember".to_string(),
+                    output: serde_json::json!({
+                        "recorded": true,
+                        "memory_id": memory_id,
+                        "key": key,
+                        "stage": "Observed",
+                        "provenance_receipt": receipt_id,
+                        "note": "Provisional. Observed-stage memories expire in 24h \
+                                 unless reinforced, and become durable only through \
+                                 promotion — which reaches IdentityBearing on an \
+                                 operator signature.",
+                    }),
+                })
             }
 
-            Intent::RequestApproval { proposed_action, reason } => {
+            Intent::RequestApproval {
+                kind,
+                proposed_action,
+                reason,
+                finding,
+                failed_limb,
+                expected_outcome,
+                draft,
+                enactment,
+            } => {
+                // Already waiting on an answer for this exact call?
+                //
+                // Observed 2026-08-04: four pending proposals carried
+                // `browser_use {"action":"goto_url","url":"https://zeropoint.global"}`
+                // — byte-identical, raised across three days, because asking
+                // again always minted a new one. Seven pending in total, most
+                // of them the same question.
+                //
+                // A duplicate authorises nothing new. Granting one creates
+                // precedent for that context signature and the rest become
+                // redundant while still demanding attention, so the queue
+                // grows monotonically with re-asking. The operator's reading
+                // of that queue is the scarce resource the whole approval
+                // surface runs on.
+                //
+                // Keyed on the context signature rather than the prose,
+                // because the prose is model-authored and varies —
+                // "Approve the use of browser_use to navigate to X" and
+                // "Open X and tell me what's there" are the same act.
+                if let Some(existing) = enactment
+                    .as_ref()
+                    .and_then(|e| self.pending_duplicate_of(e))
+                {
+                    info!(
+                        existing = %zp_regent::text::preview(&existing, 12),
+                        action = proposed_action.as_str(),
+                        "regent: identical proposal already pending — not queueing another"
+                    );
+                    self.emit_receipt(
+                        "regent:proposal:duplicate",
+                        Some(&format!("existing={existing}")),
+                    );
+                    return Ok(IntentOutcome::ApprovalRequested);
+                }
+
                 info!(
                     action = proposed_action.as_str(),
                     reason = reason.as_str(),
-                    "regent: requesting operator approval"
+                    kind = ?kind,
+                    "regent: proposal"
                 );
+
+                // Two terminal states, two receipt families. Per
+                // EXECUTION-AUTHORITY-MODEL Phase 7, proposing an action
+                // asks for authority and proposing a mechanism asks for a
+                // capability; conflating them would put capability
+                // requests through a review path built for one-off
+                // approvals.
+                let detail = format!(
+                    "action={} limb={} finding={} outcome={} draft={}",
+                    proposed_action,
+                    failed_limb.as_deref().unwrap_or("unstated"),
+                    finding.as_deref().unwrap_or("unstated"),
+                    expected_outcome.as_deref().unwrap_or("unstated"),
+                    if draft.is_some() { "yes" } else { "no" },
+                );
+                match kind {
+                    zp_regent::intent::ProposalKind::Action => {
+                        self.emit_receipt("regent:proposal:action", Some(&detail));
+                    }
+                    zp_regent::intent::ProposalKind::Mechanism => {
+                        self.emit_receipt("improvement:proposed", Some(&detail));
+                    }
+                }
+                // Retained: the approval queue keys on this prefix, and it
+                // is what `zp approval list` joins resolutions against.
+                //
+                // JSON tail rather than `action=…` so the enactment travels
+                // *with* the request. Whatever enacts a grant has to find
+                // what it authorises without re-asking a model — the
+                // operator signed a specific call, not a fresh
+                // interpretation of a sentence. `parse_request_tail` reads
+                // both this and the flat form the chain's history holds.
+                let request_tail = serde_json::json!({
+                    "action": proposed_action,
+                    "enact": enactment,
+                });
                 self.emit_receipt(
                     "regent:intent:request_approval",
-                    Some(&format!("action={}", proposed_action)),
+                    Some(&request_tail.to_string()),
                 );
 
                 // Broadcast approval request to cockpit surfaces.
@@ -1329,11 +2330,14 @@ impl IntentExecutor for ServerIntentExecutor {
                 Ok(IntentOutcome::Observed)
             }
 
-            Intent::Escalate { reason, prompt: _, estimated_tokens } => {
+            Intent::Escalate {
+                reason,
+                prompt: _,
+                estimated_tokens,
+            } => {
                 info!(
                     reason = reason.as_str(),
-                    estimated_tokens,
-                    "regent: cloud escalation intent"
+                    estimated_tokens, "regent: cloud escalation intent"
                 );
                 self.emit_receipt(
                     "regent:intent:escalate",
@@ -1347,7 +2351,9 @@ impl IntentExecutor for ServerIntentExecutor {
                 // Continue is handled by the loop runner's arc logic —
                 // it never reaches the executor. If it does, treat as
                 // a no-op observation to avoid panics.
-                debug!("regent: Continue intent reached executor (unexpected); treating as observed");
+                debug!(
+                    "regent: Continue intent reached executor (unexpected); treating as observed"
+                );
                 Ok(IntentOutcome::Observed)
             }
         }
@@ -1366,29 +2372,50 @@ pub struct ServerRegentConfig {
     pub routing_model: String,
     pub loop_interval_secs: u64,
     pub display_name: String,
+    /// Signer for requests to this server's own gate, taken from `AppState`.
+    ///
+    /// `None` pre-Genesis. Carried through `ServerRegentConfig` rather than as
+    /// a separate `spawn_regent` argument because it originates in server
+    /// config assembly like every other field here — but it stops at
+    /// `RegentConfig`, which is serde-derived and has no business holding a
+    /// live capability. From here it goes to the inference backends directly.
+    pub gate_signer: Option<std::sync::Arc<dyn zp_core::provider::RequestSigner>>,
+    /// The substrate's own proxy base — e.g. `http://127.0.0.1:17010`, no
+    /// path (W5 3c). Computed at the `ServerRegentConfig` construction site
+    /// in `lib.rs` from `ServerConfig::port`, which by then reflects
+    /// whatever the operator's `--port`/env/config actually resolved to —
+    /// not a schema default that could drift from it. Carried the same way
+    /// as `gate_signer`: it goes straight to both `InferenceBackend::new`
+    /// call sites, never onto `RegentConfig`.
+    pub proxy_base: String,
 }
 
-impl Default for ServerRegentConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            inference_endpoint: "http://127.0.0.1:11434".to_string(),
-            inference_api_key: None,
-            reasoning_model: "qwen3:8b".to_string(),
-            routing_model: "qwen3:1.7b".to_string(),
-            loop_interval_secs: 60,
-            display_name: "Regent".to_string(),
-        }
-    }
-}
+// `impl Default for ServerRegentConfig` removed 2026-09-01 (HARNESS-SEAM S4
+// unification): it was dead code (zero callers -- the struct is always
+// populated via the one real construction site in `zp-server/src/lib.rs`,
+// which derives `reasoning_model`/`routing_model` from `ServerConfig`,
+// itself derived from `ZpConfig`'s sole `Sourced::default_value`
+// declaration) and its removal eliminates a fourth, independently
+// hardcoded copy of the same two model-name literals.
 
 /// Spawn the Regent cognitive loop if enabled. Returns the handle.
+// Eight: `ServerRegentConfig` already absorbs the configuration; what remains
+// are the live handles the spawned task needs, which a config struct cannot
+// hold.
+#[allow(clippy::too_many_arguments)]
 pub async fn spawn_regent(
     config: ServerRegentConfig,
     audit_store: Arc<std::sync::Mutex<AuditStore>>,
     gate: Arc<GovernanceGate>,
     event_tx: tokio::sync::broadcast::Sender<crate::events::EventStreamItem>,
     data_dir: &str,
+    // Resolved path to the ontology the Cartographer writes. Passed in rather
+    // than derived here: the parameter above is called `data_dir` and lib.rs
+    // populates it with `config.home_dir`, which is a different directory.
+    // Deriving the path from it produced an empty database beside the real
+    // one and a consumer that read nothing, with no error on either side.
+    // Both now call `cartographer::ontology_db_path` on the same field.
+    ontology_db_path: std::path::PathBuf,
     promotion_engine: Arc<std::sync::Mutex<zp_memory::PromotionEngine>>,
     review_queue: Option<Arc<std::sync::Mutex<zp_memory::ReviewQueue>>>,
     vault_key: Arc<std::sync::OnceLock<Option<zp_keys::ResolvedVaultKey>>>,
@@ -1405,10 +2432,37 @@ pub async fn spawn_regent(
     // Convert raw API key from config.toml to ApiKeySource.
     // If vault is available, migrate the key to vault immediately.
     // Otherwise, use RawLegacy (transition path — key in memory).
-    // Note: vault_key may not be resolved yet (background keychain thread).
-    // We wait briefly here since this is a one-time migration path.
+    //
+    // ── No wait, and nothing to wait for, 2026-08-06 ──────────────────
+    //
+    // This block previously carried the comment "we wait briefly here since
+    // this is a one-time migration path" above a closure that did not wait, and
+    // read an `OnceLock` that `AppState::init` populated from a background
+    // thread. `spawn_regent` runs immediately after `init`, so all four
+    // `resolve_vmk()` call sites below lost that race on every boot and took
+    // the legacy branch.
+    //
+    // The consequence was not a slow migration — it was no migration, ever.
+    // `~/ZeroPoint/vault.json` did not exist on a substrate that had been
+    // running for months, the operator's cloud-inference credential lived in
+    // `config.toml` as plaintext, and `ApiKeySource::RawLegacy` — documented as
+    // a transition path — was the permanent steady state. The vault was
+    // complete and correct the whole time: ChaCha20-Poly1305, per-tier derived
+    // keys, `store_tiered`, `save`. Built, and orphaned by startup ordering.
+    //
+    // The first fix here was a bounded poll with a timeout. That is the same
+    // race with a longer fuse: a magic number, a silent fallback when it
+    // expires, and every consumer still coping with "not yet". It was replaced
+    // by resolving the key synchronously in `AppState::init`, which is correct
+    // because `resolve_vault_key` reads the credential store only through
+    // `load_sovereign_root`'s process-scoped cache — already warmed by the boot
+    // ceremony — so it costs a cache read and a KDF.
+    //
+    // `init` therefore returns fully-formed state, and this read is populated
+    // by construction. There is no race left to lose.
     let resolve_vmk = || -> Option<[u8; 32]> {
-        vault_key.get()
+        vault_key
+            .get()
             .and_then(|k| k.as_ref())
             .map(|resolved| *resolved.key)
     };
@@ -1429,12 +2483,18 @@ pub async fn spawn_regent(
                         warn!("failed to persist vault after API key migration: {} — using in-memory fallback", e);
                         zp_regent::config::ApiKeySource::RawLegacy(raw_key)
                     } else {
-                        info!("migrated regent API key from config.toml to vault at {}", vault_store_path);
+                        info!(
+                            "migrated regent API key from config.toml to vault at {}",
+                            vault_store_path
+                        );
                         zp_regent::config::ApiKeySource::Vault(vault_store_path.to_string())
                     }
                 }
                 Err(e) => {
-                    warn!("failed to open vault for API key migration: {} — using in-memory fallback", e);
+                    warn!(
+                        "failed to open vault for API key migration: {} — using in-memory fallback",
+                        e
+                    );
                     zp_regent::config::ApiKeySource::RawLegacy(raw_key)
                 }
             }
@@ -1451,7 +2511,10 @@ pub async fn spawn_regent(
             match zp_trust::CredentialVault::load_or_create(&vmk, &vault_path) {
                 Ok(vault) => match vault.retrieve(vault_store_path) {
                     Ok(_) => {
-                        info!("found existing regent API key in vault at {} — using vault source", vault_store_path);
+                        info!(
+                            "found existing regent API key in vault at {} — using vault source",
+                            vault_store_path
+                        );
                         zp_regent::config::ApiKeySource::Vault(vault_store_path.to_string())
                     }
                     Err(_) => {
@@ -1466,12 +2529,73 @@ pub async fn spawn_regent(
         }
     };
 
+    // Env overrides for the two model tiers.
+    //
+    // The routing tier is the substrate's least examined and most
+    // consequential component: a 1.7b classifier picking one of six intents
+    // from a long prompt, upstream of every guard. Across 2026-08-01..04 it
+    // proposed a standing correction for a memory, chose `remember` for a
+    // question, invented a `self_configure` parameter, reached for a browser
+    // mid-chain-compaction, and never once selected `request_approval` on its
+    // own. Nearly every downstream defect traced back to it.
+    //
+    // `reason()` already collapses to a single call when the two models
+    // match, so setting ZP_REGENT_ROUTING_MODEL equal to the reasoning model
+    // puts the larger model in charge of intent selection with no code
+    // change. That makes the hypothesis testable in one restart and
+    // reversible in another, which is worth more than an argument about it.
+    // The ZpConfig-derived authority, cloned before the env-var override
+    // below is applied. Passed to `Regent::new` as `default_config` --
+    // HARNESS-SEAM S4 unification (2026-09-01): the sole declarant for
+    // these two models is zp_config::ZpConfig's Sourced::default_value in
+    // schema.rs; everything from here down, including the
+    // ZP_REGENT_REASONING_MODEL/ZP_REGENT_ROUTING_MODEL env override, is a
+    // deviation from that authority that `Regent::new`'s pin-detection
+    // logic should be able to see.
+    let default_config = RegentConfig {
+        enabled: true,
+        inference_endpoint: config.inference_endpoint.clone(),
+        api_key_source: api_key_source.clone(),
+        reasoning_model: config.reasoning_model.clone(),
+        routing_model: config.routing_model.clone(),
+        max_context_tokens: 8192,
+        loop_interval_secs: config.loop_interval_secs,
+        cloud_mandate: None,
+        display_name: config.display_name.clone(),
+    };
+
+    let reasoning_model = std::env::var("ZP_REGENT_REASONING_MODEL")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or(config.reasoning_model);
+    let routing_model = std::env::var("ZP_REGENT_ROUTING_MODEL")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or(config.routing_model);
+    if routing_model == reasoning_model {
+        info!(
+            model = routing_model.as_str(),
+            "regent: single-tier inference — one model for routing and composition"
+        );
+    } else {
+        info!(
+            routing = routing_model.as_str(),
+            reasoning = reasoning_model.as_str(),
+            "regent: two-tier inference"
+        );
+    }
+
+    // Both backends below need these, and `config` is partially moved by the
+    // `RegentConfig` literal that follows.
+    let gate_signer = config.gate_signer.clone();
+    let proxy_base = config.proxy_base.clone();
+
     let regent_config = RegentConfig {
         enabled: true,
         inference_endpoint: config.inference_endpoint,
         api_key_source: api_key_source.clone(),
-        reasoning_model: config.reasoning_model,
-        routing_model: config.routing_model,
+        reasoning_model,
+        routing_model,
         max_context_tokens: 8192,
         loop_interval_secs: config.loop_interval_secs,
         cloud_mandate: None,
@@ -1479,7 +2603,8 @@ pub async fn spawn_regent(
     };
 
     let data_path = std::path::Path::new(data_dir);
-    let mut inference_backend = InferenceBackend::new(&regent_config);
+    let mut inference_backend =
+        InferenceBackend::new(&regent_config, gate_signer.clone(), proxy_base.clone());
 
     // If key is in vault, resolve it now and inject into the backend.
     if let zp_regent::config::ApiKeySource::Vault(ref path) = api_key_source {
@@ -1521,7 +2646,7 @@ pub async fn spawn_regent(
         None => ("unknown".to_string(), "00000000".to_string()),
     };
 
-    let mut regent = Regent::new(regent_config, data_path, sovereign);
+    let mut regent = Regent::new(regent_config, default_config, data_path, sovereign, gate_signer, proxy_base);
 
     // Inject the vault-resolved key into the Regent's OWN InferenceBackend.
     // (spawn_regent also creates a separate backend for ServerIntentExecutor —
@@ -1566,8 +2691,57 @@ pub async fn spawn_regent(
         .and_then(|p| p.parent())
         .map(|root| root.join("models"))
         .unwrap_or_else(|| data_path.join("models"));
-    let dossier_corpus = Arc::new(zp_regent::routing::DossierCorpus::load_from_dir(&models_dir));
+    let dossier_corpus = Arc::new(zp_regent::routing::DossierCorpus::load_from_dir(
+        &models_dir,
+    ));
+
+    // Extract H3 entropy baselines from the corpus for the emission
+    // analyzer. Dossiers without a calibrated `[entropy_baseline]` are
+    // silently skipped: H3 (token-entropy anomaly) simply doesn't fire
+    // for models whose baselines aren't measured yet. See
+    // docs/design/REGENT-DOOM-LOOP-DETECTION-2026-07.md §Heuristic 3.
+    let entropy_baselines = dossier_corpus.entropy_baselines();
+    info!(
+        h3_baselines = entropy_baselines.len(),
+        dossiers_scanned = dossier_corpus.dossiers.len(),
+        "H3 entropy-baseline scan complete"
+    );
+
     regent.set_dossier_corpus(dossier_corpus);
+
+    // ── Attach the ontology read handle ──────────────────────────────────
+    //
+    // The consumer half of S2. Attached unconditionally, and deliberately not
+    // gated on `cartographer_enabled`: the ordering the producer-consumer rule
+    // asks for is consumer first, exercised, *then* producer. Gating this on
+    // the producer would invert that and mean the read path first runs on the
+    // same day the write path does, with no cycle in between that proves the
+    // Regent composes correctly against an empty store.
+    //
+    // With the Cartographer off, ontology.db has no trajectory rows, the read
+    // returns None every cycle, and the composed prompt is byte-identical to
+    // one composed with no handle at all. Opening the store creates the file
+    // and its schema, which is the same thing the Cartographer's own open
+    // does, so this does not commit the substrate to anything it was not
+    // already going to do the moment the producer is enabled.
+    //
+    // A failure to open is a warning, not a startup failure. The Regent
+    // reasons without the ontology today and must keep being able to.
+    match zp_ontology::store::OntologyStore::open(&ontology_db_path) {
+        Ok(store) => {
+            regent.attach_ontology(Arc::new(store));
+            info!(
+                path = %ontology_db_path.display(),
+                exists = ontology_db_path.exists(),
+                "Regent attached ontology read handle (consumer for L4)"
+            );
+        }
+        Err(e) => warn!(
+            path = %ontology_db_path.display(),
+            error = %e,
+            "Regent could not open the ontology store; composing without it"
+        ),
+    }
 
     // Reconstitute operator pin from chain — chain supersedes config.toml.
     // Scan recent entries for the most recent regent:config:inference* receipt.
@@ -1602,7 +2776,8 @@ pub async fn spawn_regent(
                             } else if event.starts_with("regent:config:inference:shadow_start") {
                                 // Shadow was in progress when ZP shut down.
                                 // Re-enter evaluating state — battery will re-run.
-                                let candidate = reasoning.as_deref()
+                                let candidate = reasoning
+                                    .as_deref()
                                     .filter(|m| *m != "auto" && *m != "?")
                                     .unwrap_or("unknown")
                                     .to_string();
@@ -1610,7 +2785,8 @@ pub async fn spawn_regent(
                                 regent.set_shadow_evaluating(
                                     candidate.clone(),
                                     active,
-                                    routing.as_ref()
+                                    routing
+                                        .as_ref()
                                         .filter(|m| *m != "auto" && *m != "?")
                                         .cloned(),
                                 );
@@ -1621,9 +2797,8 @@ pub async fn spawn_regent(
                             } else if event.starts_with("regent:config:inference:shadow_rejected") {
                                 // Shadow was rejected. Set rejected state so the
                                 // Regent can surface findings on first interaction.
-                                let candidate = reasoning.as_deref()
-                                    .unwrap_or("unknown")
-                                    .to_string();
+                                let candidate =
+                                    reasoning.as_deref().unwrap_or("unknown").to_string();
                                 regent.set_shadow_rejected(
                                     candidate.clone(),
                                     "shadow validation failed (see prior receipts)".to_string(),
@@ -1682,38 +2857,38 @@ pub async fn spawn_regent(
         if let Ok(store) = audit_store.lock() {
             if let Ok(entries) = store.recent_entries(500) {
                 found = entries.iter().rev().find_map(|entry| {
-                let zp_core::AuditAction::SystemEvent { ref event } = entry.action else {
-                    return None;
-                };
-                if !event.starts_with("regent:awareness:session_profile") {
-                    return None;
-                }
-                let mut cycles = 0u64;
-                let mut samples = 0usize;
-                let mut mem_delta = 0f64;
-                let mut mem_rising = false;
-                let mut models = 0i64;
-                let mut tasks = 0i64;
-                for part in event.split_whitespace() {
-                    if let Some(v) = part.strip_prefix("cycles=") {
-                        cycles = v.parse().unwrap_or(0);
-                    } else if let Some(v) = part.strip_prefix("samples=") {
-                        samples = v.parse().unwrap_or(0);
-                    } else if let Some(v) = part.strip_prefix("mem_delta=") {
-                        mem_delta = v.parse().unwrap_or(0.0);
-                    } else if let Some(v) = part.strip_prefix("mem_rising=") {
-                        mem_rising = v == "true";
-                    } else if let Some(v) = part.strip_prefix("models=") {
-                        models = v.parse().unwrap_or(0);
-                    } else if let Some(v) = part.strip_prefix("tasks=") {
-                        tasks = v.parse().unwrap_or(0);
+                    let zp_core::AuditAction::SystemEvent { ref event } = entry.action else {
+                        return None;
+                    };
+                    if !event.starts_with("regent:awareness:session_profile") {
+                        return None;
                     }
-                }
-                // A profile with no samples parsed is a malformed receipt,
-                // not a short session — do not seed from it.
-                if samples == 0 {
-                    return None;
-                }
+                    let mut cycles = 0u64;
+                    let mut samples = 0usize;
+                    let mut mem_delta = 0f64;
+                    let mut mem_rising = false;
+                    let mut models = 0i64;
+                    let mut tasks = 0i64;
+                    for part in event.split_whitespace() {
+                        if let Some(v) = part.strip_prefix("cycles=") {
+                            cycles = v.parse().unwrap_or(0);
+                        } else if let Some(v) = part.strip_prefix("samples=") {
+                            samples = v.parse().unwrap_or(0);
+                        } else if let Some(v) = part.strip_prefix("mem_delta=") {
+                            mem_delta = v.parse().unwrap_or(0.0);
+                        } else if let Some(v) = part.strip_prefix("mem_rising=") {
+                            mem_rising = v == "true";
+                        } else if let Some(v) = part.strip_prefix("models=") {
+                            models = v.parse().unwrap_or(0);
+                        } else if let Some(v) = part.strip_prefix("tasks=") {
+                            tasks = v.parse().unwrap_or(0);
+                        }
+                    }
+                    // A profile with no samples parsed is a malformed receipt,
+                    // not a short session — do not seed from it.
+                    if samples == 0 {
+                        return None;
+                    }
                     Some(zp_regent::context::SessionProfile {
                         cycles,
                         samples,
@@ -1756,14 +2931,40 @@ pub async fn spawn_regent(
     // Emit a scoped CapabilityGrant for the Regent's Phase 0 tools.
     // The gate checks this grant when evaluating regent tool calls.
     {
-        let _grant = CapabilityGrant::new(
-            "genesis".to_string(),                   // grantor: substrate itself
-            "regent".to_string(),                     // grantee: regent actor
+        let tools: Vec<String> = REGENT_TOOLS.iter().map(|t| t.name.to_string()).collect();
+        let grant = CapabilityGrant::new(
+            "genesis".to_string(), // grantor: substrate itself
+            "regent".to_string(),  // grantee: regent actor
             GrantedCapability::ToolCall {
-                tools: REGENT_TOOLS.iter().map(|(c, _)| c.to_string()).collect(),
+                tools: tools.clone(),
             },
             format!("rcpt-regent-startup-{}", Uuid::now_v7()),
         );
+
+        // The grant was previously bound to `_grant` and dropped: every field
+        // below existed here and went on the floor, while the comment under it
+        // claimed a delegation receipt was emitted and the entry carried
+        // `receipt: None`. `zp_audit::RecoveryEngine` reads exactly these three
+        // extension keys to rebuild in-flight grants after a restart, so
+        // forward-only recovery has never been able to see this delegation —
+        // measured 2026-08-09: 94 `delegation:granted:regent` entries, zero
+        // carrying a receipt. See docs/design/CHANNEL-BOUNDARY-2026-08.md.
+        //
+        // Not separately signed, and that is deliberate rather than an omission:
+        // `spawn_regent` holds no receipt signing key, `compute_entry_hash`
+        // covers the `receipt` field, and `AuditStore::append` signs the entry.
+        // The receipt is therefore tamper-evident within the chain. Per the
+        // channel boundary, this claim exists to be reconstituted locally, not
+        // to travel — a receipt that leaves the machine would need its own
+        // signature.
+        // Built by the shared helper rather than inline, and that is the whole
+        // point: `zp_core::capability_grant_receipt` is what the round-trip test
+        // in `zp-audit` exercises against the real `RecoveryEngine`. A producer
+        // that assembles the receipt itself is untested by construction — which
+        // is precisely the shape of defect this arc exists to remove, and it was
+        // briefly reintroduced here before being caught.
+        let scope = format!("tool:call:{}", tools.join(","));
+        let delegation_receipt = zp_core::capability_grant_receipt(&grant, &scope);
 
         // Emit delegation receipt on the chain.
         let entry = UnsealedEntry {
@@ -1776,7 +2977,7 @@ pub async fn spawn_regent(
                 conditions: Vec::new(),
             },
             policy_module: "regent-startup".to_string(),
-            receipt: None,
+            receipt: Some(delegation_receipt),
         };
 
         if let Ok(mut store) = audit_store.lock() {
@@ -1829,13 +3030,31 @@ pub async fn spawn_regent(
     // list; see REGENT_TOOLS for the drift that motivated collapsing them.
     let delegations: Vec<zp_regent::context::DelegationSummary> = REGENT_TOOLS
         .iter()
-        .map(|(capability, scope)| zp_regent::context::DelegationSummary {
-            capability: capability.to_string(),
-            scope: scope.to_string(),
-            granted_at: chrono::Utc::now(),
-            expires_at: None,
+        .map(|tool| {
+            let (capability, scope) = (tool.name, tool.scope);
+            let (required, optional) = TOOL_PARAMS
+                .iter()
+                .find(|(t, _, _)| *t == capability)
+                .map(|(_, r, o)| (*r, *o))
+                .unwrap_or((&[], &[]));
+            zp_regent::context::DelegationSummary {
+                capability: capability.to_string(),
+                scope: scope.to_string(),
+                granted_at: chrono::Utc::now(),
+                expires_at: None,
+                required_params: required.iter().map(|s| s.to_string()).collect(),
+                optional_params: optional.iter().map(|s| s.to_string()).collect(),
+            }
         })
         .collect();
+
+    // Inference-observer tail — reads DFlash observation JSONL events
+    // (from scripts/dflash-observation-emitter.py) and appends each event
+    // as a SystemEvent under the inference-observer conversation namespace.
+    // See OBSERVATION-PLANE-2026-07 §"Inference telemetry" (Surface 7) and
+    // MODEL-DOSSIER-2026-07 §"Continuous drift signal". Tolerates missing
+    // observation file (emitter not running); retries every 60s.
+    spawn_inference_observer_tail(audit_store.clone());
 
     let handle = zp_regent::loop_runner::start_loop(
         regent,
@@ -1848,8 +3067,176 @@ pub async fn spawn_regent(
         operator_name,
         genesis_prefix,
         delegations,
+        entropy_baselines,
     );
 
     info!("Regent cognitive loop started (models preloaded)");
     Some(handle)
+}
+
+#[cfg(test)]
+mod phase1_dispatch_tests {
+    use super::*;
+
+    #[test]
+    fn parse_chart_spec_valid_bar() {
+        let params = serde_json::json!({
+            "type": "bar",
+            "title": "Q3",
+            "labels": ["A", "B"],
+            "series": [{"name": "s1", "values": [1.0, 2.0]}]
+        });
+        let spec = parse_chart_spec(&params).unwrap();
+        assert_eq!(spec.chart_type, "bar");
+        assert_eq!(spec.title.as_deref(), Some("Q3"));
+        assert_eq!(spec.labels, vec!["A".to_string(), "B".to_string()]);
+        assert_eq!(spec.series.len(), 1);
+        assert_eq!(spec.series[0].values, vec![1.0, 2.0]);
+    }
+
+    #[test]
+    fn parse_chart_spec_missing_type() {
+        let params = serde_json::json!({
+            "labels": ["A"],
+            "series": [{"name": "s", "values": [1.0]}]
+        });
+        let err = parse_chart_spec(&params).unwrap_err();
+        assert!(err.to_string().contains("'type'"));
+    }
+
+    #[test]
+    fn parse_chart_spec_missing_series_name() {
+        let params = serde_json::json!({
+            "type": "bar",
+            "labels": ["A"],
+            "series": [{"values": [1.0]}]
+        });
+        let err = parse_chart_spec(&params).unwrap_err();
+        assert!(err.to_string().contains("series[0]"));
+        assert!(err.to_string().contains("'name'"));
+    }
+
+    #[test]
+    fn parse_report_fragments_valid() {
+        let params = serde_json::json!({
+            "fragments": [
+                {"heading": "H", "body_html": "<p>b</p>"},
+                {"body_html": "<p>c</p>", "chart_svg": "<svg/>"}
+            ]
+        });
+        let frags = parse_report_fragments(&params).unwrap();
+        assert_eq!(frags.len(), 2);
+        assert_eq!(frags[0].heading.as_deref(), Some("H"));
+        assert!(frags[1].heading.is_none());
+        assert_eq!(frags[1].chart_svg.as_deref(), Some("<svg/>"));
+    }
+
+    #[test]
+    fn parse_report_fragments_missing_body_html() {
+        let params = serde_json::json!({
+            "fragments": [{"heading": "H"}]
+        });
+        let err = parse_report_fragments(&params).unwrap_err();
+        assert!(err.to_string().contains("body_html"));
+    }
+
+    #[test]
+    fn parse_report_fragments_missing_fragments_array() {
+        let params = serde_json::json!({});
+        let err = parse_report_fragments(&params).unwrap_err();
+        assert!(err.to_string().contains("fragments"));
+    }
+
+    // ── save_to_artifacts parser + validator ───────────────────────────
+
+    #[test]
+    fn parse_save_to_artifacts_accepts_content_text() {
+        let params = serde_json::json!({
+            "name": "report.html",
+            "content": "<p>hi</p>",
+        });
+        let (name, bytes) = parse_save_to_artifacts(&params).unwrap();
+        assert_eq!(name, "report.html");
+        assert_eq!(bytes, b"<p>hi</p>");
+    }
+
+    #[test]
+    fn parse_save_to_artifacts_accepts_content_base64() {
+        // Base64 of "hello"
+        let params = serde_json::json!({
+            "name": "test.bin",
+            "content_base64": "aGVsbG8=",
+        });
+        let (name, bytes) = parse_save_to_artifacts(&params).unwrap();
+        assert_eq!(name, "test.bin");
+        assert_eq!(bytes, b"hello");
+    }
+
+    #[test]
+    fn parse_save_to_artifacts_base64_wins_over_content_when_both_present() {
+        // If Regent sends both, prefer bytes (safer default).
+        let params = serde_json::json!({
+            "name": "test.bin",
+            "content_base64": "aGVsbG8=",  // "hello"
+            "content": "goodbye",
+        });
+        let (_, bytes) = parse_save_to_artifacts(&params).unwrap();
+        assert_eq!(bytes, b"hello");
+    }
+
+    #[test]
+    fn parse_save_to_artifacts_missing_name() {
+        let params = serde_json::json!({"content": "x"});
+        let err = parse_save_to_artifacts(&params).unwrap_err();
+        assert!(err.to_string().contains("'name'"));
+    }
+
+    #[test]
+    fn parse_save_to_artifacts_missing_content() {
+        let params = serde_json::json!({"name": "x.html"});
+        let err = parse_save_to_artifacts(&params).unwrap_err();
+        assert!(err.to_string().contains("missing content"));
+    }
+
+    #[test]
+    fn parse_save_to_artifacts_bad_base64() {
+        let params = serde_json::json!({
+            "name": "test.bin",
+            "content_base64": "not_valid_base64!!!",
+        });
+        let err = parse_save_to_artifacts(&params).unwrap_err();
+        assert!(err.to_string().contains("failed to decode"));
+    }
+
+    #[test]
+    fn validate_artifact_name_accepts_plain_filenames() {
+        assert!(validate_artifact_name("report.html").is_ok());
+        assert!(validate_artifact_name("chart.svg").is_ok());
+        assert!(validate_artifact_name("data.bin").is_ok());
+        assert!(validate_artifact_name("no-extension").is_ok());
+        assert!(validate_artifact_name("with_underscore.txt").is_ok());
+    }
+
+    #[test]
+    fn validate_artifact_name_rejects_path_separators() {
+        assert!(validate_artifact_name("sub/file.html").is_err());
+        assert!(validate_artifact_name("windows\\file.html").is_err());
+    }
+
+    #[test]
+    fn validate_artifact_name_rejects_traversal() {
+        assert!(validate_artifact_name("..").is_err());
+        assert!(validate_artifact_name(".").is_err());
+        assert!(validate_artifact_name("/etc/passwd").is_err());
+    }
+
+    #[test]
+    fn validate_artifact_name_rejects_empty() {
+        assert!(validate_artifact_name("").is_err());
+    }
+
+    #[test]
+    fn validate_artifact_name_rejects_nul_byte() {
+        assert!(validate_artifact_name("file\0.html").is_err());
+    }
 }

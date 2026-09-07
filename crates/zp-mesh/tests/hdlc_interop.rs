@@ -25,32 +25,26 @@ use zp_mesh::tcp::{hdlc_frame, HdlcDecoder};
 // =============================================================================
 
 fn generate_test_vectors() -> Vec<Vec<u8>> {
-    let mut vectors: Vec<Vec<u8>> = Vec::new();
-
-    // 1. Simple ASCII — no escaping needed
-    vectors.push(b"hello reticulum".to_vec());
-
-    // 2. Contains FLAG byte (0x7E) — must be escaped
-    vectors.push(vec![0x01, 0x02, 0x7E, 0x03, 0x04]);
-
-    // 3. Contains ESC byte (0x7D) — must be escaped
-    vectors.push(vec![0x10, 0x7D, 0x20, 0x30]);
-
-    // 4. Contains BOTH FLAG and ESC — double trouble
-    vectors.push(vec![0x7E, 0x7D, 0x7E, 0x7D]);
-
-    // 5. All special bytes consecutively
-    vectors.push(vec![0x7E, 0x7E, 0x7E, 0x7D, 0x7D, 0x7D]);
-
-    // 6. Bytes that look like escaped sequences but aren't
-    //    0x5E = FLAG ^ ESC_MASK, 0x5D = ESC ^ ESC_MASK
-    vectors.push(vec![0x5E, 0x5D, 0x5E, 0x5D]);
-
-    // 7. All 256 byte values (comprehensive)
-    vectors.push((0..=255u8).collect());
-
-    // 8. Empty-ish — single byte
-    vectors.push(vec![0x42]);
+    // Vectors 1-8 are literals; 9 onward are computed and pushed below.
+    let mut vectors: Vec<Vec<u8>> = vec![
+        // 1. Simple ASCII — no escaping needed
+        b"hello reticulum".to_vec(),
+        // 2. Contains FLAG byte (0x7E) — must be escaped
+        vec![0x01, 0x02, 0x7E, 0x03, 0x04],
+        // 3. Contains ESC byte (0x7D) — must be escaped
+        vec![0x10, 0x7D, 0x20, 0x30],
+        // 4. Contains BOTH FLAG and ESC — double trouble
+        vec![0x7E, 0x7D, 0x7E, 0x7D],
+        // 5. All special bytes consecutively
+        vec![0x7E, 0x7E, 0x7E, 0x7D, 0x7D, 0x7D],
+        // 6. Bytes that look like escaped sequences but aren't
+        //    0x5E = FLAG ^ ESC_MASK, 0x5D = ESC ^ ESC_MASK
+        vec![0x5E, 0x5D, 0x5E, 0x5D],
+        // 7. All 256 byte values (comprehensive)
+        (0..=255u8).collect(),
+        // 8. Empty-ish — single byte
+        vec![0x42],
+    ];
 
     // 9. Reticulum-realistic: simulated packet header + payload
     let header = vec![0b00000000u8, 0x07];
@@ -85,7 +79,7 @@ fn generate_test_vectors() -> Vec<Vec<u8>> {
     for i in 0u32..500 {
         let mut hasher = Sha256::new();
         hasher.update(b"interop-mtu-vector");
-        hasher.update(&i.to_le_bytes());
+        hasher.update(i.to_le_bytes());
         let hash = hasher.finalize();
         mtu_data.push(hash[0]);
     }

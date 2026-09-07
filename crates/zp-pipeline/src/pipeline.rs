@@ -14,7 +14,6 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 use execution_engine::{ExecutionEngine, ExecutionRequest as ExecRequest, Runtime};
-use zp_host::HostContext;
 use zp_audit::{AuditStore, UnsealedEntry};
 use zp_core::policy::PolicyContext;
 use zp_core::{
@@ -22,6 +21,7 @@ use zp_core::{
     MessageRole, OperatorIdentity, Outcome, PolicyDecision, ReceiptAction, ReceiptStatus, Request,
     Response, ToolCall, ToolResult,
 };
+use zp_host::HostContext;
 use zp_learning::EpisodeStore;
 use zp_llm::{ChatMessage, CompletionRequest, PromptBuilder, ProviderPool};
 use zp_mesh::envelope::EnvelopeType;
@@ -29,18 +29,55 @@ use zp_mesh::identity::MeshIdentity;
 use zp_mesh::runtime::{MeshRuntime, RuntimeConfig};
 use zp_mesh::transport::MeshNode;
 use zp_policy::PolicyEngine;
-use zp_skills::{SkillMatcher, SkillRegistry};
+// zp-skills removed 2026-08-10: SkillMatcher selected capabilities by
+// fuzzy-matching request prose, making an authority decision by string
+// similarity. Capabilities now come from the policy context alone.
 
 /// Maximum tool invocation iterations before forcing a final response.
 const MAX_TOOL_ITERATIONS: usize = 10;
+
+/// Build the diagnostic for a failed provider selection.
+///
+/// HARNESS-SEAM-2026-08 §4 invariant — *no verb silently degrades*: a crossing
+/// that failed must produce the same diagnostic wherever it is first depended
+/// upon. The server refuses to boot, because its point of use is process start.
+/// The CLI reaches this instead, because its point of use is the verb. Same
+/// rule, different moment; the text must not differ.
+///
+/// The message is derived from observed pool state rather than from remembered
+/// configuration, so it cannot drift away from what is actually true.
+fn no_provider_diagnostic(pool: &ProviderPool, cause: &str) -> String {
+    if pool.is_empty() {
+        "provider pool is empty — the model-election crossing was never made. \
+         If llm.enabled is true this is a half-state, not a degraded mode: the \
+         substrate is configured to think and cannot. Run `zp config show` and \
+         check llm.provider / llm.model, confirm the model is installed on the \
+         backend, or set llm.enabled = false to run without inference. \
+         (HARNESS-SEAM-2026-08 S3)"
+            .to_string()
+    } else {
+        let ids: Vec<String> = pool.provider_ids().iter().map(|i| i.0.clone()).collect();
+        format!(
+            "no provider in the pool satisfies the requested model class. \
+             Pool holds: [{}]. Underlying cause: {}. Note that a single-tier pool \
+             cannot satisfy RequireStrong by design — set llm.escalation_model to \
+             register a strong tier rather than expecting a silent downgrade. \
+             (HARNESS-SEAM-2026-08 C1)",
+            ids.join(", "),
+            cause
+        )
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum PipelineError {
     #[error("policy blocked: {0}")]
     PolicyBlocked(String),
 
-    #[error("no provider available")]
-    NoProvider,
+    /// Provider selection failed. Carries the full diagnostic rather than a
+    /// bare label — see `no_provider_diagnostic`.
+    #[error("{0}")]
+    NoProvider(String),
 
     #[error("provider error: {0}")]
     ProviderError(String),
@@ -59,7 +96,6 @@ pub enum PipelineError {
 pub struct Pipeline {
     pub config: PipelineConfig,
     pub policy_engine: PolicyEngine,
-    pub skill_registry: SkillRegistry,
     /// Shared audit store. Stage 3 (AUDIT-03): exactly one `AuditStore`
     /// per process, shared by the server's `AppState` and this pipeline.
     /// Opening a second handle to the same DB file is forbidden —
@@ -113,7 +149,6 @@ impl Pipeline {
         Ok(Self {
             config,
             policy_engine: PolicyEngine::new(),
-            skill_registry: SkillRegistry::new(),
             audit_store,
             provider_pool: RwLock::new(ProviderPool::new()),
             episode_store: Mutex::new(episode_store),
@@ -143,6 +178,81 @@ impl Pipeline {
         );
         self.execution_engine = Some(engine);
         Ok(())
+    }
+
+    /// Populate the provider pool.
+    ///
+    /// Until this is called the pool is empty and every request fails with
+    /// `PipelineError::NoProvider` — `Pipeline::new` deliberately constructs an
+    /// empty pool, mirroring `init_execution_engine`'s post-construction shape.
+    ///
+    /// Providers are `ProxyLlmProvider`, which routes through the ZP inference
+    /// proxy at `zp_port` so every completion picks up receipt signing, cost
+    /// tracking and policy gating. Wiring a backend client directly would work
+    /// and would be an unobserved inference path — the one thing the substrate
+    /// exists to prevent. Don't.
+    ///
+    /// Two tiers are registered when `escalation_model` is non-empty: the
+    /// default at strength 0.6 and the escalation at 0.8. `ModelClass::Strong`
+    /// selects the higher, and `RequireStrong` needs `> 0.7`, so a single-tier
+    /// pool cannot satisfy `RequireStrong` at all — that is intentional and
+    /// visible rather than silently downgraded.
+    ///
+    /// `signer` supplies the per-request ZP-Sig envelope. It is required, not
+    /// optional: the gate authenticates `/api/v1/proxy/*`, so a pool built
+    /// without one can only produce 401s, and the tempting repair for a wall
+    /// of 401s is the legacy bearer path that is pending removal. Requiring it
+    /// here means the composition root must have reached Genesis before it can
+    /// build a pool at all.
+    ///
+    /// Returns the number of providers registered. Does not verify the backend
+    /// is reachable; call `provider_pool.health_check()` for that.
+    pub async fn init_providers(
+        &self,
+        zp_port: u16,
+        provider_id: &str,
+        model: &str,
+        escalation_model: &str,
+        supports_tools: bool,
+        signer: Arc<dyn zp_core::provider::RequestSigner>,
+    ) -> Result<usize, PipelineError> {
+        if model.trim().is_empty() {
+            return Err(PipelineError::Internal(
+                "llm.model is empty — nothing to register".to_string(),
+            ));
+        }
+
+        let mut pool = self.provider_pool.write().await;
+
+        let make = |m: &str, strength: f64| -> Box<dyn zp_llm::LlmProvider> {
+            // `local()` marks the provider is_local, which ModelClass::LocalOnly
+            // routes on; `new()` does not. Keep them distinct.
+            let p = if provider_id == "ollama" {
+                zp_llm::ProxyLlmProvider::local(zp_port, m, Arc::clone(&signer))
+            } else {
+                zp_llm::ProxyLlmProvider::new(zp_port, provider_id, m, Arc::clone(&signer))
+            };
+            Box::new(p.with_strength(strength).with_tools(supports_tools))
+        };
+
+        pool.add_provider(make(model, 0.6));
+        let mut count = 1;
+
+        if !escalation_model.trim().is_empty() && escalation_model != model {
+            pool.add_provider(make(escalation_model, 0.8));
+            count += 1;
+        }
+
+        info!(
+            provider = %provider_id,
+            model = %model,
+            escalation = %escalation_model,
+            zp_port,
+            supports_tools,
+            "Provider pool initialized with {} provider(s)",
+            count
+        );
+        Ok(count)
     }
 
     /// Attach a mesh node to this pipeline for cross-agent governance.
@@ -463,6 +573,11 @@ impl Pipeline {
             trust_tier: self.config.trust_tier,
             channel: request.channel.clone(),
             conversation_id: request.conversation_id.clone(),
+            // Empty until skills arrive from a grant rather than from prose
+            // matching. This was already the effective state — the matcher fed
+            // ids into `capabilities_for`, which returns capabilities carrying
+            // no tools regardless — so removing the matcher changes what is
+            // *authorised*, not what is *delivered*.
             skill_ids: vec![],
             tool_names: vec![],
             mesh_context: None,
@@ -510,20 +625,71 @@ impl Pipeline {
             return Err(PipelineError::PolicyBlocked(reason));
         }
 
-        // 3. Auto-approve Warn/Review in Phase 1
+        // 3. A decision that requires interaction, with no interaction
+        //    surface, is a denial.
+        //
+        // This previously logged "auto-approving in Phase 1" and continued.
+        // `needs_interaction()` is exactly `Warn { require_ack: true }` or
+        // `Review { .. }` — in both cases the type is asking for a human, and
+        // proceeding without one answers the question by assuming the answer.
+        //
+        // `Review`'s own field documents `timeout` as "How long to wait
+        // before auto-denying". Auto-approving inverts the type's stated
+        // semantics; with no reviewer surface wired, the timeout is
+        // effectively immediate, so denial is what the type already specifies.
+        //
+        // `Warn { require_ack: false }` is unaffected and still proceeds —
+        // that variant means flagged-but-permitted, and it is the one that
+        // does not ask anything of anyone.
+        //
+        // Behaviourally this is a no-op today: no rule in the workspace
+        // constructs `Warn` or `Review` (checked 2026-08-14 — the only
+        // constructors are an example, the out-of-workspace trust-triangle
+        // demo, serialization mappers and tests). It exists so that the first
+        // rule to emit one is not silently approved. When an ack/review
+        // surface lands, this is the branch it replaces.
+        //
+        // See `docs/design/THREAT-MODEL-2026-08.md` §6.
         if decision.needs_interaction() {
-            debug!("Policy returned Warn/Review; auto-approving in Phase 1");
+            let reason = match &decision {
+                PolicyDecision::Review { summary, .. } => {
+                    format!("requires human review ({summary}), and no reviewer surface is wired")
+                }
+                PolicyDecision::Warn { message, .. } => format!(
+                    "requires acknowledgement ({message}), and no acknowledgement surface is wired"
+                ),
+                _ => "requires interaction, and no interaction surface is wired".to_string(),
+            };
+            self.log_audit(
+                ActorId::System("policy".to_string()),
+                AuditAction::SystemEvent {
+                    event: format!("request_needs_interaction: {}", reason),
+                },
+                &request.conversation_id,
+                &decision,
+            );
+            return Err(PipelineError::PolicyBlocked(reason));
         }
 
-        // 4. Match skills
-        let matched_skill_ids = SkillMatcher::match_request(&self.skill_registry, &request.content);
-        debug!("Matched {} skills", matched_skill_ids.len());
-
-        // 5. Build capabilities
-        let skill_id_strings: Vec<String> = matched_skill_ids.iter().map(|s| s.0.clone()).collect();
+        // 4. Build capabilities
+        //
+        // Capabilities come from the policy context alone. There is no longer a
+        // matching step between the operator's text and the skills that grant
+        // authority.
+        //
+        // `SkillMatcher::match_request` selected capabilities by fuzzy-matching
+        // request prose against a registry. That made an authority decision by
+        // string similarity: what the agent may do was determined by what the
+        // user happened to type. In a substrate where authority flows from
+        // grants, that is the wrong mechanism at a structural level — not
+        // legacy residue but a direct contradiction, and one that widens
+        // capability in response to attacker-controlled input.
+        //
+        // The policy engine already owned the decision; matching only supplied
+        // a candidate list. Removing it makes the grant the sole source.
         let capabilities = self
             .policy_engine
-            .capabilities_for(&policy_context, &skill_id_strings);
+            .capabilities_for(&policy_context, &policy_context.skill_ids);
 
         // 6. Determine model preference
         let model_preference = self.policy_engine.model_for(&policy_context);
@@ -540,8 +706,9 @@ impl Pipeline {
         // 8. Select provider and call LLM
         let pool = self.provider_pool.read().await;
         let provider = pool.select(&model_preference).map_err(|e| {
-            error!("No provider available: {}", e);
-            PipelineError::NoProvider
+            let diagnostic = no_provider_diagnostic(&pool, &e.to_string());
+            error!(providers = pool.len(), "{}", diagnostic);
+            PipelineError::NoProvider(diagnostic)
         })?;
 
         let mut completion = provider.complete(&completion_request).await.map_err(|e| {
@@ -701,11 +868,16 @@ impl Pipeline {
         }
 
         // 13. Record episode (best-effort)
+        //
+        // Skill ids come from the policy context now, not from prose matching.
+        // Recording what was *granted* rather than what was *matched* is the
+        // correct thing for the episode to carry anyway — the learning loop
+        // should see the authority in force, not a heuristic's guess at it.
         self.record_episode(
             &request,
             &response,
             &decision,
-            &skill_id_strings,
+            &policy_context.skill_ids,
             &completion.model,
             start_time.elapsed().as_millis() as u64,
         );

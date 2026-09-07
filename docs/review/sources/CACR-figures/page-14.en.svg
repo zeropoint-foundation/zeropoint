@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1620" height="1320" viewBox="0 0 1620 1320">
+<rect width="1620" height="1320" fill="#ffffff"/>
+<text x="810.0" y="48" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="24" font-weight="700" fill="#1a1a1a">Figure 3 — Cryptographic protection measures for generative AI systems</text>
+<text x="810.0" y="75" text-anchor="middle" font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="16" fill="#6b6b6b">图3　生成式人工智能系统密码防护措施</text>
+<text x="810.0" y="99" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13" fill="#6b6b6b"><tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif">《生成式人工智能系统密码应用指引》</tspan> v1.0 · <tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif">中国密码学会密评联委会</tspan> · August 2026 · p.8 · unofficial English rendering</text>
+<ellipse cx="810" cy="598" rx="790" ry="448" fill="#fbfbfa" stroke="#2b2b2b" stroke-width="1.6"/>
+<ellipse cx="620" cy="592" rx="540" ry="388" fill="#f4f4f2" stroke="#2b2b2b" stroke-width="1.6"/>
+<ellipse cx="392" cy="592" rx="214" ry="316" fill="#e9e9e6" stroke="#2b2b2b" stroke-width="1.6"/>
+<rect x="268" y="372" width="250" height="44" rx="2.5" fill="#ffffff" stroke="#2b2b2b" stroke-width="1.2"/>
+<text x="393.0" y="391" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#1a1a1a">General requirements</text>
+<text x="393.0" y="406" text-anchor="middle" font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">通用要求</text>
+<rect x="268" y="427" width="250" height="44" rx="2.5" fill="#ffffff" stroke="#2b2b2b" stroke-width="1.2"/>
+<text x="393.0" y="446" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#1a1a1a">Physical and environmental security</text>
+<text x="393.0" y="461" text-anchor="middle" font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">物理和环境安全</text>
+<rect x="268" y="482" width="250" height="44" rx="2.5" fill="#ffffff" stroke="#2b2b2b" stroke-width="1.2"/>
+<text x="393.0" y="501" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#1a1a1a">Network and communication security</text>
+<text x="393.0" y="516" text-anchor="middle" font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">网络和通信安全</text>
+<rect x="268" y="537" width="250" height="44" rx="2.5" fill="#ffffff" stroke="#2b2b2b" stroke-width="1.2"/>
+<text x="393.0" y="556" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#1a1a1a">Device and computing security</text>
+<text x="393.0" y="571" text-anchor="middle" font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">设备和计算安全</text>
+<rect x="268" y="592" width="250" height="44" rx="2.5" fill="#ffffff" stroke="#2b2b2b" stroke-width="1.2"/>
+<text x="393.0" y="611" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#1a1a1a">Application and data security</text>
+<text x="393.0" y="626" text-anchor="middle" font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">应用和数据安全</text>
+<rect x="268" y="647" width="250" height="44" rx="2.5" fill="#ffffff" stroke="#2b2b2b" stroke-width="1.2"/>
+<text x="393.0" y="666" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="600" fill="#1a1a1a">Management security</text>
+<text x="393.0" y="681" text-anchor="middle" font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">管理安全</text>
+<text x="392" y="750" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="700" fill="#1a1a1a">Basic requirements for cryptographic</text>
+<text x="392" y="770" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="700" fill="#1a1a1a">application in information systems</text>
+<text x="392" y="790" text-anchor="middle" font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="12.5" font-weight="400" fill="#6b6b6b">信息系统密码应用基本要求</text>
+<text x="392" y="810" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="400" fill="#6b6b6b" font-style="italic">GB/T 39786-2021</text>
+<rect x="660" y="318" width="320" height="108" rx="3" fill="#ffffff" stroke="#2b2b2b" stroke-width="1.4"/>
+<text x="820.0" y="345" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">Model security</text>
+<text x="820.0" y="362" text-anchor="middle" font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="13" fill="#6b6b6b">模型安全</text>
+<text x="820.0" y="384" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Parameter integrity<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  参数完整性</tspan></text>
+<text x="820.0" y="404" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Parameter confidentiality<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  参数机密性</tspan></text>
+<text x="820.0" y="424" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" fill="#6b6b6b">…</text>
+<rect x="660" y="440" width="380" height="128" rx="3" fill="#ffffff" stroke="#2b2b2b" stroke-width="1.4"/>
+<text x="850.0" y="467" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">AI model service security</text>
+<text x="850.0" y="484" text-anchor="middle" font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="13" fill="#6b6b6b">人工智能模型服务安全</text>
+<text x="850.0" y="506" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Identity authentication<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  身份鉴别</tspan></text>
+<text x="850.0" y="526" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Access control<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  访问控制</tspan></text>
+<text x="850.0" y="546" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Communication security<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  通信安全</tspan></text>
+<text x="850.0" y="566" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" fill="#6b6b6b">…</text>
+<rect x="660" y="592" width="380" height="108" rx="3" fill="#ffffff" stroke="#2b2b2b" stroke-width="1.4"/>
+<path d="M663 592 H1037 A3 3 0 0 1 1040 595 V597 H660 V595 A3 3 0 0 1 663 592Z" fill="#b3352c"/>
+<text x="850.0" y="619" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">Agent security</text>
+<text x="850.0" y="636" text-anchor="middle" font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="13" fill="#6b6b6b">智能体安全</text>
+<text x="850.0" y="658" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Interaction protocol security<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  交互协议安全</tspan></text>
+<text x="850.0" y="678" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Monitoring and audit<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  监控与审计</tspan></text>
+<text x="850.0" y="698" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" fill="#6b6b6b">…</text>
+<rect x="660" y="724" width="320" height="128" rx="3" fill="#ffffff" stroke="#2b2b2b" stroke-width="1.4"/>
+<text x="820.0" y="751" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">Data security</text>
+<text x="820.0" y="768" text-anchor="middle" font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="13" fill="#6b6b6b">数据安全</text>
+<text x="820.0" y="790" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Training-data anonymisation<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  训练数据匿名化</tspan></text>
+<text x="820.0" y="810" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Training-data integrity<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  训练数据完整性</tspan></text>
+<text x="820.0" y="830" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Content-identifier signing<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  内容标识签名</tspan></text>
+<text x="820.0" y="850" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" fill="#6b6b6b">…</text>
+<text x="702" y="888" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">Baseline cryptographic protection for generative AI systems</text>
+<text x="702" y="908" text-anchor="middle" font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="13.5" fill="#6b6b6b">生成式人工智能系统基础密码防护</text>
+<rect x="1180" y="352" width="285" height="128" rx="3" fill="#ffffff" stroke="#2b2b2b" stroke-width="1.4"/>
+<text x="1322.5" y="379" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">Model security</text>
+<text x="1322.5" y="396" text-anchor="middle" font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="13" fill="#6b6b6b">模型安全</text>
+<text x="1322.5" y="418" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Trusted execution environment<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  可信执行环境</tspan></text>
+<text x="1322.5" y="438" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Confidential computing<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  机密计算</tspan></text>
+<text x="1322.5" y="458" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Differential privacy<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  差分隐私</tspan></text>
+<text x="1322.5" y="478" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" fill="#6b6b6b">…</text>
+<rect x="1190" y="512" width="300" height="148" rx="3" fill="#ffffff" stroke="#2b2b2b" stroke-width="1.4"/>
+<text x="1340.0" y="539" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">Training data security</text>
+<text x="1340.0" y="556" text-anchor="middle" font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="13" fill="#6b6b6b">训练数据安全</text>
+<text x="1340.0" y="578" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Differential privacy<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  差分隐私</tspan></text>
+<text x="1340.0" y="598" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Homomorphic encryption<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  同态加密</tspan></text>
+<text x="1340.0" y="618" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Attribute-based encryption<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  基于属性加密</tspan></text>
+<text x="1340.0" y="638" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Secure multi-party computation<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  多方安全计算</tspan></text>
+<text x="1340.0" y="658" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" fill="#6b6b6b">…</text>
+<rect x="1165" y="698" width="300" height="148" rx="3" fill="#ffffff" stroke="#2b2b2b" stroke-width="1.4"/>
+<path d="M1168 698 H1462 A3 3 0 0 1 1465 701 V703 H1165 V701 A3 3 0 0 1 1168 698Z" fill="#b3352c"/>
+<text x="1315.0" y="725" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">Application data security</text>
+<text x="1315.0" y="742" text-anchor="middle" font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="13" fill="#6b6b6b">应用数据安全</text>
+<text x="1315.0" y="764" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Attribute-based encryption<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  基于属性加密</tspan></text>
+<text x="1315.0" y="784" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Homomorphic encryption<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  同态加密</tspan></text>
+<text x="1315.0" y="804" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Implicit-identifier signing<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  隐式标识签名</tspan></text>
+<text x="1315.0" y="824" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#1a1a1a">Zero-knowledge proof<tspan font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="11.5" fill="#6b6b6b">  零知识证明</tspan></text>
+<text x="1315.0" y="844" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="15" fill="#6b6b6b">…</text>
+<text x="1090" y="930" text-anchor="middle" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="16" font-weight="700" fill="#1a1a1a">Enhanced cryptographic protection for generative AI systems</text>
+<text x="1090" y="950" text-anchor="middle" font-family="'Noto Sans CJK SC', 'Noto Sans CJK TC', sans-serif" font-size="13.5" fill="#6b6b6b">生成式人工智能系统增强密码防护</text>
+<line x1="60" y1="1056" x2="1560" y2="1056" stroke="#d8d8d4" stroke-width="1"/>
+<text x="60" y="1090" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#3f3f3f"><tspan font-weight="700" fill="#1a1a1a">Reading the figure.</tspan> The model is concentric, not stacked. GB/T 39786-2021's requirement set is the core and the guideline surrounds it — its authority is entirely</text>
+<text x="60" y="1109" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#3f3f3f">derived. Appendix C carries the explicit mapping table between the two.</text>
+<text x="60" y="1139" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#3f3f3f"><tspan font-weight="700" fill="#1a1a1a">The ellipsis is the document's.</tspan> Every box in the original ends with “…”. These are worked examples of the tiering, not closed enumerations of what belongs to each tier.</text>
+<text x="60" y="1169" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#3f3f3f"><tspan font-weight="700" fill="#1a1a1a">Two placements worth noting (marked in red).</tspan> Agent security is BASELINE — interaction-protocol security and monitoring/audit are expected of every deployment. Zero-knowledge proof is</text>
+<text x="60" y="1188" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="13.5" fill="#3f3f3f">ENHANCED-only, which places §8.5.2.4(a)'s pre-execution plan credential at the enhanced tier by the document's own scheme.</text>
+</svg>

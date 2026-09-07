@@ -14,7 +14,7 @@
 //! `CancellationToken` so all listener tasks drain coherently.
 //!
 //! See
-//! `docs/handoffs/singular-loopback-binding-design-2026-05.md`.
+//! `docs/design/SINGULAR-LOOPBACK-BINDING-2026-05.md`.
 //!
 //! # Why this pin forbids only `.serve(` (and not `Server::builder()`)
 //!
@@ -34,9 +34,7 @@ use zp_discipline::Discipline;
 #[test]
 fn loopback_grpc_must_route_through_zp_net() {
     Discipline::new("no_raw_tonic_serve_outside_zp_net")
-        .cite_invariant(
-            "Principle 8 (one canonical path) — singular loopback binding",
-        )
+        .cite_invariant("Principle 8 (one canonical path) — singular loopback binding")
         .rationale(
             "The tonic address-passing serve form binds a single \
              SocketAddr and repeats the IPv6-first resolver trap for \

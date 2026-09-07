@@ -473,10 +473,13 @@ pub async fn tools_handler(
     tool_chain::emit_tool_receipt(&state.0.audit_store, &event, Some(&detail));
 
     let total = targets.len();
-    (StatusCode::OK, Json(ToolsAnalysisResponse {
-        tools: tool_summaries,
-        total,
-    }))
+    (
+        StatusCode::OK,
+        Json(ToolsAnalysisResponse {
+            tools: tool_summaries,
+            total,
+        }),
+    )
 }
 
 /// Request body for Monte Carlo simulation.

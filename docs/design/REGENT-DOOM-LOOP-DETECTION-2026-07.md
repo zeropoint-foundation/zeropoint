@@ -298,7 +298,7 @@ Emission cadence: at most one `chronic_drift_suspected` receipt per (model, heur
 
 **COGNITIVE-SELF-OBSERVER-2026-07.md** — this document proposes to extend the observer's verification catalog. CSO today ships Classes 1–7 (Chain-state, Diagnosis, Interpretation, Precedent, Commitment, Self-state, Capability). Doom-loop detection is proposed as an additional Class 8: Emission Coherence. Same infrastructure: post-emission verification, pattern-match extraction, chain-anchored findings. Different signal. **Integration status:** Class 8 is not yet in CSO's shipped catalog; picked up in follow-up work when doom-loop instrumentation lands.
 
-**MODEL-DOSSIER-2026-07** (via EXECUTION-AUTHORITY-MODEL Phase 5) — dossier's `suitability` field extends to include:
+**MODEL-DOSSIER-2026-07.md** — dossier's `suitability` field extends to include:
 - `doom_loop_rate_per_1k_responses` — chain-anchored measurement over rolling window
 - `entropy_baseline` — for Heuristic 3
 - `reasoning_step_parseable` — bool, whether Heuristic 5 applies
@@ -348,7 +348,7 @@ Beyond catching immediate failures:
 
 Concrete first-pass placement in the codebase:
 
-- **New module:** `crates/zp-regent/src/emission_coherence.rs` — parallel to `cognitive_observer.rs`. Contains Heuristics 1–5, detection composition, receipt schema.
+- **New module:** shipped as a standalone crate, `crates/zp-emission-coherence/` (`entropy.rs`, `length.rs`, `ngram.rs`), not as a module inside `zp-regent` as planned here. Contains Heuristics 1–5, detection composition, receipt schema. **Corrected 2026-07-27 by triage-for-coherence:** `zp-regent` neither depends on nor calls it, so the heuristics are built and unreached — C2 per `CONNECTION-INTEGRITY-PROGRAM-2026-07.md` §3.
 - **Integration point:** invoked in `crates/zp-regent/src/loop_runner.rs` immediately after `intent` is produced but before delivery — same slot Cognitive Self-Observer occupies.
 - **Configuration:** thresholds default in code, overridable via `zp_config` schema additions (`[regent.emission_coherence]` section — but defaults produce a functional substrate per SUBSTRATE-READINESS-CONTRACT §Surface 3).
 - **Chain emission:** existing audit-store append path (through the intent executor).
@@ -394,7 +394,7 @@ Testable claims that must hold post-implementation:
 
 **Longer-term:**
 - Implement Class R2 with fallback-tier engagement (requires INFERENCE-ROUTING-DISCIPLINE fallback verb).
-- Amend EXECUTION-AUTHORITY-MODEL Phase 5 (model evaluation) to include doom-loop rate as first-class metric.
+- Amend MODEL-DOSSIER-2026-07 §"The canonical schema" §Suitability fields to include doom-loop rate as first-class field (already listed there via forward-reference to this spec; confirms the two-way composition).
 - Amend INFERENCE-ROUTING-DISCIPLINE with the SLM-vs-LLM routing bright line: precedent → SLM, novelty → LLM.
 - Feedback loop: chain-anchored doom-loop corpus feeds SHADOW-EVALUATION-PRIMITIVE for provider comparison.
 - Feedback loop: chain-anchored doom-loop corpus becomes training signal for eventual substrate-specific fine-tuning.
@@ -410,7 +410,8 @@ Testable claims that must hold post-implementation:
 ## Composes with / connects to
 
 - **COGNITIVE-SELF-OBSERVER-2026-07.md** — this document proposes Class 8 (Emission Coherence) as an extension to the observer's verification catalog. CSO today ships Classes 1–7; Class 8 integration is pending.
-- **EXECUTION-AUTHORITY-MODEL-2026-07.md** — Phase 5 model evaluation absorbs doom-loop rate as first-class metric.
+- **MODEL-DOSSIER-2026-07.md** — canonical dossier spec absorbs doom-loop rate as a first-class suitability field, split by drafter-active vs -inactive under drafter-active mode.
+- **EXECUTION-AUTHORITY-MODEL-2026-07.md** — Phase 5 empirical program consumes dossier evidence (including doom-loop rate) for continuous evaluation.
 - **INFERENCE-ROUTING-DISCIPLINE-2026-07.md** — Class R2 fallback tier engagement.
 - **SHADOW-EVALUATION-PRIMITIVE-2026-07.md** — doom-loop rate as candidate-vs-control comparison signal.
 - **SUBSTRATE-READINESS-CONTRACT-2026-07.md** — `no_silent_degradation` discipline; substrate emits chain-anchored degradation when confirmed.

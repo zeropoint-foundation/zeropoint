@@ -150,7 +150,8 @@ fn parse_compose_credentials(tool_path: &Path) -> Option<ComposeCredentials> {
                 let k = k.trim();
                 let v = v.trim().trim_matches('"').trim_matches('\'');
                 // Only match env-var-looking keys (UPPER_SNAKE_CASE)
-                if k.chars().all(|c| c.is_ascii_uppercase() || c == '_' || c.is_ascii_digit())
+                if k.chars()
+                    .all(|c| c.is_ascii_uppercase() || c == '_' || c.is_ascii_digit())
                     && !v.is_empty()
                 {
                     (k, v)
@@ -261,8 +262,18 @@ fn parse_cargo_deps(tool_path: &Path) -> Vec<String> {
 
     if let Ok(contents) = std::fs::read_to_string(&cargo_toml) {
         let interesting = &[
-            "dotenvy", "dotenv", "sqlx", "diesel", "axum", "actix-web", "rocket",
-            "tokio", "warp", "tide", "poem", "tower-http",
+            "dotenvy",
+            "dotenv",
+            "sqlx",
+            "diesel",
+            "axum",
+            "actix-web",
+            "rocket",
+            "tokio",
+            "warp",
+            "tide",
+            "poem",
+            "tower-http",
         ];
 
         // Check both [dependencies] and [workspace.dependencies] sections.
@@ -331,9 +342,7 @@ fn extract_workspace_members(cargo_contents: &str) -> Option<Vec<String>> {
                                     if let Ok(entries) = std::fs::read_dir(&base_path) {
                                         for e in entries.flatten() {
                                             if e.path().join("Cargo.toml").exists() {
-                                                members.push(
-                                                    e.path().display().to_string(),
-                                                );
+                                                members.push(e.path().display().to_string());
                                             }
                                         }
                                     }
@@ -481,10 +490,7 @@ pub fn analyze_tool(tool_name: &str, tool_path: &Path) -> DeepScanResult {
         {
             let user = creds.postgres_user.as_deref().unwrap_or("postgres");
             let pass = creds.postgres_password.as_deref().unwrap_or("postgres");
-            let db = creds
-                .postgres_db
-                .as_deref()
-                .unwrap_or(tool_name);
+            let db = creds.postgres_db.as_deref().unwrap_or(tool_name);
             let port = creds.postgres_port.unwrap_or(5432);
 
             let url = format!("postgres://{}:{}@localhost:{}/{}", user, pass, port, db);
@@ -538,8 +544,15 @@ pub fn analyze_tool(tool_name: &str, tool_path: &Path) -> DeepScanResult {
     // Check if .env.example declares vars that look like they need real values
     // but have obviously placeholder defaults
     let placeholder_patterns = &[
-        "your-", "xxx", "sk-...", "xoxb-...", "change-me", "replace-",
-        "TODO", "FIXME", "...",
+        "your-",
+        "xxx",
+        "sk-...",
+        "xoxb-...",
+        "change-me",
+        "replace-",
+        "TODO",
+        "FIXME",
+        "...",
     ];
     for (key, val) in &env_vars {
         let lower_val = val.to_lowercase();
@@ -641,10 +654,7 @@ fn build_database_url(creds: &ComposeCredentials, existing_url: &str) -> Option<
     // Determine database name
     let db = creds.postgres_db.as_deref().unwrap_or_else(|| {
         // Try to extract from existing URL
-        existing_url
-            .rsplit('/')
-            .next()
-            .unwrap_or("postgres")
+        existing_url.rsplit('/').next().unwrap_or("postgres")
     });
 
     Some(format!(
@@ -720,16 +730,14 @@ mod tests {
             redis_password: None,
             redis_port: None,
         };
-        let result =
-            build_database_url(&creds, "postgres://localhost/old_db").unwrap();
+        let result = build_database_url(&creds, "postgres://localhost/old_db").unwrap();
         assert_eq!(result, "postgres://myuser:mypass@localhost:5433/mydb");
     }
 
     #[test]
     fn test_build_database_url_defaults() {
         let creds = ComposeCredentials::default();
-        let result =
-            build_database_url(&creds, "postgres://localhost/testdb").unwrap();
+        let result = build_database_url(&creds, "postgres://localhost/testdb").unwrap();
         assert_eq!(result, "postgres://postgres:postgres@localhost:5432/testdb");
     }
 
@@ -743,9 +751,12 @@ mod tests {
         .unwrap();
 
         let vars = parse_env_example(dir.path());
-        assert_eq!(vars.get("DATABASE_URL").unwrap(), "postgres://localhost/test");
+        assert_eq!(
+            vars.get("DATABASE_URL").unwrap(),
+            "postgres://localhost/test"
+        );
         assert_eq!(vars.get("PORT").unwrap(), "8080");
-        assert!(vars.get("Comment").is_none());
+        assert!(!vars.contains_key("Comment"));
     }
 
     #[test]

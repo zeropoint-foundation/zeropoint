@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZeroPoint — Substrate State Map</title>
+<style>
+  :root, .viz-root{
+    color-scheme: light;
+    --surface-1:#fcfcfb; --surface-2:#f2f2f0; --surface-3:#e8e8e4;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#77766f;
+    --rule:#dcdcd6;
+    --st-good:#0ca30c; --st-warn:#fab219; --st-crit:#d03b3b;
+    --series-1:#2a78d6;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:where(:not([data-theme="light"])),
+    :root:where(:not([data-theme="light"])) .viz-root{
+      color-scheme: dark;
+      --surface-1:#1a1a19; --surface-2:#232322; --surface-3:#2e2e2c;
+      --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#94938a;
+      --rule:#3a3a37; --series-1:#3987e5;
+    }
+  }
+  :root[data-theme="dark"], :root[data-theme="dark"] .viz-root{
+    color-scheme: dark;
+    --surface-1:#1a1a19; --surface-2:#232322; --surface-3:#2e2e2c;
+    --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#94938a;
+    --rule:#3a3a37; --series-1:#3987e5;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Inter,system-ui,sans-serif;}
+  .viz-root{background:var(--surface-1);color:var(--text-primary);min-height:100vh;padding:32px 28px 72px;}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:23px;margin:0 0 4px;letter-spacing:-.01em}
+  h2{font-size:15px;margin:38px 0 4px;letter-spacing:.02em;text-transform:uppercase;color:var(--text-secondary);font-weight:600}
+  .sub{color:var(--text-muted);font-size:13px;margin:0 0 2px}
+  .lede{color:var(--text-secondary);font-size:14px;margin:6px 0 0;max-width:74ch}
+  .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap}
+  button.tg{background:var(--surface-2);color:var(--text-secondary);border:1px solid var(--rule);
+    border-radius:7px;padding:6px 11px;font-size:12px;cursor:pointer;font-family:inherit}
+  button.tg:hover{color:var(--text-primary)}
+  .heroes{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-top:16px}
+  .hero{background:var(--surface-2);border:1px solid var(--rule);border-radius:11px;padding:17px 19px}
+  .hero .n{font-size:39px;font-weight:660;letter-spacing:-.025em;line-height:1.02}
+  .hero .k{font-size:12px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px}
+  .hero .f{font-size:12.5px;color:var(--text-muted);margin-top:7px;line-height:1.45}
+  .card{background:var(--surface-2);border:1px solid var(--rule);border-radius:11px;padding:19px 21px;margin-top:12px}
+  .legend{display:flex;gap:17px;flex-wrap:wrap;margin:12px 0 15px;font-size:12.5px;color:var(--text-secondary)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:11px;height:11px;border-radius:3px;display:inline-block;flex:none}
+  .ico{font-size:11px;width:13px;display:inline-block;text-align:center;flex:none}
+  .barrow{margin:15px 0 3px}
+  .barlab{display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-secondary);margin-bottom:5px}
+  .bar{display:flex;height:30px;border-radius:5px;overflow:hidden;background:var(--surface-3);gap:2px}
+  .seg{position:relative;display:flex;align-items:center;justify-content:center;font-size:11.5px;
+       font-weight:640;color:#08080a;cursor:default;min-width:2px}
+  .seg:first-child{border-radius:5px 0 0 5px}.seg:last-child{border-radius:0 5px 5px 0}
+  table{border-collapse:collapse;width:100%;font-size:13px;margin-top:9px}
+  th,td{text-align:left;padding:7px 11px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{color:var(--text-muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.045em}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;padding-right:14px}
+  code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+  .chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:650;
+        padding:2.5px 8px;border-radius:20px;white-space:nowrap}
+  .loop{display:grid;grid-template-columns:52px 1fr;gap:14px;padding:15px 0;border-bottom:1px solid var(--rule)}
+  .loop:last-child{border-bottom:none}
+  .loop .id{font-weight:700;font-size:15px;color:var(--text-secondary);font-family:ui-monospace,monospace}
+  .loop h3{margin:0 0 5px;font-size:15px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .flow{font-family:ui-monospace,monospace;font-size:12px;color:var(--text-secondary);
+        background:var(--surface-3);padding:6px 10px;border-radius:6px;display:inline-block;margin:3px 0 7px}
+  .loop p{margin:0;font-size:13px;color:var(--text-secondary);max-width:82ch}
+  .cite{font-family:ui-monospace,monospace;font-size:11px;color:var(--text-muted);margin-top:6px;display:block}
+  .hbar{display:grid;grid-template-columns:250px 1fr 40px;gap:11px;align-items:center;margin:6px 0;font-size:12.5px}
+  .hbar .t{color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,monospace;font-size:11.5px}
+  .hbar .track{background:var(--surface-3);border-radius:4px;height:17px;position:relative}
+  .hbar .fill{background:var(--series-1);height:100%;border-radius:4px}
+  .hbar .v{text-align:right;font-variant-numeric:tabular-nums;color:var(--text-secondary);font-weight:600}
+  .seq{display:grid;grid-template-columns:44px 1fr;gap:12px;padding:11px 0;border-bottom:1px solid var(--rule)}
+  .seq:last-child{border-bottom:none}
+  .seq .s{font-family:ui-monospace,monospace;font-weight:700;color:var(--text-secondary)}
+  .seq .n{font-size:14px;margin-bottom:3px}
+  .seq .e{font-size:12.5px;color:var(--text-muted)}
+  .note{font-size:12.5px;color:var(--text-muted);margin-top:11px;line-height:1.5;max-width:84ch}
+  .warnbox{border-left:3px solid var(--st-warn);background:var(--surface-3);padding:12px 15px;
+           border-radius:0 7px 7px 0;margin-top:13px;font-size:13px;color:var(--text-secondary);max-width:86ch}
+  .tip{position:fixed;pointer-events:none;background:var(--surface-1);border:1px solid var(--rule);
+       border-radius:7px;padding:7px 10px;font-size:12px;opacity:0;transition:opacity .1s;z-index:50;
+       box-shadow:0 5px 18px rgba(0,0,0,.28);color:var(--text-primary);max-width:280px}
+  footer{margin-top:44px;padding-top:15px;border-top:1px solid var(--rule);font-size:12px;color:var(--text-muted);line-height:1.6}
+</style>
+</head>
+<body>
+<div class="viz-root"><div class="wrap">
+
+<div class="topbar">
+  <div>
+    <h1>ZeroPoint — Substrate State Map</h1>
+    <p class="sub">Built vs. specified · <span class="mono">c756728</span> · 3 commits · rev 3, 2026-08-19</p>
+    <p class="lede">What runs, what is written down and does not run, and where the six loops break.
+      Every figure is measured from the repository, not quoted from a document. Rev 2 replaces the zero-live proxy with first-party build-state classification, and reports live-only from the connection map itself rather than by hand.</p>
+  </div>
+  <button class="tg" id="tgl">Light / dark</button>
+</div>
+
+<h2>Coverage — the two numbers, together</h2>
+<div class="heroes">
+  <div class="hero">
+    <div class="k">Reported maturity</div>
+    <div class="n">78.4%</div>
+    <div class="f">live ∪ tied-off ÷ all declared. Rose from 33.6% on 2026-07-26.</div>
+  </div>
+  <div class="hero">
+    <div class="k">Live only</div>
+    <div class="n" style="color:var(--st-good)">45.0%</div>
+    <div class="f">Connections that actually work. Rose from 29.4% — a 15.6-point gain inside a 44.8-point headline.</div>
+  </div>
+  <div class="hero">
+    <div class="k">If tie-offs had not grown</div>
+    <div class="n" style="color:var(--text-secondary)">48.2%</div>
+    <div class="f">Maturity today had tie-offs stayed at 41. Roughly 30 of the 44.8 points are declarations, not connections.</div>
+  </div>
+</div>
+<div class="warnbox"><strong>Read these together or not at all.</strong> A tie-off is an honest governance
+acknowledgement that something is known-unbuilt — and it moves the headline without changing what the
+substrate does. Tie-offs grew 10.6×; live connections grew 2.05×.
+<br><br><strong>And they are not one mechanism.</strong> Of 433 tie-offs, <strong>1</strong> carries a
+disposition, a declared date and a reopen condition (<code>tieoffs.toml</code>, whose own header insists it
+is <em>not</em> an allowlist). 60 carry a reason at the site. <strong>372</strong> carry a reason in a
+source comment — real and often careful, but prose a reader can find and a tool cannot check. All three
+suppress a defect and all three count toward maturity identically.</div>
+
+<h2>Declared connections — 2026-07-26 vs now</h2>
+<div class="card">
+  <div class="legend">
+    <span><i class="sw" style="background:var(--st-good)"></i><i class="ico">●</i>Live — works today</span>
+    <span><i class="sw" style="background:var(--st-warn)"></i><i class="ico">◑</i>Tied off — declared known-unbuilt</span>
+    <span><i class="sw" style="background:var(--st-crit)"></i><i class="ico">▲</i>Defect — declared, unreconciled</span>
+  </div>
+  <div class="barrow">
+    <div class="barlab"><span>2026-07-26 baseline</span><span class="mono">969 declared · maturity 33.6%</span></div>
+    <div class="bar" id="bar-base"></div>
+  </div>
+  <div class="barrow">
+    <div class="barlab"><span>2026-08-18 — now</span><span class="mono">1,298 declared · maturity 78.4%</span></div>
+    <div class="bar" id="bar-now"></div>
+  </div>
+  <p class="note">Bars are to a common scale (widest = 1,298), so the growth in total declared surface is
+    visible alongside the change in composition. Segment widths carry magnitude; labels carry the value.</p>
+</div>
+
+<h2>The six loops</h2>
+<div class="card" id="loops"></div>
+
+<h2>Specified and not running</h2>
+<div class="card">
+  <p class="note" style="margin-top:0"><strong>397 documents, classified by what the repository can
+    corroborate</strong> — from <code>docs/lenses/manifest.json</code>, which cross-references each
+    document's code mentions against what exists in the tree. It was <strong>165 commits stale</strong>
+    until this session and is now regenerated.</p>
+  <div class="legend" style="margin-top:14px">
+    <span><i class="sw" style="background:var(--st-good)"></i><i class="ico">●</i>Built</span>
+    <span><i class="sw" style="background:var(--series-1)"></i><i class="ico">◐</i>Partial</span>
+    <span><i class="sw" style="background:var(--st-warn)"></i><i class="ico">◑</i>Scaffolded / candidate</span>
+    <span><i class="sw" style="background:var(--surface-3)"></i><i class="ico">·</i>Unknown</span>
+  </div>
+  <div class="barrow">
+    <div class="barlab"><span>All documents</span><span class="mono">397</span></div>
+    <div class="bar" id="bs-all"></div>
+  </div>
+  <div class="barrow">
+    <div class="barlab"><span>Tier 2 — canonical elaborations</span><span class="mono">283</span></div>
+    <div class="bar" id="bs-t2"></div>
+  </div>
+  <p class="note"><strong>95 of 283 Tier-2 canonical documents are built.</strong> 63 are partial, 56 are
+    scaffolded or candidate, and 69 are unclassifiable from the text. Separately, at connection level,
+    <strong>97 of 327 sources have zero live connections</strong> — a document that specified a lot and
+    has not been built is not a defect, but it is the half of the corpus the sequencing work is about.</p>
+</div>
+
+<h2>What runs when nobody asks</h2>
+<div class="card">
+  <table>
+    <thead><tr><th>Subsystem</th><th>Cadence</th><th>Default</th><th>Source</th></tr></thead>
+    <tbody id="subs"></tbody>
+  </table>
+  <p class="note"><strong>All three default to <code>false</code> in <code>ServerConfig::default()</code>.</strong>
+    An unconfigured <code>zp serve</code> runs listeners, a 30s liveness sweeper and two chain-integrity
+    runtimes — nothing that perceives, materialises or reasons. No run with all three enabled is recorded
+    anywhere in the corpus. The operator's live <code>config.toml</code> is outside the mounted folder and
+    could not be read, so these are code defaults, not necessarily what is running on APOLLO.</p>
+</div>
+
+<h2>Built and not wired</h2>
+<div class="card">
+  <table>
+    <thead><tr><th>Crate</th><th>State</th><th>Why it matters</th></tr></thead>
+    <tbody id="orph"></tbody>
+  </table>
+</div>
+
+<h2>Proposed sequence</h2>
+<div class="card" id="seq"></div>
+
+<h2>Table view — all figures</h2>
+<div class="card">
+  <table>
+    <thead><tr><th>Measure</th><th class="num">2026-07-26</th><th class="num">2026-08-18</th><th class="num">Δ</th></tr></thead>
+    <tbody id="tbl"></tbody>
+  </table>
+  <p class="note">Defect composition now: 144 aspirational corpus→chain (no emitter found — a governance
+    decision), 129 code→artifact, 5 registry-gap corpus→chain (code emits, registry omits — a mechanical
+    fix), 3 derived-artifact. 11 frozen Tier-3 documents are excluded from claim checks rather than
+    silently dropped.</p>
+</div>
+
+<footer>
+  Sources — <code>tools/connection-map/connections.json</code> regenerated against the working tree ·
+  baseline from <code>CONNECTION-INTEGRITY-PROGRAM-2026-07.md:211-215</code> ·
+  loop traces and citations from <code>docs/handoffs/substrate-sequencing-2026-08.md</code> §3 ·
+  data file <code>dashboard/data/substrate-state.json</code>.<br>
+  Status colors are the reserved good / warning / critical steps, paired with icon and label so color never
+  carries meaning alone; the warning step is sub-3:1 on the light surface by design, which is why every
+  segment is directly labelled and this table view exists.
+</footer>
+
+<div class="tip" id="tip"></div>
+</div></div>
+<script>
+const DATA = {
+  "generated": "2026-08-19 (rev 3)",
+  "commit": "c756728",
+  "tree": "committed: 6f21cfb, 9f0e160, e8b26a4",
+  "note": "Regenerated from tools/connection-map/connection_map.py against the working tree. Baseline figures from CONNECTION-INTEGRITY-PROGRAM-2026-07.md:211-215.",
+  "connections": {
+    "now": {
+      "date": "2026-08-18",
+      "total": 1298,
+      "live": 584,
+      "tied_off": 433,
+      "defect": 281,
+      "governed_docs": 176,
+      "live_only": 0.4499,
+      "tied_off_share": 0.3336,
+      "maturity": 0.7835,
+      "tieoff_provenance": {
+        "declared_tieoff": 1,
+        "pin_exception": 60,
+        "reserved_prefix": 372
+      }
+    },
+    "baseline": {
+      "date": "2026-07-26",
+      "total": 969,
+      "live": 285,
+      "tied_off": 41,
+      "defect": 643,
+      "governed_docs": null
+    }
+  },
+  "defect_breakdown": {
+    "corpus_to_chain_registry_gap": 5,
+    "corpus_to_chain_aspirational": 144,
+    "code_to_artifact": 129,
+    "derived_artifact": 3
+  },
+  "sources": {
+    "total": 327,
+    "zero_live": 97,
+    "frozen_dropped": 11
+  },
+  "zero_live_top": [
+    [
+      "OFFICER-ACTION-SURFACES-2026-07",
+      27
+    ],
+    [
+      "BLAST-RADIUS-AND-RECOVERY-2026-07",
+      22
+    ],
+    [
+      "OPERATOR-DEATH-AND-LEGACY-2026-07",
+      18
+    ],
+    [
+      "HARDWARE-OBSERVER-2026-07",
+      16
+    ],
+    [
+      "BUILD-PROCESS-DESIGN-2026-07",
+      14
+    ],
+    [
+      "EMBODIMENT-STATE-PROTOCOL-2026-07",
+      13
+    ],
+    [
+      "SOVEREIGN-KINSHIP-PRIMITIVES-2026-07",
+      12
+    ],
+    [
+      "SAGE-WIZARD-SCRIPT-2026-05",
+      11
+    ],
+    [
+      "HARDWARE-DOSSIER-2026-08",
+      11
+    ],
+    [
+      "DEPENDENT-SOVEREIGNTY-2026-07",
+      10
+    ],
+    [
+      "PEER-DISCOVERY-AS-OUTREACH-2026-07",
+      9
+    ],
+    [
+      "HOUSEHOLD-COMPOSITION-2026-07",
+      9
+    ]
+  ],
+  "loops": [
+    {
+      "id": "L1",
+      "name": "Perception",
+      "state": "closed",
+      "chain": "officer sweep \u2192 finding \u2192 send_findings \u2192 CognitiveContext \u2192 prompt",
+      "detail": "Closed for the 900s sweep path. spawn_sensor_forge_task is pinned in KNOWN_UNFORWARDED \u2014 ~394 unclearable findings per window would make has_urgent true nearly every cycle. Review 2026-09-09.",
+      "cite": "officers.rs:525,809-816 \u00b7 loop_runner.rs:135-140 \u00b7 context.rs:71"
+    },
+    {
+      "id": "L2",
+      "name": "Cognition",
+      "state": "closed",
+      "chain": "context \u2192 composition receipt \u2192 prompt \u2192 intent \u2192 gate \u2192 chain",
+      "detail": "The composition receipt and the prompt are two views of one CognitiveContext from a single perceive call. No separate prompt-assembly path exists.",
+      "cite": "loop_runner.rs:1626 \u00b7 regent.rs:2014,2038"
+    },
+    {
+      "id": "L3",
+      "name": "Authority",
+      "state": "closed",
+      "chain": "escalation \u2192 approval \u2192 precedent \u2192 autonomous act",
+      "detail": "Closed for exact-parameter repeats only (PRECEDENT_SCOPE is empty). Rests on an unsigned chain \u2014 0 of 10,018 entries signed as of 2026-08-01.",
+      "cite": "regent.rs:354-385,2071 \u00b7 precedent.rs:118,190"
+    },
+    {
+      "id": "L4",
+      "name": "Understanding",
+      "state": "broken",
+      "chain": "chain \u2192 Cartographer \u2192 ontology \u2192 \u2717 cognition",
+      "detail": "Write side real (3,575 lines across two crates), off by default. Read side does not exist: zp-regent does not depend on zp-ontology at all, and CognitiveContext has no ontology-sourced field.",
+      "cite": "cartographer.rs \u00b7 zp-ontology/ \u00b7 zp-regent/Cargo.toml"
+    },
+    {
+      "id": "L5",
+      "name": "Verification",
+      "state": "partial",
+      "chain": "claim \u2192 check \u2192 evidence \u2192 \u2717 correction",
+      "detail": "Runs every cycle and chain-anchors proof it ran. Only substrate_validate.rs reads the receipts \u2014 a diagnostic, not a corrective. A violated standing correction changes nothing, deliberately.",
+      "cite": "loop_runner.rs:1953,2011-2085"
+    },
+    {
+      "id": "L6",
+      "name": "Improvement",
+      "state": "broken",
+      "chain": "proposed \u2192 \u2717 evaluated \u2192 landed \u2192 verified \u2192 regressed",
+      "detail": "Stage 1 emits. Grepping crates/ for the other four returns zero emission sites; they appear only as recognised prefixes in a validator checking for receipts nothing emits.",
+      "cite": "regent.rs:2294 \u00b7 substrate_validate.rs:136-139"
+    }
+  ],
+  "subsystems": [
+    {
+      "name": "Officer sweep",
+      "cadence": "900s",
+      "default": false,
+      "cite": "lib.rs:160"
+    },
+    {
+      "name": "Cartographer",
+      "cadence": "chain-append",
+      "default": false,
+      "cite": "lib.rs:167"
+    },
+    {
+      "name": "Regent loop",
+      "cadence": "60s",
+      "default": false,
+      "cite": "lib.rs:169"
+    }
+  ],
+  "orphaned_crates": [
+    {
+      "name": "zp-memory-index",
+      "severity": "defect",
+      "why": "declared as backing the memory:retrieve gated tool \u2014 a live surface naming a crate nothing imports"
+    },
+    {
+      "name": "zp-gossip",
+      "severity": "decide",
+      "why": "Regent-to-Regent collective intelligence; keep or evict"
+    },
+    {
+      "name": "zp-cloudflare",
+      "severity": "decide",
+      "why": "sole permitted Cloudflare surface; not imported by zp-server"
+    }
+  ],
+  "sequence": [
+    {
+      "id": "S0",
+      "name": "Turn the three subsystems on and watch 72h",
+      "kind": "information",
+      "exit": "72h continuous run; emission counts by receipt family"
+    },
+    {
+      "id": "S1",
+      "name": "Make the maturity number mean what it says",
+      "kind": "instrument",
+      "exit": "two numbers reported; tie-off age visible"
+    },
+    {
+      "id": "S2",
+      "name": "Give the ontology a consumer, then its producer",
+      "kind": "connect",
+      "exit": "composition receipt with non-empty ontology hash, used in a response"
+    },
+    {
+      "id": "S3",
+      "name": "Put a signature under the loop that closed",
+      "kind": "connect",
+      "exit": "precedent entry verifies to a key; unsigned refused"
+    },
+    {
+      "id": "S4",
+      "name": "Give verification a consumer",
+      "kind": "decide",
+      "exit": "a violation changes a later cycle \u2014 or canon says it never will"
+    },
+    {
+      "id": "S5",
+      "name": "Widen precedent's discriminating input",
+      "kind": "connect",
+      "exit": "a model change escalates once, chain-visibly"
+    },
+    {
+      "id": "S6",
+      "name": "Close the improvement arc",
+      "kind": "build",
+      "exit": "an arc reaches improvement:verified without a human moving it"
+    },
+    {
+      "id": "S7",
+      "name": "Grant bounded build-execution authority",
+      "kind": "gate",
+      "exit": "blocked on the \u00a76.1 operator decision"
+    }
+  ],
+  "build_states": {
+    "source": "docs/lenses/manifest.json, regenerated 2026-08-18 (165 commits stale before this session)",
+    "total_docs": 397,
+    "all": [
+      [
+        "built",
+        138
+      ],
+      [
+        "partial",
+        96
+      ],
+      [
+        "unknown",
+        79
+      ],
+      [
+        "candidate",
+        49
+      ],
+      [
+        "scaffolded",
+        34
+      ],
+      [
+        "keel",
+        1
+      ]
+    ],
+    "tier2": {
+      "total": 283,
+      "built": 95,
+      "partial": 63,
+      "unknown": 69,
+      "candidate": 32,
+      "scaffolded": 24
+    }
+  },
+  "session_changes": [
+    "connection_map.py \u2014 the derived_artifact detector's wall-clock branch sat below an unconditional continue and had never executed; hoisted so an artifact with no commit provenance says so instead of being judged by a proxy that reports 165 commits of drift on a file regenerated seconds ago",
+    "connection_map.py \u2014 EMIT_FORMAT_RE counted format!(\"mail:read:{}\", mb) in zp-cli's capability-list builder as receipt emission. Registry-gap defects 5 -> 1; the advertised mechanical fix would have registered a capability vocabulary as a receipt vocabulary",
+    "connection_map.py \u2014 live-only and tied-off share now reported beside maturity, in the same output and in totals",
+    "regenerate_manifest.py + regenerate_source_manifest.py \u2014 now stamp generated_from_commit, so the two lens manifests can clear their own freshness check once committed",
+    "docs/lenses/manifest.json + source-manifest.json \u2014 regenerated; 165 and 154 commits stale respectively",
+    "connection_map.py \u2014 tie-off provenance now reported: of 433 tie-offs, 1 carries a disposition, a declared date and a reopen condition (tieoffs.toml); 60 carry a reason at the site (pin exceptions); 372 carry a reason in a source comment (RESERVED_RECEIPT_PREFIXES). All three count toward maturity identically"
+  ]
+};
+const MAXW = DATA.connections.now.total;
+const C = { live:'var(--st-good)', tied_off:'var(--st-warn)', defect:'var(--st-crit)' };
+const ICO = { live:'●', tied_off:'◑', defect:'▲' };
+const NAME = { live:'Live', tied_off:'Tied off', defect:'Defect' };
+const tip = document.getElementById('tip');
+function hov(el, html){
+  el.addEventListener('mousemove', e=>{ tip.innerHTML=html; tip.style.opacity=1;
+    tip.style.left=Math.min(e.clientX+14, innerWidth-292)+'px'; tip.style.top=(e.clientY+16)+'px'; });
+  el.addEventListener('mouseleave', ()=> tip.style.opacity=0);
+}
+function bar(id, d){
+  const el=document.getElementById(id); el.style.width=(100*d.total/MAXW)+'%';
+  ['live','tied_off','defect'].forEach(k=>{
+    const s=document.createElement('div'); s.className='seg';
+    s.style.flex=d[k]; s.style.background=C[k];
+    s.textContent = (100*d[k]/d.total>=7) ? d[k] : '';
+    hov(s, `<strong>${NAME[k]}</strong> ${ICO[k]}<br>${d[k]} of ${d.total} — ${(100*d[k]/d.total).toFixed(1)}%<br><span style="color:var(--text-muted)">${d.date}</span>`);
+    el.appendChild(s);
+  });
+}
+bar('bar-base', DATA.connections.baseline);
+bar('bar-now',  DATA.connections.now);
+
+const SC={closed:['var(--st-good)','●','Closed'],partial:['var(--st-warn)','◑','Evidence only'],broken:['var(--st-crit)','▲','Broken']};
+document.getElementById('loops').innerHTML = DATA.loops.map(l=>{
+  const [c,i,t]=SC[l.state];
+  return `<div class="loop"><div class="id">${l.id}</div><div>
+    <h3>${l.name}<span class="chip" style="background:${c};color:#08080a">${i} ${t}</span></h3>
+    <div class="flow">${l.chain.replace(/</g,'&lt;')}</div>
+    <p>${l.detail}</p><span class="cite">${l.cite}</span></div></div>`;}).join('');
+
+const BSC={built:['var(--st-good)','●'],partial:['var(--series-1)','◐'],
+  scaffolded:['var(--st-warn)','◑'],candidate:['var(--st-warn)','◑'],unknown:['var(--surface-3)','·'],keel:['var(--st-good)','●']};
+function bsbar(id, pairs, total){
+  const el=document.getElementById(id);
+  pairs.forEach(([k,v])=>{
+    const s=document.createElement('div'); s.className='seg';
+    s.style.flex=v; s.style.background=BSC[k][0];
+    if(k==='unknown') s.style.color='var(--text-secondary)';
+    s.textContent=(100*v/total>=6)?v:'';
+    hov(s,`<strong>${k[0].toUpperCase()+k.slice(1)}</strong> ${BSC[k][1]}<br>${v} of ${total} — ${(100*v/total).toFixed(1)}%`);
+    el.appendChild(s);
+  });
+}
+bsbar('bs-all', DATA.build_states.all, DATA.build_states.total_docs);
+const t2=DATA.build_states.tier2;
+bsbar('bs-t2', [['built',t2.built],['partial',t2.partial],['scaffolded',t2.scaffolded],
+  ['candidate',t2.candidate],['unknown',t2.unknown]], t2.total);
+
+document.getElementById('subs').innerHTML = DATA.subsystems.map(s=>
+  `<tr><td>${s.name}</td><td class="mono">${s.cadence}</td>
+   <td><span class="chip" style="background:var(--st-crit);color:#08080a">▲ false</span></td>
+   <td class="mono" style="color:var(--text-muted)">${s.cite}</td></tr>`).join('');
+
+document.getElementById('orph').innerHTML = DATA.orphaned_crates.map(c=>{
+  const d = c.severity==='defect';
+  return `<tr><td class="mono">${c.name}</td>
+   <td><span class="chip" style="background:${d?'var(--st-crit)':'var(--st-warn)'};color:#08080a">${d?'▲ defect':'◑ decide'}</span></td>
+   <td style="color:var(--text-secondary)">${c.why}</td></tr>`;}).join('');
+
+const KC={information:'var(--st-warn)',instrument:'var(--st-warn)',connect:'var(--st-good)',decide:'var(--st-warn)',build:'var(--st-good)',gate:'var(--st-crit)'};
+document.getElementById('seq').innerHTML = DATA.sequence.map(s=>
+  `<div class="seq"><div class="s">${s.id}</div><div>
+    <div class="n">${s.name} <span class="chip" style="background:${KC[s.kind]};color:#08080a">${s.kind}</span></div>
+    <div class="e">Exit — ${s.exit}</div></div></div>`).join('');
+
+const b=DATA.connections.baseline, n=DATA.connections.now;
+const rows=[['Declared connections',b.total,n.total],['Live',b.live,n.live],
+  ['Tied off',b.tied_off,n.tied_off],['Defect',b.defect,n.defect]];
+document.getElementById('tbl').innerHTML = rows.map(([k,x,y])=>{
+  const d=y-x, s=d>0?'+':'';
+  return `<tr><td>${k}</td><td class="num">${x.toLocaleString()}</td><td class="num">${y.toLocaleString()}</td>
+   <td class="num" style="color:var(--text-secondary)">${s}${d.toLocaleString()}</td></tr>`;}).join('')
+ + `<tr><td>Maturity</td><td class="num">33.6%</td><td class="num">78.4%</td><td class="num" style="color:var(--text-secondary)">+44.8 pts</td></tr>`
+ + `<tr><td>Live only</td><td class="num">29.4%</td><td class="num">45.0%</td><td class="num" style="color:var(--text-secondary)">+15.6 pts</td></tr>`
+ + `<tr><td>Governed documents</td><td class="num">—</td><td class="num">176</td><td class="num">—</td></tr>`
+ + `<tr><td>Sources with zero live connections</td><td class="num">—</td><td class="num">97 of 327</td><td class="num">—</td></tr>`;
+
+document.getElementById('tgl').onclick = ()=>{
+  const r=document.documentElement;
+  r.dataset.theme = r.dataset.theme==='dark' ? 'light' : 'dark';
+};
+</script>
+</body></html>

@@ -28,8 +28,7 @@ use crate::{FindingSeverity, VerifyFinding, VerifyReport};
 /// BLAKE3 hash of the empty byte string — `blake3(b"")`.
 /// Sentinel `prev_hash` for the genesis entry of any chain.
 /// Byte-identical to `zp_audit::chain::genesis_hash()`.
-pub const GENESIS_HASH: &str =
-    "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262";
+pub const GENESIS_HASH: &str = "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262";
 
 // ── Wire types (match the JSON shape returned by /api/v1/foundation/chain) ──
 
@@ -210,10 +209,7 @@ pub fn verify_foundation_chain(
             report.findings.push(VerifyFinding {
                 rule: "M3".to_string(),
                 entry_id: eid.to_string(),
-                description: format!(
-                    "Expected sequence {}, got {}",
-                    i, entry.sequence
-                ),
+                description: format!("Expected sequence {}, got {}", i, entry.sequence),
                 severity: FindingSeverity::Error,
             });
         }
@@ -379,8 +375,7 @@ mod tests {
         entry.signatures = vec![FoundationSignature {
             alg: "Ed25519".to_string(),
             kid: "foundation-root-v1".to_string(),
-            value: base64::engine::general_purpose::STANDARD
-                .encode(raw_sig.to_bytes()),
+            value: base64::engine::general_purpose::STANDARD.encode(raw_sig.to_bytes()),
         }];
 
         entry

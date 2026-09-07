@@ -22,7 +22,10 @@ pub struct IndexConfig {
 
 impl Default for IndexConfig {
     fn default() -> Self {
-        Self { dim: 0, bit_width: 4 }
+        Self {
+            dim: 0,
+            bit_width: 4,
+        }
     }
 }
 
@@ -64,13 +67,19 @@ impl TurboVecIndex {
             IdMapIndex::new(config.dim, config.bit_width)
                 .map_err(|e| MemoryIndexError::TurboVec(e.to_string()))?
         };
-        Ok(Self { inner, config: config.clone() })
+        Ok(Self {
+            inner,
+            config: config.clone(),
+        })
     }
 
     /// Load an existing `.tvim` index from disk.
     pub fn load(path: &Path, config: &IndexConfig) -> Result<Self, MemoryIndexError> {
         let inner = IdMapIndex::load(path)?;
-        Ok(Self { inner, config: config.clone() })
+        Ok(Self {
+            inner,
+            config: config.clone(),
+        })
     }
 
     /// The config used at construction time.
@@ -187,7 +196,10 @@ mod tests {
 
     #[test]
     fn add_and_search_basic() {
-        let config = IndexConfig { dim: DIM, bit_width: 4 };
+        let config = IndexConfig {
+            dim: DIM,
+            bit_width: 4,
+        };
         let mut idx = TurboVecIndex::new(&config).unwrap();
 
         idx.add(1001, &ones_vec()).unwrap();
@@ -205,7 +217,10 @@ mod tests {
 
     #[test]
     fn allowlist_filters_results() {
-        let config = IndexConfig { dim: DIM, bit_width: 4 };
+        let config = IndexConfig {
+            dim: DIM,
+            bit_width: 4,
+        };
         let mut idx = TurboVecIndex::new(&config).unwrap();
 
         idx.add(1001, &ones_vec()).unwrap();
@@ -219,7 +234,10 @@ mod tests {
 
     #[test]
     fn empty_allowlist_errors() {
-        let config = IndexConfig { dim: DIM, bit_width: 4 };
+        let config = IndexConfig {
+            dim: DIM,
+            bit_width: 4,
+        };
         let mut idx = TurboVecIndex::new(&config).unwrap();
         idx.add(1001, &ones_vec()).unwrap();
 
@@ -229,7 +247,10 @@ mod tests {
 
     #[test]
     fn remove_and_contains() {
-        let config = IndexConfig { dim: DIM, bit_width: 4 };
+        let config = IndexConfig {
+            dim: DIM,
+            bit_width: 4,
+        };
         let mut idx = TurboVecIndex::new(&config).unwrap();
 
         idx.add(42, &ones_vec()).unwrap();
@@ -241,7 +262,10 @@ mod tests {
 
     #[test]
     fn save_and_load_roundtrip() {
-        let config = IndexConfig { dim: DIM, bit_width: 4 };
+        let config = IndexConfig {
+            dim: DIM,
+            bit_width: 4,
+        };
         let mut idx = TurboVecIndex::new(&config).unwrap();
         idx.add(100, &ones_vec()).unwrap();
         idx.add(200, &zero_vec()).unwrap();
@@ -267,7 +291,10 @@ mod tests {
 
     #[test]
     fn lazy_dim_locks_on_first_add() {
-        let config = IndexConfig { dim: 0, bit_width: 4 };
+        let config = IndexConfig {
+            dim: 0,
+            bit_width: 4,
+        };
         let mut idx = TurboVecIndex::new(&config).unwrap();
         assert_eq!(idx.dim(), None);
 

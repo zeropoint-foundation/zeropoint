@@ -5,7 +5,7 @@
 //! and system pressure. The routing decision is auditable, governable, and
 //! sovereign — no external router decides which model handles a given task.
 //!
-//! See `docs/design/inference-routing-2026-07.md` for the full design.
+//! See `docs/design/INFERENCE-ROUTING-DISCIPLINE-2026-07.md` for the full design.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -13,7 +13,6 @@ use std::path::Path;
 use tracing::{debug, info, warn};
 
 use crate::context::SystemAwareness;
-
 
 // ─── Intent categories ────────────────────────────────────────────
 
@@ -163,6 +162,50 @@ pub struct ModelDossier {
     pub cloud_model_id: Option<String>,
     /// Blocked tiers (quick lookup).
     pub blocked_tiers: Vec<String>,
+    /// H3 (token-entropy anomaly) baseline for zp-emission-coherence.
+    /// `None` when the dossier's `[entropy_baseline]` section is
+    /// absent OR when its `state != "calibrated"`. Only calibrated
+    /// baselines flow into the analyzer; every other state is treated
+    /// as "H3 skipped for this variant" (silent, per doc).
+    pub entropy_baseline: Option<EntropyBaselineSpec>,
+}
+
+/// H3 (token-entropy anomaly) baseline as declared in a model dossier's
+/// `[entropy_baseline]` section. Runtime projection of the TOML; the
+/// dossier file is truth.
+///
+/// Mirrors the `[drafter]` schema pattern: the section is always present
+/// so the shape is visible in the corpus, but `state` gates whether the
+/// numbers are trusted. Loader inserts calibrated baselines into
+/// `zp_emission_coherence::AnalyzerConfig.entropy_baselines`; anything
+/// else is skipped.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntropyBaselineSpec {
+    /// One of `"not_yet_calibrated"` or `"calibrated"`. Only
+    /// `"calibrated"` baselines are inserted into the analyzer.
+    pub state: String,
+    /// Which variant the baseline was measured on. Loader keys the
+    /// analyzer entry by this string so `Response.model` matches.
+    pub target_variant: String,
+    /// Mean `-log P(chosen)` over the calibration battery.
+    pub mean: f64,
+    /// Sample standard deviation from the calibration battery.
+    pub std_dev: f64,
+    /// Size of the calibration prompt set (informational).
+    pub battery_prompt_count: u64,
+    /// Chain receipt id for the calibration run (informational).
+    pub battery_receipt: String,
+    /// ISO-8601 timestamp when the calibration ran (informational).
+    pub calibrated_at: String,
+}
+
+impl EntropyBaselineSpec {
+    /// True if `state == "calibrated"` AND `std_dev > 0`. Both are
+    /// required for H3 to produce a meaningful comparison (a zero
+    /// std_dev makes the sigma computation degenerate).
+    pub fn is_usable(&self) -> bool {
+        self.state == "calibrated" && self.std_dev > 0.0
+    }
 }
 
 impl ModelDossier {
@@ -259,38 +302,44 @@ impl DossierCorpus {
 
     /// Parse a single model_dossier.toml into a ModelDossier.
     fn parse_dossier(path: &Path) -> Result<ModelDossier, String> {
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| format!("read error: {}", e))?;
+        let content = std::fs::read_to_string(path).map_err(|e| format!("read error: {}", e))?;
         let table: toml::Table = content
             .parse()
             .map_err(|e| format!("TOML parse error: {}", e))?;
 
         // Extract identity.
-        let identity = table.get("identity")
+        let identity = table
+            .get("identity")
             .and_then(|v| v.as_table())
             .ok_or("missing [identity] section")?;
 
-        let family = identity.get("family")
+        let family = identity
+            .get("family")
             .and_then(|v| v.as_str())
             .ok_or("missing identity.family")?
             .to_string();
 
-        let primary_variant = identity.get("variant_primary")
+        let primary_variant = identity
+            .get("variant_primary")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
 
-        let variants: Vec<String> = identity.get("variants_tested")
+        let variants: Vec<String> = identity
+            .get("variants_tested")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default();
 
         // Check if cloud-only.
-        let cloud_only = identity.get("cloud")
-            .and_then(|v| v.as_table())
-            .is_some();
+        let cloud_only = identity.get("cloud").and_then(|v| v.as_table()).is_some();
 
-        let cloud_model_id = identity.get("cloud")
+        let cloud_model_id = identity
+            .get("cloud")
             .and_then(|v| v.as_table())
             .and_then(|c| c.get("abacus_model_id"))
             .and_then(|v| v.as_str())
@@ -318,6 +367,44 @@ impl DossierCorpus {
             }
         }
 
+        // Extract entropy_baseline (H3 in zp-emission-coherence).
+        // Section is optional; missing section → None. Parse errors on
+        // individual fields degrade to default values rather than
+        // failing the whole dossier — a malformed [entropy_baseline]
+        // should not silently drop the model from the corpus.
+        let entropy_baseline = table
+            .get("entropy_baseline")
+            .and_then(|v| v.as_table())
+            .map(|t| EntropyBaselineSpec {
+                state: t
+                    .get("state")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("not_yet_calibrated")
+                    .to_string(),
+                target_variant: t
+                    .get("target_variant")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(&primary_variant)
+                    .to_string(),
+                mean: t.get("mean").and_then(|v| v.as_float()).unwrap_or(0.0),
+                std_dev: t.get("std_dev").and_then(|v| v.as_float()).unwrap_or(0.0),
+                battery_prompt_count: t
+                    .get("battery_prompt_count")
+                    .and_then(|v| v.as_integer())
+                    .map(|i| i.max(0) as u64)
+                    .unwrap_or(0),
+                battery_receipt: t
+                    .get("battery_receipt")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                calibrated_at: t
+                    .get("calibrated_at")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+            });
+
         Ok(ModelDossier {
             family,
             primary_variant,
@@ -327,7 +414,48 @@ impl DossierCorpus {
             cloud_only,
             cloud_model_id,
             blocked_tiers,
+            entropy_baseline,
         })
+    }
+
+    /// Extract H3 entropy baselines from the corpus for
+    /// `zp_emission_coherence::EmissionAnalyzer`. Every dossier's
+    /// `[entropy_baseline]` section that is `is_usable()` (i.e. state =
+    /// "calibrated" AND std_dev > 0) becomes a map entry keyed by
+    /// `target_variant`. Skipped baselines are logged at info level;
+    /// dossiers without a baseline section are silently ignored.
+    ///
+    /// Returned map fits `AnalyzerConfig.entropy_baselines` directly.
+    pub fn entropy_baselines(&self) -> HashMap<String, zp_emission_coherence::EntropyBaseline> {
+        let mut out = HashMap::new();
+        for (family, dossier) in &self.dossiers {
+            let Some(spec) = &dossier.entropy_baseline else {
+                continue;
+            };
+            if spec.is_usable() {
+                info!(
+                    family = %family,
+                    variant = %spec.target_variant,
+                    mean = spec.mean,
+                    std_dev = spec.std_dev,
+                    "H3 entropy baseline loaded from dossier"
+                );
+                out.insert(
+                    spec.target_variant.clone(),
+                    zp_emission_coherence::EntropyBaseline {
+                        mean: spec.mean,
+                        std_dev: spec.std_dev,
+                    },
+                );
+            } else {
+                info!(
+                    family = %family,
+                    state = %spec.state,
+                    "H3 entropy baseline skipped — dossier not calibrated or std_dev=0"
+                );
+            }
+        }
+        out
     }
 
     /// Get all eligible candidates for an intent category.
@@ -401,8 +529,13 @@ impl Router {
             .map(|(dossier, suitability)| {
                 let variant = dossier.variant_for(category);
                 let is_local = !dossier.cloud_only;
+                // zpd:raw-loopback-opt-in -- display/rationale metadata only.
+                // RouteDecision.endpoint is never read by the actual dispatch
+                // path (Regent::infer matches on `tier`, not `endpoint`); the
+                // real call goes through InferenceBackend::chat_via_proxy,
+                // which computes its own URL from proxy_base. Not a call site.
                 let endpoint = if is_local {
-                    "http://127.0.0.1:11434".to_string()
+                    "http://127.0.0.1:11434".to_string() // zpd:raw-loopback-opt-in
                 } else {
                     config.inference_endpoint.clone()
                 };
@@ -464,7 +597,11 @@ impl Router {
             .collect();
 
         // Sort by score descending.
-        candidates.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        candidates.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Winner is the highest-scored candidate.
         let winner = &candidates[0];
@@ -595,6 +732,7 @@ mod tests {
                 cloud_only: false,
                 cloud_model_id: None,
                 blocked_tiers: vec![],
+                entropy_baseline: None,
             },
         );
 
@@ -616,6 +754,7 @@ mod tests {
                 cloud_only: false,
                 cloud_model_id: None,
                 blocked_tiers: vec!["reasoning".into()],
+                entropy_baseline: None,
             },
         );
 
@@ -637,6 +776,7 @@ mod tests {
                 cloud_only: true,
                 cloud_model_id: Some("zai-org/GLM-5.2".into()),
                 blocked_tiers: vec![],
+                entropy_baseline: None,
             },
         );
 
@@ -644,12 +784,16 @@ mod tests {
     }
 
     fn test_config() -> crate::config::RegentConfig {
+        // HARNESS-SEAM S4 unification (2026-09-01): RegentConfig no longer
+        // derives Default. for_tests() supplies reasoning_model/routing_model
+        // (positionally, so this line never spells out the
+        // `reasoning_model: "..."` struct-literal shape the S4 pin forbids)
+        // plus the remaining fields; enabled/inference_endpoint are
+        // overridden below for what this suite actually exercises.
         crate::config::RegentConfig {
             enabled: true,
             inference_endpoint: "https://routellm.abacus.ai/v1".into(),
-            reasoning_model: "qwen3:8b".into(),
-            routing_model: "qwen3:1.7b".into(),
-            ..Default::default()
+            ..crate::config::RegentConfig::for_tests("qwen3:8b", "qwen3:1.7b")
         }
     }
 
@@ -678,7 +822,10 @@ mod tests {
         let config = test_config();
         let decision = Router::route(&IntentCategory::Conversation, &corpus, None, &config);
         // gemma4 is blocked for reasoning — should not appear
-        assert!(!decision.alternatives_rejected.iter().any(|r| r.contains("gemma4")));
+        assert!(!decision
+            .alternatives_rejected
+            .iter()
+            .any(|r| r.contains("gemma4")));
         assert_ne!(decision.model, "gemma4:26b-mlx");
     }
 
@@ -705,5 +852,140 @@ mod tests {
         let decision = Router::route(&IntentCategory::Conversation, &corpus, None, &config);
         assert_eq!(decision.model, "qwen3:8b"); // config default
         assert!(decision.rationale.contains("config default"));
+    }
+
+    // ── EntropyBaselineSpec parsing ─────────────────────────────────────
+
+    fn write_dossier(dir: &Path, family: &str, extra: &str) -> std::path::PathBuf {
+        let sub = dir.join(family);
+        std::fs::create_dir_all(&sub).unwrap();
+        let dossier = sub.join("model_dossier.toml");
+        let base = format!(
+            "[identity]\n\
+             family = \"{fam}\"\n\
+             variant_primary = \"{fam}:1b\"\n\
+             variants_tested = [\"{fam}:1b\"]\n\
+             \n\
+             [tiers.reasoning]\n\
+             suitability = \"viable\"\n\
+             variant = \"{fam}:1b\"\n",
+            fam = family
+        );
+        std::fs::write(&dossier, format!("{}{}", base, extra)).unwrap();
+        dossier
+    }
+
+    #[test]
+    fn parse_dossier_reads_calibrated_entropy_baseline() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_dossier(
+            tmp.path(),
+            "testfam",
+            "\n[entropy_baseline]\n\
+             state = \"calibrated\"\n\
+             target_variant = \"testfam:1b\"\n\
+             mean = 2.5\n\
+             std_dev = 0.7\n\
+             battery_prompt_count = 128\n\
+             battery_receipt = \"regent:calibration:testfam:abc\"\n\
+             calibrated_at = \"2026-08-01T12:00:00Z\"\n",
+        );
+        let corpus = DossierCorpus::load_from_dir(tmp.path());
+        let d = corpus.dossiers.get("testfam").unwrap();
+        let b = d.entropy_baseline.as_ref().unwrap();
+        assert_eq!(b.state, "calibrated");
+        assert_eq!(b.target_variant, "testfam:1b");
+        assert!((b.mean - 2.5).abs() < 1e-9);
+        assert!((b.std_dev - 0.7).abs() < 1e-9);
+        assert_eq!(b.battery_prompt_count, 128);
+        assert_eq!(b.battery_receipt, "regent:calibration:testfam:abc");
+        assert!(b.is_usable());
+    }
+
+    #[test]
+    fn parse_dossier_reads_not_yet_calibrated_entropy_baseline() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_dossier(
+            tmp.path(),
+            "testfam",
+            "\n[entropy_baseline]\n\
+             state = \"not_yet_calibrated\"\n\
+             target_variant = \"testfam:1b\"\n\
+             mean = 0.0\n\
+             std_dev = 0.0\n\
+             battery_prompt_count = 0\n\
+             battery_receipt = \"\"\n\
+             calibrated_at = \"\"\n",
+        );
+        let corpus = DossierCorpus::load_from_dir(tmp.path());
+        let d = corpus.dossiers.get("testfam").unwrap();
+        let b = d.entropy_baseline.as_ref().unwrap();
+        assert_eq!(b.state, "not_yet_calibrated");
+        assert!(!b.is_usable()); // state gates usability
+    }
+
+    #[test]
+    fn parse_dossier_missing_entropy_baseline_is_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_dossier(tmp.path(), "testfam", "");
+        let corpus = DossierCorpus::load_from_dir(tmp.path());
+        let d = corpus.dossiers.get("testfam").unwrap();
+        assert!(d.entropy_baseline.is_none());
+    }
+
+    #[test]
+    fn entropy_baseline_calibrated_but_zero_stddev_is_not_usable() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_dossier(
+            tmp.path(),
+            "testfam",
+            "\n[entropy_baseline]\n\
+             state = \"calibrated\"\n\
+             target_variant = \"testfam:1b\"\n\
+             mean = 2.5\n\
+             std_dev = 0.0\n\
+             battery_prompt_count = 128\n\
+             battery_receipt = \"\"\n\
+             calibrated_at = \"\"\n",
+        );
+        let corpus = DossierCorpus::load_from_dir(tmp.path());
+        let b = corpus
+            .dossiers
+            .get("testfam")
+            .unwrap()
+            .entropy_baseline
+            .as_ref()
+            .unwrap();
+        // Degenerate: std_dev=0 makes sigmas_below computation divide by zero.
+        // The is_usable() guard is what keeps H3 from seeing this.
+        assert!(!b.is_usable());
+    }
+
+    #[test]
+    fn parse_dossier_defaults_target_variant_to_primary_variant() {
+        // If [entropy_baseline] omits target_variant, loader should fall
+        // back to the dossier's primary_variant so the H3 lookup still
+        // has a key to match Response.model against.
+        let tmp = tempfile::tempdir().unwrap();
+        write_dossier(
+            tmp.path(),
+            "testfam",
+            "\n[entropy_baseline]\n\
+             state = \"calibrated\"\n\
+             mean = 2.5\n\
+             std_dev = 0.7\n\
+             battery_prompt_count = 10\n\
+             battery_receipt = \"\"\n\
+             calibrated_at = \"\"\n",
+        );
+        let corpus = DossierCorpus::load_from_dir(tmp.path());
+        let b = corpus
+            .dossiers
+            .get("testfam")
+            .unwrap()
+            .entropy_baseline
+            .as_ref()
+            .unwrap();
+        assert_eq!(b.target_variant, "testfam:1b"); // fell back to primary
     }
 }

@@ -289,10 +289,9 @@ mod tests {
     #[cfg(feature = "os-keychain")]
     #[test]
     fn test_resolve_vault_key_from_genesis() {
-        let _serial = crate::test_sync::serial_guard();
+        let zp = crate::test_sync::isolated_zp_home();
         std::env::remove_var("SECRETS_MASTER_KEY");
-        let dir = tempfile::tempdir().unwrap();
-        let keyring = Keyring::open(dir.path().join("keys")).unwrap();
+        let keyring = Keyring::open(zp.keys_dir()).unwrap();
 
         let genesis = GenesisKey::generate("resolve-test");
         keyring.save_genesis(&genesis, true).unwrap();
@@ -305,18 +304,16 @@ mod tests {
 
     #[test]
     fn test_resolve_vault_key_errors_without_genesis() {
-        let _serial = crate::test_sync::serial_guard();
-        let dir = tempfile::tempdir().unwrap();
-        let keyring = Keyring::open(dir.path().join("keys")).unwrap();
+        let zp = crate::test_sync::isolated_zp_home();
+        let keyring = Keyring::open(zp.keys_dir()).unwrap();
         std::env::remove_var("SECRETS_MASTER_KEY");
         assert!(resolve_vault_key(&keyring).is_err());
     }
 
     #[test]
     fn test_resolve_vault_key_env_var_fallback() {
-        let _serial = crate::test_sync::serial_guard();
-        let dir = tempfile::tempdir().unwrap();
-        let keyring = Keyring::open(dir.path().join("keys")).unwrap();
+        let zp = crate::test_sync::isolated_zp_home();
+        let keyring = Keyring::open(zp.keys_dir()).unwrap();
         let test_key = [0xAB_u8; 32];
         std::env::set_var("SECRETS_MASTER_KEY", hex::encode(test_key));
         let resolved = resolve_vault_key(&keyring).unwrap();
@@ -327,9 +324,8 @@ mod tests {
 
     #[test]
     fn test_resolve_vault_key_rejects_short_env_var() {
-        let _serial = crate::test_sync::serial_guard();
-        let dir = tempfile::tempdir().unwrap();
-        let keyring = Keyring::open(dir.path().join("keys")).unwrap();
+        let zp = crate::test_sync::isolated_zp_home();
+        let keyring = Keyring::open(zp.keys_dir()).unwrap();
         // Too short (< 16 bytes) and not valid hex for 32 bytes
         std::env::set_var("SECRETS_MASTER_KEY", "tooshort");
         let result = resolve_vault_key(&keyring);
@@ -339,9 +335,8 @@ mod tests {
 
     #[test]
     fn test_resolve_vault_key_rejects_wrong_length_hex() {
-        let _serial = crate::test_sync::serial_guard();
-        let dir = tempfile::tempdir().unwrap();
-        let keyring = Keyring::open(dir.path().join("keys")).unwrap();
+        let zp = crate::test_sync::isolated_zp_home();
+        let keyring = Keyring::open(zp.keys_dir()).unwrap();
         // Valid hex but only 16 bytes (32 hex chars) — not 32 bytes
         std::env::set_var("SECRETS_MASTER_KEY", hex::encode([0xABu8; 16]));
         let result = resolve_vault_key(&keyring);
@@ -351,9 +346,8 @@ mod tests {
 
     #[test]
     fn test_resolve_vault_key_hashes_long_raw_string() {
-        let _serial = crate::test_sync::serial_guard();
-        let dir = tempfile::tempdir().unwrap();
-        let keyring = Keyring::open(dir.path().join("keys")).unwrap();
+        let zp = crate::test_sync::isolated_zp_home();
+        let keyring = Keyring::open(zp.keys_dir()).unwrap();
         // Long enough raw string (>= 16 bytes), not valid hex
         let raw = "this-is-a-legacy-passphrase-from-old-setup";
         std::env::set_var("SECRETS_MASTER_KEY", raw);
@@ -368,10 +362,9 @@ mod tests {
     #[cfg(feature = "os-keychain")]
     #[test]
     fn test_derive_and_resolve_consistency() {
-        let _serial = crate::test_sync::serial_guard();
+        let zp = crate::test_sync::isolated_zp_home();
         std::env::remove_var("SECRETS_MASTER_KEY");
-        let dir = tempfile::tempdir().unwrap();
-        let keyring = Keyring::open(dir.path().join("keys")).unwrap();
+        let keyring = Keyring::open(zp.keys_dir()).unwrap();
 
         let genesis = GenesisKey::generate("consistency-test");
         keyring.save_genesis(&genesis, true).unwrap();

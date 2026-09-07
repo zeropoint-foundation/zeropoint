@@ -740,10 +740,7 @@ fn evaluate_statement(config: &GuardConfig, stmt: &shell::Statement) -> EvalResu
 
     // 3) Unknown command, no rule match — Low risk (warn humans, block agents).
     EvalResult {
-        allowed: match config.actor {
-            Actor::Human => true,
-            _ => false,
-        },
+        allowed: matches!(config.actor, Actor::Human),
         risk: RiskLevel::Low,
         matched_rules: vec![],
         reason: Some("Unrecognized command".to_string()),

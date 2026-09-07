@@ -14,6 +14,12 @@ use crate::officer::{ChainReader, Officer, VaultKeyLister};
 /// The Steward officer — watches chain integrity and vault coherence.
 pub struct Steward;
 
+impl Default for Steward {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Steward {
     pub fn new() -> Self {
         Self
@@ -114,10 +120,7 @@ impl Steward {
                         domain: self.domain(),
                         finding_type: "signature_invalid".into(),
                         severity: Severity::Error,
-                        summary: format!(
-                            "Invalid signature on entry {}",
-                            entry_report.entry_id
-                        ),
+                        summary: format!("Invalid signature on entry {}", entry_report.entry_id),
                         detail: json!({
                             "entry_id": entry_report.entry_id,
                             "issue": entry_report.issue,
@@ -202,10 +205,7 @@ impl Steward {
                     domain: self.domain(),
                     finding_type: "chain_silence".into(),
                     severity: Severity::Warning,
-                    summary: format!(
-                        "No chain entries in the last {} minutes",
-                        age.num_minutes()
-                    ),
+                    summary: format!("No chain entries in the last {} minutes", age.num_minutes()),
                     detail: json!({
                         "last_entry_age_minutes": age.num_minutes(),
                         "last_entry_id": newest.id.0.to_string(),
@@ -354,11 +354,7 @@ impl Officer for Steward {
         &[]
     }
 
-    fn sweep(
-        &self,
-        chain: &ChainReader<'_>,
-        vault_keys: &VaultKeyLister,
-    ) -> Vec<Finding> {
+    fn sweep(&self, chain: &ChainReader<'_>, vault_keys: &VaultKeyLister) -> Vec<Finding> {
         debug!("Steward sweep starting");
 
         let mut findings = Vec::new();
@@ -367,10 +363,7 @@ impl Officer for Steward {
         findings.extend(self.check_chain_growth(chain));
         findings.extend(self.check_vault_hygiene(vault_keys));
 
-        debug!(
-            findings = findings.len(),
-            "Steward sweep complete"
-        );
+        debug!(findings = findings.len(), "Steward sweep complete");
 
         findings
     }
@@ -397,13 +390,16 @@ mod tests {
 
         // Should produce chain_empty and vault_empty findings
         let types: Vec<&str> = findings.iter().map(|f| f.finding_type.as_str()).collect();
-        assert!(types.contains(&"chain_empty"), "expected chain_empty finding, got: {types:?}");
+        assert!(
+            types.contains(&"chain_empty"),
+            "expected chain_empty finding, got: {types:?}"
+        );
     }
 
     #[test]
     fn steward_detects_suspicious_key_names() {
         let vault = VaultKeyLister::new(vec![
-            "tools/ironclaw/api_key".into(),
+            "tools/example-tool/api_key".into(),
             "providers/openai/sk-proj-abc123".into(), // suspicious
             "system/master_key".into(),
         ]);
@@ -425,7 +421,7 @@ mod tests {
     #[test]
     fn steward_reports_unnamespaced_keys() {
         let vault = VaultKeyLister::new(vec![
-            "tools/ironclaw/key".into(),
+            "tools/example-tool/key".into(),
             "orphan_key".into(), // no namespace
         ]);
 

@@ -325,7 +325,11 @@ fn persist_session(path: &Path, token: &str, created_at: i64, key_fp: &str) {
 
     if let Some(parent) = path.parent() {
         if let Err(e) = std::fs::create_dir_all(parent) {
-            warn!("Failed to create {} for session file: {}", parent.display(), e);
+            warn!(
+                "Failed to create {} for session file: {}",
+                parent.display(),
+                e
+            );
             return;
         }
     }
@@ -591,7 +595,7 @@ fn extract_cookie_token(req: &Request) -> Option<String> {
 ///      is `Some` (i.e. post-Genesis).
 ///   2. `Authorization: Bearer <token>` — legacy bearer-token path retained
 ///      during the genesis-signed-gate-requests migration (kept until Step 4
-///      of `docs/handoffs/genesis-signed-gate-requests-design-2026-05.md`).
+///      of `docs/design/GENESIS-SIGNED-GATE-REQUESTS-2026-05.md`).
 ///   3. `Cookie: zp_session=<token>` — browser HttpOnly cookie path
 ///      (out-of-scope for this migration; tracked under #139).
 ///   4. `?token=<token>` query param — **only for /ws/* upgrades** because
@@ -737,7 +741,8 @@ pub async fn require_auth(
             let mut resp = build_auth_response(StatusCode::UNAUTHORIZED, "stale");
             // Expire the stale cookie so the next request arrives clean.
             if let Ok(hv) = "zp_session=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict".parse() {
-                resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+                resp.headers_mut()
+                    .insert(axum::http::header::SET_COOKIE, hv);
             }
             Ok(resp)
         }
@@ -808,7 +813,10 @@ async fn verify_envelope_and_continue(
     let body_bytes = match to_bytes(body, ENVELOPE_MAX_BODY).await {
         Ok(b) => b,
         Err(_) => {
-            warn!("Envelope verify: body exceeds {} bytes on {}", ENVELOPE_MAX_BODY, path);
+            warn!(
+                "Envelope verify: body exceeds {} bytes on {}",
+                ENVELOPE_MAX_BODY, path
+            );
             return Ok(build_envelope_response(
                 StatusCode::PAYLOAD_TOO_LARGE,
                 "envelope-body-too-large",
@@ -881,7 +889,9 @@ fn build_envelope_response(status: StatusCode, reason: &str) -> Response {
 /// don't try to parse it as JSON.
 fn build_auth_response(status: StatusCode, reason: &'static str) -> Response {
     let body = match reason {
-        "stale" => r#"{"error":"session_stale","detail":"Session expired or server restarted — reload to reconnect"}"#,
+        "stale" => {
+            r#"{"error":"session_stale","detail":"Session expired or server restarted — reload to reconnect"}"#
+        }
         "missing" => r#"{"error":"unauthenticated","detail":"No session token"}"#,
         _ => r#"{"error":"unauthorized"}"#,
     };
@@ -979,20 +989,9 @@ impl fmt::Display for PathError {
 
 /// System path prefixes that are never permitted as targets.
 const SYSTEM_PATH_PREFIXES: &[&str] = &[
-    "/etc",
-    "/var",
-    "/usr",
-    "/bin",
-    "/sbin",
-    "/root",
-    "/boot",
-    "/dev",
-    "/proc",
-    "/sys",
-    "/tmp",
+    "/etc", "/var", "/usr", "/bin", "/sbin", "/root", "/boot", "/dev", "/proc", "/sys", "/tmp",
     // macOS equivalents
-    "/private",
-    "/System",
+    "/private", "/System",
 ];
 
 /// Canonicalize a path and verify it falls within the allowed boundary.
@@ -1032,10 +1031,12 @@ pub fn safe_path(raw: &str, boundary: &Path) -> Result<PathBuf, PathError> {
     })?;
 
     // 4. Verify we're within the boundary.
-    let canonical_boundary = boundary.canonicalize().map_err(|e| PathError::ResolveFailed {
-        path: boundary.to_string_lossy().to_string(),
-        reason: e.to_string(),
-    })?;
+    let canonical_boundary = boundary
+        .canonicalize()
+        .map_err(|e| PathError::ResolveFailed {
+            path: boundary.to_string_lossy().to_string(),
+            reason: e.to_string(),
+        })?;
 
     if !canonical.starts_with(&canonical_boundary) {
         return Err(PathError::EscapesBoundary {
@@ -1107,7 +1108,11 @@ impl fmt::Display for CommandError {
                 write!(f, "'{}' argument rejected: {}", program, reason)
             }
             CommandError::BlockedPattern(pat) => {
-                write!(f, "Command blocked by governance policy: contains '{}'", pat)
+                write!(
+                    f,
+                    "Command blocked by governance policy: contains '{}'",
+                    pat
+                )
             }
         }
     }
@@ -1256,9 +1261,7 @@ pub fn validate_command(cmd: &str) -> Result<ValidatedCommand, CommandError> {
 
         // ── System info (read-only, no arguments that write) ──
         "which" | "env" | "echo" | "date" | "whoami" | "uname" | "df" | "du" | "free" | "ps"
-        | "lsof" | "pgrep" => {
-            validate_sysinfo_args(program, args)?
-        }
+        | "lsof" | "pgrep" => validate_sysinfo_args(program, args)?,
 
         // ── ZeroPoint CLI (governed subcommands) ──
         "zp" => validate_zp_args(args)?,
@@ -1283,8 +1286,20 @@ pub fn check_command(cmd: &str) -> Result<(), String> {
 /// Git: allowlist of read-only subcommands.
 fn validate_git_args(args: &[String]) -> Result<(), CommandError> {
     const ALLOWED_GIT_SUBCMDS: &[&str] = &[
-        "status", "log", "diff", "branch", "remote", "show", "ls-files", "rev-parse", "tag",
-        "stash", "describe", "shortlog", "blame", "config",
+        "status",
+        "log",
+        "diff",
+        "branch",
+        "remote",
+        "show",
+        "ls-files",
+        "rev-parse",
+        "tag",
+        "stash",
+        "describe",
+        "shortlog",
+        "blame",
+        "config",
     ];
 
     let subcmd = args.first().map(|s| s.as_str()).unwrap_or("");
@@ -1356,12 +1371,16 @@ fn validate_fs_read_args(program: &str, args: &[String]) -> Result<(), CommandEr
 
 /// Docker: allowlist of safe subcommands, reject dangerous flags.
 fn validate_docker_args(args: &[String]) -> Result<(), CommandError> {
-    const ALLOWED_DOCKER_SUBCMDS: &[&str] = &[
-        "ps", "logs", "inspect", "images", "compose",
-    ];
+    const ALLOWED_DOCKER_SUBCMDS: &[&str] = &["ps", "logs", "inspect", "images", "compose"];
     const DANGEROUS_FLAGS: &[&str] = &[
-        "--privileged", "-v", "--volume", "--mount", "--network=host",
-        "--pid=host", "--cap-add", "--security-opt",
+        "--privileged",
+        "-v",
+        "--volume",
+        "--mount",
+        "--network=host",
+        "--pid=host",
+        "--cap-add",
+        "--security-opt",
     ];
 
     let subcmd = args.first().map(|s| s.as_str()).unwrap_or("");
@@ -1405,9 +1424,8 @@ fn validate_docker_args(args: &[String]) -> Result<(), CommandError> {
 
 /// Docker Compose: allowlist of safe subcommands.
 fn validate_docker_compose_args(args: &[String]) -> Result<(), CommandError> {
-    const ALLOWED_COMPOSE_SUBCMDS: &[&str] = &[
-        "up", "down", "ps", "logs", "restart", "stop", "start",
-    ];
+    const ALLOWED_COMPOSE_SUBCMDS: &[&str] =
+        &["up", "down", "ps", "logs", "restart", "stop", "start"];
 
     let subcmd = args.first().map(|s| s.as_str()).unwrap_or("");
     if subcmd.is_empty() {

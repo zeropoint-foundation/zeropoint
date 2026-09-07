@@ -155,11 +155,7 @@ pub trait Officer: Send + Sync {
     ///
     /// Called periodically (default: every 15 minutes) and on real-time
     /// trigger matches. Returns all findings from this sweep cycle.
-    fn sweep(
-        &self,
-        chain: &ChainReader<'_>,
-        vault_keys: &VaultKeyLister,
-    ) -> Vec<Finding>;
+    fn sweep(&self, chain: &ChainReader<'_>, vault_keys: &VaultKeyLister) -> Vec<Finding>;
 
     /// Evaluate a single chain entry for real-time activation.
     ///

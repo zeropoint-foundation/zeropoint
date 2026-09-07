@@ -1,5 +1,0 @@
-#!/bin/bash
-# IronClaw Foundation Agent — Login Item launcher
-# Runs start-ironclaw.sh with full user session context (vault access, keychain unlocked).
-# This wrapper exists solely so macOS Login Items can reference an .app bundle.
-exec /bin/bash "/Users/kenrom/projects/zeropoint/scripts/start-ironclaw.sh"

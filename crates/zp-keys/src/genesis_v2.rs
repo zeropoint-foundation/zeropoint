@@ -302,9 +302,7 @@ pub fn perform_genesis_v2(
     let now = Utc::now();
     let next_rotation = now + chrono::Duration::days(rotation_interval_days as i64);
 
-    let public_key_hash = blake3::hash(public_key_hex.as_bytes())
-        .to_hex()
-        .to_string();
+    let public_key_hash = blake3::hash(public_key_hex.as_bytes()).to_hex().to_string();
 
     let record = GenesisV2Record {
         version: "2.0".to_string(),

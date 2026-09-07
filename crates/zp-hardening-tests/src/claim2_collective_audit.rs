@@ -14,13 +14,18 @@
 //! cargo test -p zp-hardening-tests claim2
 //! ```
 
+// Gated to match the items below, and to match `uuid::Uuid` immediately
+// after — an ungated `use tempfile::tempdir;` here read as unused in the lib
+// target and was deleted by `cargo clippy --fix` on 2026-08-12. See the note
+// in `receipt_chain_stress.rs`.
+#[cfg(test)]
 use tempfile::tempdir;
 #[cfg(test)]
 use uuid::Uuid;
 #[cfg(test)]
 use zp_audit::{
-    AuditResponse, AuditStore, CompactAuditEntry, UnsealedEntry, response_tip_consistent,
-    verify_response,
+    response_tip_consistent, verify_response, AuditResponse, AuditStore, CompactAuditEntry,
+    UnsealedEntry,
 };
 #[cfg(test)]
 use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
@@ -124,7 +129,10 @@ fn claim2_empty_entries_nonempty_tip_detected() {
     );
 
     let att = verify_response("adversarial-peer", &response);
-    assert!(!att.chain_valid, "zero-entry response with claimed tip must fail");
+    assert!(
+        !att.chain_valid,
+        "zero-entry response with claimed tip must fail"
+    );
 }
 
 /// Empty entries with an empty tip is the legitimate "no chain yet" shape.

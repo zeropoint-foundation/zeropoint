@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 
 use crate::artifact::{ArtifactKind, LibraryFilter};
 use crate::LibraryError;
@@ -27,8 +27,7 @@ pub struct IndexRow {
 
 impl ArtifactIndex {
     pub fn open(path: &Path) -> Result<Self, LibraryError> {
-        let conn = Connection::open(path)
-            .map_err(|e| LibraryError::Index(e.to_string()))?;
+        let conn = Connection::open(path).map_err(|e| LibraryError::Index(e.to_string()))?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS artifacts (
                 artifact_id      TEXT PRIMARY KEY,
@@ -43,7 +42,9 @@ impl ArtifactIndex {
                 ON artifacts (kind, state, operator_id, created_at DESC);",
         )
         .map_err(|e| LibraryError::Index(e.to_string()))?;
-        Ok(Self { conn: std::sync::Mutex::new(conn) })
+        Ok(Self {
+            conn: std::sync::Mutex::new(conn),
+        })
     }
 
     /// Insert a new artifact row. No-op if artifact_id already exists.
@@ -114,17 +115,12 @@ impl ArtifactIndex {
     }
 
     /// List artifact_ids matching the filter.
-    pub fn list(
-        &self,
-        filter: &LibraryFilter,
-    ) -> Result<Vec<(String, String)>, LibraryError> {
+    pub fn list(&self, filter: &LibraryFilter) -> Result<Vec<(String, String)>, LibraryError> {
         // Returns (artifact_id, content_store_id) pairs
         let limit = if filter.limit == 0 { 100 } else { filter.limit };
         let conn = self.conn.lock().unwrap();
 
-        let mut sql = String::from(
-            "SELECT artifact_id, content_store_id FROM artifacts WHERE 1=1",
-        );
+        let mut sql = String::from("SELECT artifact_id, content_store_id FROM artifacts WHERE 1=1");
         let mut params_dyn: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
 
         if let Some(kind) = &filter.kind {
@@ -146,8 +142,7 @@ impl ArtifactIndex {
         sql.push_str(" ORDER BY created_at DESC LIMIT ?");
         params_dyn.push(Box::new(limit as i64));
 
-        let refs: Vec<&dyn rusqlite::ToSql> =
-            params_dyn.iter().map(|b| b.as_ref()).collect();
+        let refs: Vec<&dyn rusqlite::ToSql> = params_dyn.iter().map(|b| b.as_ref()).collect();
 
         let mut stmt = conn
             .prepare(&sql)

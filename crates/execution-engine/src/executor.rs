@@ -189,10 +189,7 @@ pub async fn execute_sandboxed(
     let (program, mut args) = if sandbox_wrapper.is_empty() {
         (interpreter_path.to_string_lossy().to_string(), vec![])
     } else {
-        (
-            sandbox_wrapper[0].clone(),
-            sandbox_wrapper[1..].to_vec(),
-        )
+        (sandbox_wrapper[0].clone(), sandbox_wrapper[1..].to_vec())
     };
 
     // If using a wrapper, the interpreter is an arg to the wrapper.
@@ -217,8 +214,14 @@ pub async fn execute_sandboxed(
 
     // ── Stage 3: build isolated env (env_clear + minimal set) ─────────────
     let mut env_vars = vec![
-        ("HOME".to_string(), sandbox_dir.to_string_lossy().to_string()),
-        ("TMPDIR".to_string(), sandbox_dir.to_string_lossy().to_string()),
+        (
+            "HOME".to_string(),
+            sandbox_dir.to_string_lossy().to_string(),
+        ),
+        (
+            "TMPDIR".to_string(),
+            sandbox_dir.to_string_lossy().to_string(),
+        ),
         ("PATH".to_string(), minimal_path()),
         ("LANG".to_string(), "en_US.UTF-8".to_string()),
     ];

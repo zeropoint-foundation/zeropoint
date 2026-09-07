@@ -306,7 +306,7 @@ Wiring follows the Steward pattern: `OfficersConfig` gains `cleo_enabled`, `spaw
 1. Add `StorySegment`, `SegmentKind`, `ChainStory`, `ChainNarrator` trait to `zp-officers`.
 2. Implement `cleo.rs`: `Officer` + `ChainNarrator`. Sweep checks for delegation lifecycle, gate decisions, authority chain, policy compliance.
 3. Add `governance` domain to `PostureScore`.
-4. Wire Cleo into `zp-server/officers.rs` (same pattern as Steward).
+4. Wire Cleo into `crates/zp-server/src/officers.rs` (same pattern as Steward).
 5. Add `cleo_enabled` to config schema and resolution.
 6. Add `zp chain story` CLI subcommand.
 7. Add `/api/v1/audit/story` endpoint for cockpit consumption.

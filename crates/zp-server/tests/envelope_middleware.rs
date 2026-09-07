@@ -111,7 +111,11 @@ async fn envelope_authenticates_request_end_to_end() {
         .unwrap();
 
     let resp = app.oneshot(req).await.unwrap();
-    assert_eq!(resp.status(), StatusCode::OK, "envelope should authenticate");
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "envelope should authenticate"
+    );
 }
 
 #[tokio::test]
@@ -295,5 +299,9 @@ async fn body_is_passed_through_to_handler_unchanged() {
     let resp = app.oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let echoed = to_bytes(resp.into_body(), 1024 * 1024).await.unwrap();
-    assert_eq!(echoed.as_ref(), body.as_slice(), "body must round-trip unchanged");
+    assert_eq!(
+        echoed.as_ref(),
+        body.as_slice(),
+        "body must round-trip unchanged"
+    );
 }

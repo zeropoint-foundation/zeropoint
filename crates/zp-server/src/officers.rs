@@ -23,8 +23,8 @@
 use std::sync::{Mutex, OnceLock};
 
 use tracing::{debug, info, warn};
-use zp_officers::officer::Officer;
 use uuid::Uuid;
+use zp_officers::officer::Officer;
 
 use zp_audit::{AuditStore, UnsealedEntry};
 use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
@@ -34,7 +34,6 @@ use zp_officers::{
     cleo::Cleo,
     finding::Severity,
     forge::Forge,
-    sweep::OfficerSweepResult,
     officer::{ChainReader, VaultKeyLister},
     posture::PostureScore,
     proposal::OfficerDelegation,
@@ -42,6 +41,7 @@ use zp_officers::{
     sentinel::Sentinel,
     steward::Steward,
     sweep::run_sweep,
+    sweep::OfficerSweepResult,
 };
 
 // ── Conversation namespace ────────────────────────────────────────────────────
@@ -92,8 +92,43 @@ fn emit_finding(
         Err(_) => return false,
     };
 
+    // `prefix + space + JSON`, per the workspace convention and the
+    // `chain_events_carry_a_prefix` discipline pin.
+    //
+    // Until 2026-08-06 the event was `finding.event_key()` alone, so an officer
+    // finding reached the chain as a bare key with no subject:
+    //
+    //     officer:sen:security:unauthorized_listener
+    //
+    // `finding.summary` was carried in `policy_decision.conditions` — a
+    // different column, and not one any query for finding content thinks to
+    // read — and `finding.detail`, which holds the pid, process name, ports and
+    // binary path, was dropped entirely. A security finding that cannot say
+    // what it is about is a count, not a finding: five of these landed in five
+    // seconds and the only honest thing anyone could say about them was that
+    // there were five.
+    //
+    // Appending a payload is safe for consumers: every reader of officer events
+    // matches by `starts_with`, and the single equality comparison
+    // (`substrate_validate.rs:613`) is already OR'd with one.
+    //
+    // `summary` stays in `conditions` as well for now. That location is a
+    // semantic misuse — conditions describe a policy decision, not an
+    // observation — but removing it is a breaking change for any consumer
+    // reading it today, and the event payload is the canonical location going
+    // forward.
+    let payload = serde_json::json!({
+        "severity": format!("{:?}", finding.severity),
+        "summary": finding.summary,
+        "detail": finding.detail,
+        "observed_at": finding.timestamp.to_rfc3339(),
+    });
     let action = AuditAction::SystemEvent {
-        event: finding.event_key(),
+        event: format!(
+            "{} {}",
+            finding.event_key(),
+            serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string())
+        ),
     };
     let policy_decision = PolicyDecision::Allow {
         conditions: vec![finding.summary.clone()],
@@ -154,7 +189,7 @@ fn emit_heartbeat(
         action,
         officer_conv_id().clone(),
         policy_decision,
-        &format!("officer-{}", result.officer_name),
+        format!("officer-{}", result.officer_name),
     );
     store.append(unsealed).ok();
 }
@@ -194,10 +229,7 @@ fn emit_sweep_clear(
 ///
 /// Always emitted — even on an all-clear cycle — because posture trend
 /// over time is a calibration input. See design doc §4.6.
-fn emit_posture_receipt(
-    audit_store: &std::sync::Arc<Mutex<AuditStore>>,
-    posture: &PostureScore,
-) {
+fn emit_posture_receipt(audit_store: &std::sync::Arc<Mutex<AuditStore>>, posture: &PostureScore) {
     let mut store = match audit_store.lock() {
         Ok(s) => s,
         Err(_) => return,
@@ -445,7 +477,9 @@ fn collect_vault_key_names(
     let resolved = match vault_key.get().and_then(|k| k.as_ref()) {
         Some(k) => k,
         None => {
-            debug!("Officer sweep: vault key not yet resolved — vault checks will use empty lister");
+            debug!(
+                "Officer sweep: vault key not yet resolved — vault checks will use empty lister"
+            );
             return vec![];
         }
     };
@@ -456,7 +490,10 @@ fn collect_vault_key_names(
     match zp_trust::CredentialVault::load_or_create(&resolved.key, &vault_path) {
         Ok(vault) => vault.list(),
         Err(e) => {
-            warn!("Officer sweep: vault open failed — vault checks will use empty lister: {}", e);
+            warn!(
+                "Officer sweep: vault open failed — vault checks will use empty lister: {}",
+                e
+            );
             vec![]
         }
     }
@@ -485,10 +522,7 @@ fn collect_vault_key_names(
 ///
 /// TODO(tier2): if LLM reasoning is added inside officer sweeps, snapshot
 /// chain entries before acquiring the lock and release before calling the LLM.
-pub fn spawn_sweep_task(
-    config: OfficersConfig,
-    state: std::sync::Arc<crate::AppStateInner>,
-) {
+pub fn spawn_sweep_task(config: OfficersConfig, state: std::sync::Arc<crate::AppStateInner>) {
     if !config.enabled {
         debug!("Officer cadre disabled (`[officers] enabled = false`) — sweep task not spawned");
         return;
@@ -496,9 +530,7 @@ pub fn spawn_sweep_task(
 
     tokio::spawn(async move {
         let interval_secs = config.sweep_interval_secs.max(1);
-        let mut ticker = tokio::time::interval(
-            tokio::time::Duration::from_secs(interval_secs),
-        );
+        let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(interval_secs));
         // MissedTickBehavior::Skip: if a sweep takes longer than the interval
         // (shouldn't happen in Tier 1, but defensive), skip missed ticks
         // rather than firing a burst to catch up.
@@ -549,8 +581,7 @@ pub fn spawn_sweep_task(
             debug!(officers = officers.len(), "Officer sweep starting");
 
             // Step 1: collect vault key names outside the audit store lock.
-            let vault_key_names =
-                collect_vault_key_names(&state.vault_key, &state.data_dir);
+            let vault_key_names = collect_vault_key_names(&state.vault_key, &state.data_dir);
             let vault_keys = VaultKeyLister::new(vault_key_names);
 
             // Step 2: acquire lock → run sweep → release.
@@ -596,10 +627,10 @@ pub fn spawn_sweep_task(
                 // but don't need their own chain entry.
                 let mut n = 0;
                 for finding in &result.findings {
-                    if finding.severity > Severity::Info {
-                        if emit_finding(&state.audit_store, finding) {
-                            n += 1;
-                        }
+                    if finding.severity > Severity::Info
+                        && emit_finding(&state.audit_store, finding)
+                    {
+                        n += 1;
                     }
                 }
                 n
@@ -650,10 +681,9 @@ pub fn spawn_sweep_task(
                 // Only emit requests with Warning+ severity — Info-level
                 // consolidations are captured in posture but don't need
                 // their own chain entry (same quiet-sweep principle as Step 4).
-                if req.severity > Severity::Info {
-                    if emit_governance_request(&state.audit_store, req) {
-                        governance_emitted += 1;
-                    }
+                if req.severity > Severity::Info && emit_governance_request(&state.audit_store, req)
+                {
+                    governance_emitted += 1;
                 }
             }
 
@@ -663,8 +693,8 @@ pub fn spawn_sweep_task(
             // silence is not approval; the chain must carry explicit sign-off.
             {
                 use zp_officers::governance_posture::{
-                    compute_postures, GovernanceFacet, RegisteredToolInfo,
-                    ToolRegistrySnapshot, UnregisteredTools,
+                    compute_postures, GovernanceFacet, RegisteredToolInfo, ToolRegistrySnapshot,
+                    UnregisteredTools,
                 };
 
                 // Build port registry snapshot.
@@ -704,7 +734,8 @@ pub fn spawn_sweep_task(
                         std::collections::HashSet::new();
                     for finding in &result.findings {
                         if finding.severity > Severity::Info {
-                            if let Some(tool) = finding.detail.get("tool").and_then(|v| v.as_str()) {
+                            if let Some(tool) = finding.detail.get("tool").and_then(|v| v.as_str())
+                            {
                                 warned.insert((finding.officer.to_string(), tool.to_string()));
                             }
                         }
@@ -747,15 +778,20 @@ pub fn spawn_sweep_task(
                     for officer in &officers {
                         for tool in &governed_tools {
                             let pair = (officer.name().to_string(), tool.to_string());
-                            if !warned.contains(&pair) && !already_attested.contains(&pair) {
-                                if emit_attestation(&state.audit_store, officer.name(), tool) {
-                                    attestations += 1;
-                                }
+                            if !warned.contains(&pair)
+                                && !already_attested.contains(&pair)
+                                && emit_attestation(&state.audit_store, officer.name(), tool)
+                            {
+                                attestations += 1;
                             }
                         }
                     }
                     if attestations > 0 {
-                        debug!(attestations, tools = governed_tools.len(), "Officer attestations emitted");
+                        debug!(
+                            attestations,
+                            tools = governed_tools.len(),
+                            "Officer attestations emitted"
+                        );
                     }
                 }
             }
@@ -801,12 +837,22 @@ pub fn spawn_sweep_task(
                 }
 
                 // Collect review-due info before dropping engine borrow.
-                let review_submissions: Vec<(String, zp_memory::MemoryStage, zp_memory::MemoryStage)> =
-                    sweep_result.review_due_ids.iter().filter_map(|id| {
+                let review_submissions: Vec<(
+                    String,
+                    zp_memory::MemoryStage,
+                    zp_memory::MemoryStage,
+                )> = sweep_result
+                    .review_due_ids
+                    .iter()
+                    .filter_map(|id| {
                         engine.get(id).and_then(|entry| {
-                            entry.stage.next().map(|next| (id.clone(), entry.stage, next))
+                            entry
+                                .stage
+                                .next()
+                                .map(|next| (id.clone(), entry.stage, next))
                         })
-                    }).collect();
+                    })
+                    .collect();
 
                 // Submit to review queue (separate lock).
                 if !review_submissions.is_empty() {
@@ -873,7 +919,10 @@ pub fn sync_known_bindings(state: &crate::AppStateInner) {
             tool_name: b.tool.clone(),
             pid: b.pid,
             port: b.actual_port.unwrap_or(b.port),
-            extra_ports: b.extra_ports.values().copied()
+            extra_ports: b
+                .extra_ports
+                .values()
+                .copied()
                 .chain(b.actual_extra_ports.values().copied())
                 .collect(),
         })
@@ -884,7 +933,7 @@ pub fn sync_known_bindings(state: &crate::AppStateInner) {
     for ack in &state.acknowledged_listeners {
         known.push(zp_sensors::KnownBinding {
             tool_name: ack.name.clone(),
-            pid: None,   // PID discovered at scan time
+            pid: None, // PID discovered at scan time
             port: ack.port,
             extra_ports: Vec::new(),
         });
@@ -1051,8 +1100,7 @@ pub fn spawn_sensor_forge_task(
             }
 
             // Collect vault key names.
-            let vault_key_names =
-                collect_vault_key_names(&state.vault_key, &state.data_dir);
+            let vault_key_names = collect_vault_key_names(&state.vault_key, &state.data_dir);
             let vault_keys = VaultKeyLister::new(vault_key_names);
 
             // Run Forge sweep under audit store lock.
@@ -1072,42 +1120,75 @@ pub fn spawn_sensor_forge_task(
             // The sweep reads the chain; these assessments evaluate the
             // specific process the sensor just discovered.
             if let zp_sensors::SensorEvent::NewListenerDiscovered {
-                pid, process_name, ports, context, ..
-            } = &event {
+                pid,
+                process_name,
+                ports,
+                context,
+                ..
+            } = &event
+            {
                 let ports_json: Vec<serde_json::Value> = ports
                     .iter()
-                    .map(|p| serde_json::json!({
-                        "port": p.port,
-                        "protocol": &p.protocol,
-                        "socket": &p.socket,
-                    }))
+                    .map(|p| {
+                        serde_json::json!({
+                            "port": p.port,
+                            "protocol": &p.protocol,
+                            "socket": &p.socket,
+                        })
+                    })
                     .collect();
-                let context_json = serde_json::to_value(context)
-                    .unwrap_or(serde_json::Value::Null);
+                let context_json = serde_json::to_value(context).unwrap_or(serde_json::Value::Null);
 
                 // Sentinel: security assessment (root? network-exposed? unusual parent?)
                 let sentinel = Sentinel::new();
-                findings.extend(
-                    sentinel.assess_unauthorized_listener(
-                        *pid, process_name, &ports_json, &context_json,
-                    )
-                );
+                findings.extend(sentinel.assess_unauthorized_listener(
+                    *pid,
+                    process_name,
+                    &ports_json,
+                    &context_json,
+                ));
 
                 // Forge: operations assessment (should this be governed?)
-                findings.extend(
-                    forge.assess_unregistered_listener(
-                        *pid, process_name, &ports_json, &context_json,
-                    )
-                );
+                findings.extend(forge.assess_unregistered_listener(
+                    *pid,
+                    process_name,
+                    &ports_json,
+                    &context_json,
+                ));
             }
 
-            // Emit findings for Warning+ severity.
+            // Emit every finding. Severity governs whether it *surfaces*, not
+            // whether it is *recorded*.
+            //
+            // This filtered `> Severity::Info` until 2026-08-06, which silently
+            // defeated half the P1.2 benign-listener refactor. That refactor's
+            // stated intent was that routine listener activity be
+            // "chain-anchored for auditability without surfacing to operator
+            // attention" — two requirements. Classification delivered the
+            // second; the filter destroyed the first. `unregistered_known_app`
+            // sat in KNOWN_RECEIPT_PREFIXES and in `silent_prefixes`
+            // simultaneously: declared, implemented, tested, and structurally
+            // incapable of reaching the chain.
+            //
+            // The volume objection that justified the filter has since
+            // collapsed. Discovery is edge-triggered now, so this is one
+            // receipt per benign listener *appearance* — a model load, an app
+            // launch — not one per listener per 300-second scan.
+            //
+            // The deciding case is inference. Ollama spawns a `llama-server`
+            // per model load, and that process is where Regent's cognition
+            // actually runs; its command line carries the model blob hash and
+            // the port. Classifying it benign and then dropping it would leave
+            // the substrate unable to say when its own reasoning apparatus
+            // changed underneath it. §III.24 aligned blindness is about
+            // refusing to observe what the substrate has no business seeing —
+            // this is the inverse, and the lsof test's requirement that every
+            // listener trace to a receipt or be explicitly out of scope admits
+            // no third option where the listener is simply forgotten.
             let mut emitted = 0usize;
             for finding in &findings {
-                if finding.severity > Severity::Info {
-                    if emit_finding(&state.audit_store, finding) {
-                        emitted += 1;
-                    }
+                if emit_finding(&state.audit_store, finding) {
+                    emitted += 1;
                 }
             }
 
@@ -1117,7 +1198,12 @@ pub fn spawn_sensor_forge_task(
                     Ok(s) => s,
                     Err(_) => {
                         if emitted > 0 {
-                            info!(trigger = event.kind_label(), findings = findings.len(), emitted, "Sensor Forge sweep complete");
+                            info!(
+                                trigger = event.kind_label(),
+                                findings = findings.len(),
+                                emitted,
+                                "Sensor Forge sweep complete"
+                            );
                         }
                         continue;
                     }
@@ -1142,10 +1228,9 @@ pub fn spawn_sensor_forge_task(
             let governance_requests = consolidate(&findings, &authorized_proposals);
             let mut governance_emitted = 0usize;
             for req in &governance_requests {
-                if req.severity > Severity::Info {
-                    if emit_governance_request(&state.audit_store, req) {
-                        governance_emitted += 1;
-                    }
+                if req.severity > Severity::Info && emit_governance_request(&state.audit_store, req)
+                {
+                    governance_emitted += 1;
                 }
             }
 
@@ -1165,8 +1250,8 @@ pub fn spawn_sensor_forge_task(
             // Compute governance posture. Tools that reach Hardened go dormant.
             {
                 use zp_officers::governance_posture::{
-                    compute_postures, GovernanceFacet, RegisteredToolInfo,
-                    ToolRegistrySnapshot, UnregisteredTools,
+                    compute_postures, GovernanceFacet, RegisteredToolInfo, ToolRegistrySnapshot,
+                    UnregisteredTools,
                 };
 
                 let data_path = std::path::Path::new(&state.data_dir);

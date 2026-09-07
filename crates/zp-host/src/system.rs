@@ -12,6 +12,27 @@
 //! crashes or the receipt append after execution fails, the chain still shows
 //! the gate decision that authorized the action.  This is the receipt-triple
 //! shape from the handoff brief: intent → policy → exec.
+//!
+//! ## The append is a precondition, not a companion (2026-08-14)
+//!
+//! Until this date, step 2 was best-effort: a failed append or a poisoned
+//! lock logged a warning, set `gate_receipt_hash` to `None`, and **the side
+//! effect proceeded anyway**.  That made the effect happen with no verifiable
+//! record of it — the definition of failing open in
+//! `docs/design/THREAT-MODEL-2026-08.md` §1, and the direct counterexample to
+//! `ARCHITECTURE.md:250`'s claim that it is "structurally impossible to act
+//! without a trace."
+//!
+//! `HostError::AuditError` already documented the intended behaviour — *"The
+//! action was NOT executed — the host treats an unappendable audit chain as
+//! fatal for governed actions"* — and `zp-server/src/exec_ws.rs` already
+//! handled it.  Nothing constructed it.  `seal_or_refuse` now does.
+//!
+//! Note the ordering consequence: the append is attempted *before* the block
+//! check, so a gate denial that cannot be recorded returns `AuditError`
+//! rather than `GateDenied`.  Both refuse the action.  `AuditError` is the
+//! more honest of the two, because `GateDenied`'s own doc comment promises
+//! the denial is on-chain, and in that case it is not.
 
 use std::sync::{Arc, Mutex};
 
@@ -20,16 +41,22 @@ use reqwest::header::{HeaderName, HeaderValue};
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
-use tracing::warn;
+use tracing::error;
 
-use zp_audit::AuditStore;
-use zp_core::{ActionType, ActorId, Channel, ConversationId, FileOperation, PolicyContext, PolicyDecision, TrustTier};
+use zp_audit::{AuditStore, UnsealedEntry};
+use zp_core::{
+    ActionType, ActorId, Channel, ConversationId, FileOperation, PolicyContext, PolicyDecision,
+    TrustTier,
+};
 use zp_policy::GovernanceGate;
 
 use crate::{
     context::HostContext,
     error::HostError,
-    types::{HttpMethod, HttpRequest, HttpResult, SpawnRequest, SpawnResult, WriteMode, WriteRequest, WriteResult},
+    types::{
+        HttpMethod, HttpRequest, HttpResult, SpawnRequest, SpawnResult, WriteMode, WriteRequest,
+        WriteResult,
+    },
 };
 
 /// Production HostContext.  Holds references to the governance gate and audit
@@ -45,6 +72,33 @@ impl SystemHostContext {
     /// store.  Called once during `AppState::init`.
     pub fn new(gate: Arc<GovernanceGate>, audit_store: Arc<Mutex<AuditStore>>) -> Self {
         Self { gate, audit_store }
+    }
+
+    /// Seal the gate decision into the chain, or refuse the action.
+    ///
+    /// Returns the sealed entry hash on success.  Every failure path —
+    /// poisoned lock, rejected append — returns `HostError::AuditError`, and
+    /// every caller propagates it with `?` **before** performing any side
+    /// effect.  That is the whole point: an effect the chain cannot record is
+    /// an effect this crate will not perform.
+    ///
+    /// `site` names the host function for the operator-facing log line.  A
+    /// refusal here is an infrastructure fault, not a policy outcome, so it
+    /// logs at `error` rather than `warn` — the chain being unwritable is the
+    /// substrate's most serious non-crash condition.
+    fn seal_or_refuse(&self, unsealed: UnsealedEntry, site: &str) -> Result<String, HostError> {
+        let mut store = self.audit_store.lock().map_err(|e| {
+            error!("zp-host: {site}: audit store lock poisoned — refusing action: {e}");
+            HostError::AuditError(format!("{site}: audit store lock poisoned: {e}"))
+        })?;
+
+        store
+            .append(unsealed)
+            .map(|sealed| sealed.entry_hash)
+            .map_err(|e| {
+                error!("zp-host: {site}: gate receipt append rejected — refusing action: {e}");
+                HostError::AuditError(format!("{site}: failed to append gate receipt: {e}"))
+            })
     }
 }
 
@@ -66,21 +120,11 @@ impl HostContext for SystemHostContext {
         let actor = ActorId::System(req.actor_label.clone());
         let gate_result = self.gate.evaluate(&context, actor);
 
-        // ── Stage 2: append gate decision to chain ─────────────────────────
+        // ── Stage 2: seal the gate decision, or refuse ─────────────────────
         // Append regardless of decision — the chain must record denials too.
-        let gate_receipt_hash = match self.audit_store.lock() {
-            Ok(mut store) => match store.append(gate_result.unsealed.clone()) {
-                Ok(sealed) => Some(sealed.entry_hash),
-                Err(e) => {
-                    warn!("zp-host: failed to append gate receipt: {}", e);
-                    None
-                }
-            },
-            Err(e) => {
-                warn!("zp-host: audit store lock poisoned: {}", e);
-                None
-            }
-        };
+        // A failure here returns before any spawn happens.
+        let gate_receipt_hash =
+            Some(self.seal_or_refuse(gate_result.unsealed.clone(), "spawn_process")?);
 
         // ── Stage 3: honour gate decision ─────────────────────────────────
         if gate_result.is_blocked() {
@@ -112,7 +156,10 @@ impl HostContext for SystemHostContext {
 
         let child = cmd.spawn()?; // maps std::io::Error → HostError::Io via From
 
-        Ok(SpawnResult { child, gate_receipt_hash })
+        Ok(SpawnResult {
+            child,
+            gate_receipt_hash,
+        })
     }
 
     async fn write_file(&self, req: WriteRequest) -> Result<WriteResult, HostError> {
@@ -132,20 +179,9 @@ impl HostContext for SystemHostContext {
         let actor = ActorId::System(req.actor_label.clone());
         let gate_result = self.gate.evaluate(&context, actor);
 
-        // ── Stage 2: append gate decision to chain ─────────────────────────
-        let gate_receipt_hash = match self.audit_store.lock() {
-            Ok(mut store) => match store.append(gate_result.unsealed.clone()) {
-                Ok(sealed) => Some(sealed.entry_hash),
-                Err(e) => {
-                    warn!("zp-host: failed to append gate receipt for write_file: {}", e);
-                    None
-                }
-            },
-            Err(e) => {
-                warn!("zp-host: audit store lock poisoned in write_file: {}", e);
-                None
-            }
-        };
+        // ── Stage 2: seal the gate decision, or refuse ─────────────────────
+        let gate_receipt_hash =
+            Some(self.seal_or_refuse(gate_result.unsealed.clone(), "write_file")?);
 
         // ── Stage 3: honour gate decision ─────────────────────────────────
         if gate_result.is_blocked() {
@@ -179,7 +215,10 @@ impl HostContext for SystemHostContext {
             }
         }
 
-        Ok(WriteResult { gate_receipt_hash, bytes_written })
+        Ok(WriteResult {
+            gate_receipt_hash,
+            bytes_written,
+        })
     }
 
     async fn http_request(&self, req: HttpRequest) -> Result<HttpResult, HostError> {
@@ -198,20 +237,9 @@ impl HostContext for SystemHostContext {
         let actor = ActorId::System(req.actor_label.clone());
         let gate_result = self.gate.evaluate(&context, actor);
 
-        // ── Stage 2: append gate decision to chain ─────────────────────────
-        let gate_receipt_hash = match self.audit_store.lock() {
-            Ok(mut store) => match store.append(gate_result.unsealed.clone()) {
-                Ok(sealed) => Some(sealed.entry_hash),
-                Err(e) => {
-                    warn!("zp-host: failed to append gate receipt for http_request: {}", e);
-                    None
-                }
-            },
-            Err(e) => {
-                warn!("zp-host: audit store lock poisoned in http_request: {}", e);
-                None
-            }
-        };
+        // ── Stage 2: seal the gate decision, or refuse ─────────────────────
+        let gate_receipt_hash =
+            Some(self.seal_or_refuse(gate_result.unsealed.clone(), "http_request")?);
 
         // ── Stage 3: honour gate decision ─────────────────────────────────
         if gate_result.is_blocked() {
@@ -227,7 +255,11 @@ impl HostContext for SystemHostContext {
         let status = response.status().as_u16();
         let body = response.bytes().await?.to_vec();
 
-        Ok(HttpResult { status, body, gate_receipt_hash })
+        Ok(HttpResult {
+            status,
+            body,
+            gate_receipt_hash,
+        })
     }
 
     async fn http_request_streaming(
@@ -249,16 +281,10 @@ impl HostContext for SystemHostContext {
         let actor = ActorId::System(req.actor_label.clone());
         let gate_result = self.gate.evaluate(&context, actor);
 
-        match self.audit_store.lock() {
-            Ok(mut store) => {
-                if let Err(e) = store.append(gate_result.unsealed.clone()) {
-                    warn!("zp-host: failed to append gate receipt for http_request_streaming: {}", e);
-                }
-            }
-            Err(e) => {
-                warn!("zp-host: audit store lock poisoned in http_request_streaming: {}", e);
-            }
-        }
+        // Seal or refuse. This function returns a raw `Response` and so has
+        // nowhere to carry the hash, but the append is no less a precondition:
+        // the value is discarded, the failure is not.
+        self.seal_or_refuse(gate_result.unsealed.clone(), "http_request_streaming")?;
 
         if gate_result.is_blocked() {
             let reason = match &gate_result.decision {
@@ -282,18 +308,19 @@ impl SystemHostContext {
             client_builder = client_builder.no_proxy();
         }
         if let Some(ms) = req.timeout_ms {
-            client_builder =
-                client_builder.timeout(std::time::Duration::from_millis(ms));
+            client_builder = client_builder.timeout(std::time::Duration::from_millis(ms));
         }
-        let client = client_builder.build().unwrap_or_else(|_| reqwest::Client::new());
+        let client = client_builder
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
 
         let method = match req.method {
-            HttpMethod::Get     => reqwest::Method::GET,
-            HttpMethod::Post    => reqwest::Method::POST,
-            HttpMethod::Put     => reqwest::Method::PUT,
-            HttpMethod::Delete  => reqwest::Method::DELETE,
-            HttpMethod::Patch   => reqwest::Method::PATCH,
-            HttpMethod::Head    => reqwest::Method::HEAD,
+            HttpMethod::Get => reqwest::Method::GET,
+            HttpMethod::Post => reqwest::Method::POST,
+            HttpMethod::Put => reqwest::Method::PUT,
+            HttpMethod::Delete => reqwest::Method::DELETE,
+            HttpMethod::Patch => reqwest::Method::PATCH,
+            HttpMethod::Head => reqwest::Method::HEAD,
             HttpMethod::Options => reqwest::Method::OPTIONS,
         };
 

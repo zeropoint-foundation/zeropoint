@@ -40,7 +40,9 @@ mod inner {
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex, Once, OnceLock};
 
-    use keyring::credential::{Credential, CredentialApi, CredentialBuilderApi, CredentialPersistence};
+    use keyring::credential::{
+        Credential, CredentialApi, CredentialBuilderApi, CredentialPersistence,
+    };
     use keyring::Result as KeyringResult;
 
     /// Storage key: `(target, service, user)`. `target` is rarely used

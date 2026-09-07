@@ -100,9 +100,7 @@ pub enum ReviewAction {
 #[derive(Debug)]
 pub enum ReviewOutcome {
     /// Promotion approved — includes the promotion request to execute.
-    Approved {
-        promotion_request: PromotionRequest,
-    },
+    Approved { promotion_request: PromotionRequest },
     /// Promotion rejected.
     Rejected {
         memory_id: String,
@@ -121,9 +119,7 @@ pub enum ReviewOutcome {
         memory_id: String,
     },
     /// Error — review not found or already processed.
-    NotFound {
-        review_id: String,
-    },
+    NotFound { review_id: String },
     /// Deferral limit exceeded — auto-rejected.
     DeferralLimitReached {
         review_id: String,
@@ -228,14 +224,14 @@ impl ReviewQueue {
     }
 
     /// Process a human review decision.
-    pub fn process_decision(
-        &mut self,
-        review_id: &str,
-        decision: ReviewDecision,
-    ) -> ReviewOutcome {
+    pub fn process_decision(&mut self, review_id: &str, decision: ReviewDecision) -> ReviewOutcome {
         let pending = match self.pending.remove(review_id) {
             Some(p) => p,
-            None => return ReviewOutcome::NotFound { review_id: review_id.to_string() },
+            None => {
+                return ReviewOutcome::NotFound {
+                    review_id: review_id.to_string(),
+                }
+            }
         };
 
         // Check expiry.
@@ -281,7 +277,11 @@ impl ReviewQueue {
                 }
             }
 
-            ReviewDecision::Reject { reason, action, reviewer } => {
+            ReviewDecision::Reject {
+                reason,
+                action,
+                reviewer,
+            } => {
                 info!(
                     review_id = %review_id,
                     memory_id = %pending.memory_id,
@@ -461,7 +461,10 @@ mod tests {
         if let ReviewOutcome::Approved { promotion_request } = outcome {
             assert_eq!(promotion_request.memory_id, "mem-1");
             assert_eq!(promotion_request.target_stage, MemoryStage::Remembered);
-            assert_eq!(promotion_request.reviewer.as_deref(), Some("operator-key-abc"));
+            assert_eq!(
+                promotion_request.reviewer.as_deref(),
+                Some("operator-key-abc")
+            );
         }
         assert_eq!(queue.pending_count(), 0);
         assert_eq!(queue.completed_reviews().len(), 1);
@@ -517,7 +520,12 @@ mod tests {
         );
 
         assert!(matches!(outcome, ReviewOutcome::Deferred { .. }));
-        if let ReviewOutcome::Deferred { deferral_count, new_expires_at, .. } = outcome {
+        if let ReviewOutcome::Deferred {
+            deferral_count,
+            new_expires_at,
+            ..
+        } = outcome
+        {
             assert_eq!(deferral_count, 1);
             assert!(new_expires_at > original_expiry);
         }
@@ -560,7 +568,10 @@ mod tests {
                 reviewer: "operator".to_string(),
             },
         );
-        assert!(matches!(outcome, ReviewOutcome::DeferralLimitReached { .. }));
+        assert!(matches!(
+            outcome,
+            ReviewOutcome::DeferralLimitReached { .. }
+        ));
         assert_eq!(queue.pending_count(), 0);
     }
 
@@ -581,8 +592,20 @@ mod tests {
     fn pending_reviews_sorted_by_expiry() {
         let mut queue = make_queue();
 
-        queue.submit_for_review("mem-1", MemoryStage::Trusted, MemoryStage::Remembered, "ev", "eng");
-        queue.submit_for_review("mem-2", MemoryStage::Trusted, MemoryStage::Remembered, "ev", "eng");
+        queue.submit_for_review(
+            "mem-1",
+            MemoryStage::Trusted,
+            MemoryStage::Remembered,
+            "ev",
+            "eng",
+        );
+        queue.submit_for_review(
+            "mem-2",
+            MemoryStage::Trusted,
+            MemoryStage::Remembered,
+            "ev",
+            "eng",
+        );
 
         let reviews = queue.pending_reviews();
         assert_eq!(reviews.len(), 2);
@@ -631,9 +654,27 @@ mod tests {
     fn pending_for_specific_memory() {
         let mut queue = make_queue();
 
-        queue.submit_for_review("mem-1", MemoryStage::Trusted, MemoryStage::Remembered, "ev", "eng");
-        queue.submit_for_review("mem-2", MemoryStage::Trusted, MemoryStage::Remembered, "ev", "eng");
-        queue.submit_for_review("mem-1", MemoryStage::Remembered, MemoryStage::IdentityBearing, "ev", "eng");
+        queue.submit_for_review(
+            "mem-1",
+            MemoryStage::Trusted,
+            MemoryStage::Remembered,
+            "ev",
+            "eng",
+        );
+        queue.submit_for_review(
+            "mem-2",
+            MemoryStage::Trusted,
+            MemoryStage::Remembered,
+            "ev",
+            "eng",
+        );
+        queue.submit_for_review(
+            "mem-1",
+            MemoryStage::Remembered,
+            MemoryStage::IdentityBearing,
+            "ev",
+            "eng",
+        );
 
         let mem1_reviews = queue.pending_for_memory("mem-1");
         assert_eq!(mem1_reviews.len(), 2);

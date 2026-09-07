@@ -522,7 +522,7 @@ Phase 1 adds five tools to `dispatch_tool()`:
 }
 ```
 
-`generate_chart_html` and `assemble_report_html` live in a new file `crates/zp-server/src/regent_tools.rs`. Both produce self-contained HTML. The chart embeds Chart.js from a vendored copy. The report inlines images as base64 and embeds chart HTML via iframe.
+`generate_chart_html` and `assemble_report_html` live in a new file `crates/zp-server/src/regent_tools.rs` (not yet written; neither function exists in the tree as of 2026-07-27). Both produce self-contained HTML. The chart embeds Chart.js from a vendored copy. The report inlines images as base64 and embeds chart HTML via iframe.
 
 ### 1.3 Expected execution trace
 
@@ -614,7 +614,7 @@ Phase 1 is done when:
 | File | Change |
 |------|--------|
 | `crates/zp-server/src/regent.rs` | Add `web_search`, `web_fetch`, `image_generate`, `chart_generate`, `report_assemble` arms to `dispatch_tool()`. Expand startup delegation. Increase max turns to 12. |
-| `crates/zp-server/src/regent_tools.rs` | **New.** `generate_chart_html()`, `assemble_report_html()`, `strip_html()`, `save_to_artifacts()` |
+| `crates/zp-server/src/regent_tools.rs` (not yet written) | **New.** `generate_chart_html()`, `assemble_report_html()`, `strip_html()`, `save_to_artifacts()` |
 | `crates/zp-regent/src/regent.rs` | Extend tool enumeration in `build_system_prompt()` |
 
 ### 1.10 Risk: model reliability

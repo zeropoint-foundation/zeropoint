@@ -1,0 +1,252 @@
+{
+  "title": "Freenet — Clarke at FUTO",
+  "subtitle": "Ian Clarke's update on Freenet: with Western governments now arresting posters and quietly tuning recommendation algorithms, the fix is structural — kill the servers, run every app on a self-organizing peer network where the code governing shared state is public and nobody, including its author, can take anything down.",
+  "center": {
+    "label": "Apps Without Platforms",
+    "emoji": "🕸️"
+  },
+  "branches": [
+    {
+      "label": "The Honeymoon Is Over",
+      "emoji": "⛓️",
+      "color": "coral",
+      "children": [
+        {
+          "label": "Arrests in the West",
+          "children": [
+            {"label": "UK 2023: \"12,000 arrests\""},
+            {"label": "\"That's 33 arrests per day\""},
+            {"label": "\"The process is the punishment\""}
+          ]
+        },
+        {
+          "label": "Platforms under pressure",
+          "children": [
+            {"label": "France charged Telegram's founder"},
+            {"label": "EU fined X \"120 million\""},
+            {"label": "California: ID checks in the OS"}
+          ]
+        },
+        {
+          "label": "The algorithmic turn",
+          "children": [
+            {"label": "UK would shape YouTube ranking"},
+            {"label": "\"Promote trusted sources\""},
+            {"label": "\"Particularly insidious\""}
+          ]
+        },
+        {
+          "label": "Not who you'd expect",
+          "children": [
+            {"label": "\"This is not China or Iran\""},
+            {"label": "\"Western democracies\""},
+            {"label": "Chilling for any operator"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "No Servers, Only Peers",
+      "emoji": "🌐",
+      "color": "teal",
+      "children": [
+        {
+          "label": "Where the leverage lives",
+          "children": [
+            {"label": "Every app sits in a data center"},
+            {"label": "Corporations bend to pressure"},
+            {"label": "Kill the single point of failure"}
+          ]
+        },
+        {
+          "label": "Nobody runs the network",
+          "children": [
+            {"label": "They write and release software"},
+            {"label": "Decentralized, self-organizing"},
+            {"label": "No peer is more equal"}
+          ]
+        },
+        {
+          "label": "Inability as protection",
+          "children": [
+            {"label": "\"A gun to my head\" — still no"},
+            {"label": "\"I simply wouldn't have the ability\""},
+            {"label": "Can't comply, so can't be pressured"}
+          ]
+        },
+        {
+          "label": "Drop-in for the web",
+          "children": [
+            {"label": "Browser talks to your local peer"},
+            {"label": "Shut peers down, load moves"},
+            {"label": "\"Literally routes around censorship\""}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "How It's Built",
+      "emoji": "🧩",
+      "color": "lavender",
+      "children": [
+        {
+          "label": "Contracts — shared state",
+          "children": [
+            {"label": "\"Almost like a database table\""},
+            {"label": "State plus the rules over it"},
+            {"label": "Also defines how peers sync"}
+          ]
+        },
+        {
+          "label": "Delegates — private state",
+          "children": [
+            {"label": "Data stays on hardware you own"},
+            {"label": "\"Hey delegate, can you sign this?\""},
+            {"label": "Knows who asks, may refuse"}
+          ]
+        },
+        {
+          "label": "UI ships to the browser",
+          "children": [
+            {"label": "Gmail's trick, no server behind"},
+            {"label": "WebAssembly, and no app store"},
+            {"label": "riverctl: scriptable, LLM-drivable"}
+          ]
+        },
+        {
+          "label": "Routing as learning",
+          "children": [
+            {"label": "Like branch prediction in a CPU"},
+            {"label": "Renegade: k-NN, learned metric"},
+            {"label": "Re-learns when a cable degrades"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Transparency vs the Algorithm",
+      "emoji": "🔍",
+      "color": "saffron",
+      "children": [
+        {
+          "label": "The logic is public",
+          "children": [
+            {"label": "Contracts anyone can read, audit"},
+            {"label": "Decompile to WASM, ask an LLM"},
+            {"label": "Business logic in the open"}
+          ]
+        },
+        {
+          "label": "Open-source theater",
+          "children": [
+            {"label": "X keeps promising \"the algorithm\""},
+            {"label": "Published code goes stale"},
+            {"label": "No proof it's what runs"}
+          ]
+        },
+        {
+          "label": "Atlas decentralizes discovery",
+          "children": [
+            {"label": "Maybe the first truly P2P search"},
+            {"label": "\"Enough with the cute puppies\""},
+            {"label": "Ranking becomes the user's call"}
+          ]
+        },
+        {
+          "label": "Defaults you can replace",
+          "children": [
+            {"label": "LLM writes neutral descriptions"},
+            {"label": "Kills the SEO snippet game"},
+            {"label": "Pick your crawlers and labelers"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "What Runs Today",
+      "emoji": "💬",
+      "color": "sage",
+      "children": [
+        {
+          "label": "River — group chat",
+          "children": [
+            {"label": "Each room is its own contract"},
+            {"label": "Months of use; even spam now"},
+            {"label": "No company sits behind it"}
+          ]
+        },
+        {
+          "label": "River's private rooms",
+          "children": [
+            {"label": "Symmetric key, shared asymmetrically"},
+            {"label": "Rotates weekly, or on a ban"},
+            {"label": "DMs encrypted too"}
+          ]
+        },
+        {
+          "label": "Honest about the leaks",
+          "children": [
+            {"label": "Room existence, size, timing show"},
+            {"label": "Member count visible, names not"},
+            {"label": "No double ratchet — a week's window"}
+          ]
+        },
+        {
+          "label": "Delta and Freenet Git",
+          "children": [
+            {"label": "Delta: markdown Squarespace"},
+            {"label": "Git was decentralized before GitHub"},
+            {"label": "Clone, fetch, push, no forge"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Interoperable by Default",
+      "emoji": "🔗",
+      "color": "rose",
+      "children": [
+        {
+          "label": "Everything is Lego",
+          "children": [
+            {"label": "You can read anyone's contracts"},
+            {"label": "Integrate a part or the whole"},
+            {"label": "Better than today's web, not just freer"}
+          ]
+        },
+        {
+          "label": "The 2007 API era",
+          "children": [
+            {"label": "Everyone shipped APIs at once"},
+            {"label": "All killed within a year or two"},
+            {"label": "Spam, and competitive threat"}
+          ]
+        },
+        {
+          "label": "Combinations for free",
+          "children": [
+            {"label": "Git + River: chat on commits"},
+            {"label": "Delta + River: blog comments"},
+            {"label": "Ghost Keys + Harvest: reputation"}
+          ]
+        },
+        {
+          "label": "Try it, then own it",
+          "children": [
+            {"label": "freenet.org/try — one click, no install"},
+            {"label": "Encrypted at rest, key in your browser"},
+            {"label": "\"Move to my peer\" when ready"}
+          ]
+        }
+      ]
+    }
+  ],
+  "footnotes": [
+    "52-minute update talk by Ian Clarke (\"sanity\" online), hosted by FUTO, followed by ~7 minutes of Q&A. Positioned as a progress report on the rewritten Freenet, not an architecture deep-dive — Clarke points to his February talk (\"Freenet lives\") for the mechanics.",
+    "Pre-alpha and design-stage: Freenet Mail (email-like), Raven (a decentralized social feed), Harvest (a decentralized Etsy). Clarke is explicit that the point is not to beat the incumbents but to demonstrate that every critical use case can be built decentralized and stay convenient.",
+    "Q&A — why River before Mail: group chat is useful among four or five friends, email only works if it's pervasive. Chat scales down as well as up; \"two people on a social network\" is not interesting.",
+    "Q&A — capability stratification: the contract's own WASM code decides who may write (River requires messages signed by an authorized member); restricting reads is done by encrypting, which is exactly how private rooms work.",
+    "Q&A — team and traction: Clarke full-time, two part-time developers in Spain, a volunteer community around them, hundreds of newcomers a day in the River rooms. Claude Code skills now encode the complexity of building a Freenet app, so contributors ship without knowing Rust. Harvest payments stay mechanism-agnostic — expected to be crypto via a vendor's own address, with no ZP-style currency of their own.",
+    "ZP resonance (my framing, not Clarke's): contracts/delegates map almost one-to-one onto the chain/vault split — shared state carrying its own governing code, private material never leaving hardware the operator controls, and a delegate that signs on request rather than surrendering the key is precisely the singular-sovereign-root posture. The auditable-contract argument is *signing is gravity* aimed at recommendation engines, and \"nobody runs the network\" is P3 *there is no center* stated as a threat model. The instructive divergence: Freenet has no operator ceremony — no equivalent of P9's *the system acts; the operator signs* — so its trust story ends at transparency where ZP's continues into authority."
+  ]
+}

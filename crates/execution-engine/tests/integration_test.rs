@@ -282,8 +282,10 @@ async fn test_receipt_determinism() {
 async fn test_execution_timeout() {
     let engine = ExecutionEngine::new().await.expect("engine init");
 
-    let mut sandbox = SandboxConfig::default();
-    sandbox.timeout_ms = 2_000; // 2 second timeout
+    let sandbox = SandboxConfig {
+        timeout_ms: 2_000, // 2 second timeout
+        ..Default::default()
+    };
 
     let request = ExecutionRequest {
         request_id: "test-timeout".to_string(),
@@ -319,8 +321,10 @@ async fn test_execution_timeout() {
 async fn test_output_limit() {
     let engine = ExecutionEngine::new().await.expect("engine init");
 
-    let mut sandbox = SandboxConfig::default();
-    sandbox.max_output_bytes = 100; // Very small output limit
+    let sandbox = SandboxConfig {
+        max_output_bytes: 100, // Very small output limit
+        ..Default::default()
+    };
 
     let request = ExecutionRequest {
         request_id: "test-output-limit".to_string(),

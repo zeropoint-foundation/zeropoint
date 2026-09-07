@@ -25,8 +25,13 @@ pub mod validate;
 
 pub use error::ConfigError;
 pub use provenance::{Source, Sourced};
-pub use resolve::ConfigResolver;
-pub use schema::{ZpConfig, NodeRole, AcknowledgedListener};
-pub use topology::{derive_node_role, derive_node_role_with_hint, config_hint_role, TransitionInfo, detect_role_transition};
-pub use upstream::{UpstreamBindingStatus, verify_upstream_binding_local, verify_upstream_pubkey_match};
+pub use resolve::{ConfigResolver, ShadowedAtBoot};
+pub use schema::{AcknowledgedListener, NodeRole, ZpConfig, REGENT_INFERENCE_ENDPOINT_SENTINEL};
+pub use topology::{
+    config_hint_role, derive_node_role, derive_node_role_with_hint, detect_role_transition,
+    TransitionInfo,
+};
+pub use upstream::{
+    verify_upstream_binding_local, verify_upstream_pubkey_match, UpstreamBindingStatus,
+};
 pub use validate::validate;

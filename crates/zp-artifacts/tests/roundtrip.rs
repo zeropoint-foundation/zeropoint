@@ -1,12 +1,14 @@
 //! Signing round-trip verification tests.
 
-use std::sync::Arc;
 use chrono::Utc;
 use ed25519_dalek::{SigningKey, Verifier, VerifyingKey};
 use rand::rngs::OsRng;
+use std::sync::Arc;
 use tempfile::TempDir;
-use zp_artifacts::{Library, LocalArtifactLibrary, compute_artifact_id};
-use zp_artifacts::artifact::{Artifact, ArtifactContent, ArtifactKind, LifecycleState, RenderConfig, SourceManifest};
+use zp_artifacts::artifact::{
+    Artifact, ArtifactContent, ArtifactKind, LifecycleState, RenderConfig, SourceManifest,
+};
+use zp_artifacts::{compute_artifact_id, Library, LocalArtifactLibrary};
 use zp_content::backends::LocalFsBackend;
 
 async fn make_library(tmp: &TempDir) -> LocalArtifactLibrary {
@@ -91,7 +93,10 @@ async fn mutated_content_fails_verification() {
     // Mutate the canonical bytes
     let mut tampered = signed.canonical_bytes_for_signing();
     tampered[10] ^= 0xFF;
-    assert!(vk.verify(&tampered, &sig).is_err(), "tampered bytes must not verify");
+    assert!(
+        vk.verify(&tampered, &sig).is_err(),
+        "tampered bytes must not verify"
+    );
 }
 
 #[tokio::test]
@@ -105,10 +110,15 @@ async fn artifact_id_stable_across_state_transitions() {
     assert_eq!(id.to_hex(), original_id);
 
     let sk = SigningKey::generate(&mut OsRng);
-    lib.sign(&id, &sk, sk.verifying_key().to_bytes()).await.unwrap();
+    lib.sign(&id, &sk, sk.verifying_key().to_bytes())
+        .await
+        .unwrap();
 
     let signed = lib.get(&id).await.unwrap().unwrap();
-    assert_eq!(signed.artifact_id, original_id, "artifact_id must not change on sign");
+    assert_eq!(
+        signed.artifact_id, original_id,
+        "artifact_id must not change on sign"
+    );
 }
 
 #[tokio::test]

@@ -110,9 +110,10 @@ impl Library for LocalArtifactLibrary {
         signing_key: &ed25519_dalek::SigningKey,
         signer_pubkey: [u8; 32],
     ) -> Result<(), LibraryError> {
-        let row = self.index.get(&id.to_hex())?.ok_or_else(|| {
-            LibraryError::NotFound(id.to_hex())
-        })?;
+        let row = self
+            .index
+            .get(&id.to_hex())?
+            .ok_or_else(|| LibraryError::NotFound(id.to_hex()))?;
 
         if row.state != "candidate" {
             return Err(LibraryError::WrongState(format!(
@@ -143,10 +144,13 @@ impl Library for LocalArtifactLibrary {
         if let Some(prior_hex) = &artifact.supersedes {
             if let Some(prior_row) = self.index.get(prior_hex)? {
                 // Load prior, update its lifecycle, re-store, update index.
-                let mut prior = self.load_artifact_bytes(&prior_row.content_store_id).await?;
+                let mut prior = self
+                    .load_artifact_bytes(&prior_row.content_store_id)
+                    .await?;
                 prior.lifecycle = LifecycleState::Superseded { by: id.to_hex() };
                 let prior_cid = self.put_artifact_bytes(&prior).await?;
-                self.index.update_state(prior_hex, &prior_cid, "superseded")?;
+                self.index
+                    .update_state(prior_hex, &prior_cid, "superseded")?;
             }
         }
 
@@ -155,9 +159,10 @@ impl Library for LocalArtifactLibrary {
     }
 
     async fn reject(&self, id: &ArtifactId) -> Result<(), LibraryError> {
-        let row = self.index.get(&id.to_hex())?.ok_or_else(|| {
-            LibraryError::NotFound(id.to_hex())
-        })?;
+        let row = self
+            .index
+            .get(&id.to_hex())?
+            .ok_or_else(|| LibraryError::NotFound(id.to_hex()))?;
         if row.state != "candidate" {
             return Err(LibraryError::WrongState(format!(
                 "can only reject candidates, found {}",
@@ -168,7 +173,8 @@ impl Library for LocalArtifactLibrary {
         let mut artifact = self.load_artifact_bytes(&row.content_store_id).await?;
         artifact.lifecycle = LifecycleState::Rejected;
         let new_cid = self.put_artifact_bytes(&artifact).await?;
-        self.index.update_state(&id.to_hex(), &new_cid, "rejected")?;
+        self.index
+            .update_state(&id.to_hex(), &new_cid, "rejected")?;
         Ok(())
     }
 

@@ -137,6 +137,18 @@ impl ExecutionReceipt {
     }
 }
 
+/// Encode a blake3 hash as a lowercase hex string.
+///
+/// Shared utility — used by both engine.rs and receipt.rs to avoid duplication.
+pub fn bytes_to_hex(bytes: [u8; 32]) -> String {
+    use std::fmt::Write;
+    let mut s = String::with_capacity(64);
+    for b in &bytes {
+        write!(s, "{:02x}", b).ok();
+    }
+    s
+}
+
 #[cfg(test)]
 mod hash_tests {
     use super::*;
@@ -206,16 +218,4 @@ mod hash_tests {
         assert!(r2.verify_hash());
         assert_eq!(r2.compute_hash(), r.compute_hash());
     }
-}
-
-/// Encode a blake3 hash as a lowercase hex string.
-///
-/// Shared utility — used by both engine.rs and receipt.rs to avoid duplication.
-pub fn bytes_to_hex(bytes: [u8; 32]) -> String {
-    use std::fmt::Write;
-    let mut s = String::with_capacity(64);
-    for b in &bytes {
-        write!(s, "{:02x}", b).ok();
-    }
-    s
 }

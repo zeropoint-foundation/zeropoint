@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZeroPoint — Ecosystem Map</title>
+<style>
+  :root, .viz-root{ color-scheme:light;
+    --surface-1:#fcfcfb; --surface-2:#f2f2f0; --surface-3:#e8e8e4;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#77766f; --rule:#dcdcd6;
+    --st-good:#0ca30c; --st-warn:#fab219; --st-crit:#d03b3b; --edge:#c9c9c2;
+    --t-concept:#8b8b93; --t-core:#3b82f6; --t-crate:#38bdf8; --t-engine:#8b5cf6;
+    --t-external:#eab308; --t-hardware:#f97316; --t-person:#ec4899; --t-service:#22d3ee;
+    --t-tool:#22c55e; --t-datastore:#94a3b8; --t-runtime:#a78bfa;
+    --halo:#fcfcfb; }
+  @media (prefers-color-scheme: dark){ :root:where(:not([data-theme="light"])),
+    :root:where(:not([data-theme="light"])) .viz-root{ color-scheme:dark;
+    --surface-1:#111114; --surface-2:#18181c; --surface-3:#242429;
+    --text-primary:#f4f4f5; --text-secondary:#a1a1aa; --text-muted:#71717a; --rule:#2a2a30; --edge:#2f2f36;
+    --halo:#18181c; } }
+  :root[data-theme="dark"], :root[data-theme="dark"] .viz-root{ color-scheme:dark;
+    --surface-1:#111114; --surface-2:#18181c; --surface-3:#242429;
+    --text-primary:#f4f4f5; --text-secondary:#a1a1aa; --text-muted:#71717a; --rule:#2a2a30; --edge:#2f2f36;
+    --halo:#18181c; }
+  *{box-sizing:border-box} body{margin:0;font:14px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Inter,system-ui,sans-serif}
+  .viz-root{background:var(--surface-1);color:var(--text-primary);min-height:100vh;padding:26px 24px 60px}
+  .wrap{max-width:1400px;margin:0 auto}
+  h1{font-size:21px;margin:0 0 3px;letter-spacing:-.01em}
+  .sub{color:var(--text-muted);font-size:12.5px;margin:0}
+  .lede{color:var(--text-secondary);font-size:13.5px;margin:7px 0 0;max-width:78ch}
+  .top{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;flex-wrap:wrap}
+  .tools{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+  button.tg{background:var(--surface-2);color:var(--text-secondary);border:1px solid var(--rule);
+    border-radius:7px;padding:6px 11px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
+  button.tg:hover{color:var(--text-primary)}
+  button.tg.on{color:var(--text-primary);border-color:var(--text-muted)}
+  .bar{display:flex;gap:7px;flex-wrap:wrap;margin:16px 0 10px;align-items:center}
+  .pill{background:var(--surface-2);border:1px solid var(--rule);border-radius:20px;padding:4px 11px;
+    font-size:11.5px;cursor:pointer;font-family:inherit;color:var(--text-muted);transition:.12s}
+  .pill.on{color:var(--text-primary);border-color:currentColor}
+  .stage{background:var(--surface-2);border:1px solid var(--rule);border-radius:11px;padding:8px;position:relative}
+  svg{display:block;width:100%;height:auto;touch-action:none;user-select:none;-webkit-user-select:none}
+  .n-lab{font-size:10.5px;fill:var(--text-secondary);pointer-events:none;text-anchor:middle;
+    paint-order:stroke;stroke:var(--halo);stroke-width:3px;stroke-linejoin:round}
+  g.node.hi .n-lab{fill:var(--text-primary);font-weight:620}
+  .e-lab{font-size:8px;fill:var(--text-muted);pointer-events:none;text-anchor:middle;
+    paint-order:stroke;stroke:var(--halo);stroke-width:2.5px;stroke-linejoin:round;opacity:0;transition:opacity .12s}
+  g.node{cursor:grab}
+  g.node.drag{cursor:grabbing}
+  g.node.dim{opacity:.10}
+  g.node.fade{opacity:.22}
+  g.node.pin .pin-dot{opacity:1}
+  .pin-dot{opacity:0}
+  .hint{position:absolute;right:16px;bottom:14px;font-size:10.5px;color:var(--text-muted);pointer-events:none}
+  .legend{display:flex;gap:22px;flex-wrap:wrap;margin-top:14px;font-size:11.5px;color:var(--text-secondary)}
+  .lg{display:flex;gap:11px;flex-wrap:wrap;align-items:center}
+  .lg b{font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;font-size:10px}
+  .sw{width:10px;height:10px;border-radius:50%;display:inline-block}
+  .ring{width:11px;height:11px;border-radius:50%;display:inline-block;background:none}
+  .card{background:var(--surface-2);border:1px solid var(--rule);border-radius:11px;padding:16px 18px;margin-top:14px}
+  table{border-collapse:collapse;width:100%;font-size:12.5px}
+  th,td{text-align:left;padding:6px 10px 6px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{color:var(--text-muted);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em}
+  code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+  .tip{position:fixed;pointer-events:none;background:var(--surface-1);border:1px solid var(--rule);
+    border-radius:8px;padding:9px 12px;font-size:12px;opacity:0;transition:opacity .1s;z-index:60;
+    box-shadow:0 6px 22px rgba(0,0,0,.34);max-width:330px;color:var(--text-primary)}
+  .tip .t{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)}
+  .tip .n{font-weight:640;margin:1px 0 3px}
+  .tip .d{color:var(--text-secondary);font-size:11.5px}
+  .tip .c{font-family:ui-monospace,monospace;font-size:10px;color:var(--text-muted);margin-top:4px}
+  footer{margin-top:26px;padding-top:13px;border-top:1px solid var(--rule);font-size:11.5px;color:var(--text-muted);line-height:1.6}
+</style></head>
+<body><div class="viz-root"><div class="wrap">
+
+<div class="top">
+  <div>
+    <h1>ZeroPoint — Ecosystem Map</h1>
+    <p class="sub">__NNODES__ nodes · __NEDGES__ edges · <strong id="cov">__COVERAGE__</strong> workspace crates drawn · <span id="cmt" class="mono"></span></p>
+    <p class="lede">Type is the fill. <strong>Build state is the ring.</strong> A node with no ring is not
+      healthy and not broken — it is a node nobody has produced evidence for, and it renders that way on
+      purpose. <strong>A dashed outline means the node was hand-declared</strong> rather than found in the
+      workspace; solid means it was derived. That distinction exists because an earlier version of this map
+      drew only the nodes someone had remembered to type, and the credential vault — 420 lines, a CLI verb,
+      call sites in five crates — was simply not on it. Drag to pull the graph apart; hover for the state,
+      the reason, and the file the reason was read from.</p>
+  </div>
+  <div class="tools">
+    <button class="tg" id="reheat">Re-settle</button>
+    <button class="tg" id="unpin">Unpin all</button>
+    <button class="tg" id="elab">Edge labels</button>
+    <button class="tg" id="tgl">Light / dark</button>
+  </div>
+</div>
+
+<div class="bar" id="filters"></div>
+<div class="stage">
+  <svg id="g" viewBox="0 0 __W__ __H__" preserveAspectRatio="xMidYMid meet"></svg>
+  <div class="hint">drag to reposition · double-click to release · hover to isolate</div>
+</div>
+
+<div class="legend">
+  <div class="lg"><b>type</b><span id="lg-type" style="display:contents"></span></div>
+  <div class="lg"><b>build state</b><span id="lg-state" style="display:contents"></span></div>
+  <div class="lg"><b>provenance</b><span id="lg-origin" style="display:contents"></span></div>
+</div>
+
+<div class="card">
+  <table><thead><tr><th>Node</th><th>Type</th><th>State</th><th>Evidence</th></tr></thead>
+  <tbody id="tbl"></tbody></table>
+  <p style="color:var(--text-muted);font-size:11.5px;margin:11px 0 0">Table lists every node carrying
+    evidence. The __NUNKNOWN__ unknowns are omitted here and drawn without a ring above — listing them would imply
+    they had been assessed and found wanting, which is not what unknown means.</p>
+</div>
+
+<footer id="ft"></footer>
+<div class="tip" id="tip"></div>
+</div></div>
+<script>
+const G = __GRAPH_JSON__;
+const TC = {concept:'--t-concept',core:'--t-core',crate:'--t-crate',engine:'--t-engine',external:'--t-external',
+  hardware:'--t-hardware',person:'--t-person',service:'--t-service',tool:'--t-tool',datastore:'--t-datastore',runtime:'--t-runtime'};
+const SC = {live:'--st-good',partial:'--st-warn',unwired:'--st-crit',absent:'--st-crit'};
+const NS='http://www.w3.org/2000/svg';
+const W=G.width, H=G.height;
+const svg=document.getElementById('g'), tip=document.getElementById('tip');
+const N=G.nodes, E=G.edges.slice();
+const byId=Object.fromEntries(N.map(n=>[n.id,n]));
+const R = n => 5 + Math.min(9, n.deg * 1.15);
+const el=(t,a)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+
+// ── neighbour index, used by hover isolation and by the link force ──────
+const nbr={}; N.forEach(n=>nbr[n.id]=new Set());
+E.forEach(e=>{ if(byId[e.source]&&byId[e.target]){ nbr[e.source].add(e.target); nbr[e.target].add(e.source); } });
+
+// ── draw ────────────────────────────────────────────────────────────────
+const gRoot=el('g',{}), gEdges=el('g',{}), gELab=el('g',{}), gNodes=el('g',{});
+svg.appendChild(gRoot); gRoot.appendChild(gEdges); gRoot.appendChild(gELab); gRoot.appendChild(gNodes);
+
+E.forEach(e=>{
+  const a=byId[e.source], b=byId[e.target]; if(!a||!b) return;
+  e.a=a; e.b=b;
+  const derived = e.kind==='derived';
+  e.w = derived?0.6:1.15; e.o = derived?0.45:1;
+  e.line=el('line',{stroke:'var(--edge)','stroke-width':e.w,'stroke-opacity':e.o});
+  gEdges.appendChild(e.line);
+  e.text=el('text',{class:'e-lab'}); e.text.textContent=e.label.toLowerCase().replace(/_/g,' ');
+  gELab.appendChild(e.text);
+});
+
+N.forEach(n=>{
+  const c=`var(${TC[n.type]||'--t-concept'})`;
+  const g=el('g',{class:'node'}); g.dataset.id=n.id; g.dataset.type=n.type;
+  n.g=g;
+  n.ring = n.state!=='unknown' ? el('circle',{r:R(n)+4,fill:'none',stroke:`var(${SC[n.state]})`,
+      'stroke-width':1.5,'stroke-opacity':.92,...(n.state==='absent'?{'stroke-dasharray':'2,2'}:{})}) : null;
+  if(n.ring) g.appendChild(n.ring);
+  n.dot=el('circle',{r:R(n),fill:c,'fill-opacity':.14,stroke:c,'stroke-width':1.2,
+    ...(n.origin==='declared'?{'stroke-dasharray':'3,2'}:{})});
+  g.appendChild(n.dot);
+  n.pinDot=el('circle',{class:'pin-dot',r:1.7,fill:'var(--text-muted)'});
+  g.appendChild(n.pinDot);
+  n.text=el('text',{class:'n-lab'}); n.text.textContent=n.label; g.appendChild(n.text);
+  gNodes.appendChild(g);
+});
+
+// Label extent is measured, not guessed. The collision force below separates
+// label boxes rather than circles, which is the whole point of the exercise:
+// two nodes can sit 20px apart happily and still have unreadable labels.
+N.forEach(n=>{
+  let lw=0; try{ lw=n.text.getComputedTextLength(); }catch(_){}
+  if(!lw) lw=n.label.length*5.6;              // headless/none-rendered fallback
+  n.lw=lw;
+  n.hw=Math.max(R(n)+6, lw/2 + 5);            // half-width of the label box
+  n.hh=R(n)+16;                               // circle + the label sitting under it
+});
+
+// ── force simulation ────────────────────────────────────────────────────
+// A small velocity-Verlet embedder, same shape as d3-force but inlined so the
+// artifact keeps its no-network property. Four forces: link, charge, collide
+// (label-box, above), and a weak pull to centre so isolates do not drift.
+let alpha=1, alphaTarget=0, running=false;
+const ALPHA_MIN=0.0012, ALPHA_DECAY=1-Math.pow(ALPHA_MIN,1/380), VEL_DECAY=0.62;
+const CHARGE=-1500, LINK_K=0.62, CENTRE_K=0.012;
+
+N.forEach(n=>{ n.vx=0; n.vy=0; });            // x/y arrive pre-settled from the generator
+
+function tick(){
+  alpha += (alphaTarget-alpha)*ALPHA_DECAY;
+
+  // charge — O(n^2) is fine at this size and avoids a quadtree
+  for(let i=0;i<N.length;i++) for(let j=i+1;j<N.length;j++){
+    const a=N[i], b=N[j];
+    let dx=b.x-a.x, dy=b.y-a.y, d2=dx*dx+dy*dy;
+    if(d2<1){ dx=(i%7-3)*0.4+0.1; dy=(j%5-2)*0.4+0.1; d2=dx*dx+dy*dy; }
+    const d=Math.sqrt(d2), f=CHARGE*alpha/d2;
+    const ux=dx/d*f, uy=dy/d*f;
+    a.vx+=ux; a.vy+=uy; b.vx-=ux; b.vy-=uy;
+  }
+
+  // link — rest length grows with both label boxes, so wide labels get room
+  E.forEach(e=>{
+    const a=e.a, b=e.b; if(!a) return;
+    const L = 96 + (a.hw+b.hw)*0.66;
+    let dx=b.x-a.x, dy=b.y-a.y;
+    const d=Math.sqrt(dx*dx+dy*dy)||0.01;
+    const w=1/Math.min(nbr[a.id].size||1, nbr[b.id].size||1);
+    const f=(d-L)/d*alpha*LINK_K*w;
+    const ux=dx*f, uy=dy*f;
+    a.vx+=ux; a.vy+=uy; b.vx-=ux; b.vy-=uy;
+  });
+
+  // collide — separate label boxes, resolving on the axis of least penetration
+  for(let pass=0;pass<2;pass++)
+  for(let i=0;i<N.length;i++) for(let j=i+1;j<N.length;j++){
+    const a=N[i], b=N[j];
+    const dx=b.x-a.x, dy=b.y-a.y;
+    const ox=(a.hw+b.hw+7)-Math.abs(dx), oy=(a.hh+b.hh+3)-Math.abs(dy);
+    if(ox<=0||oy<=0) continue;
+    if(ox<oy){ const s=(dx<0?-1:1)*ox*0.5*0.7; a.vx-=s; b.vx+=s; }
+    else     { const s=(dy<0?-1:1)*oy*0.5*0.7; a.vy-=s; b.vy+=s; }
+  }
+
+  // centre + integrate
+  N.forEach(n=>{
+    if(n.fx!=null){ n.x=n.fx; n.y=n.fy; n.vx=n.vy=0; return; }
+    n.vx += (W/2-n.x)*CENTRE_K*alpha;
+    n.vy += (H/2-n.y)*CENTRE_K*alpha*1.25;
+    n.vx*=VEL_DECAY; n.vy*=VEL_DECAY;
+    n.x+=n.vx; n.y+=n.vy;
+    n.x=Math.max(n.hw+6, Math.min(W-n.hw-6, n.x));
+    n.y=Math.max(n.hh, Math.min(H-n.hh, n.y));
+  });
+  render();
+}
+
+function render(){
+  N.forEach(n=>{
+    const x=n.x.toFixed(1), y=n.y.toFixed(1);
+    n.dot.setAttribute('cx',x); n.dot.setAttribute('cy',y);
+    if(n.ring){ n.ring.setAttribute('cx',x); n.ring.setAttribute('cy',y); }
+    n.pinDot.setAttribute('cx',x); n.pinDot.setAttribute('cy',(n.y-R(n)-4.5).toFixed(1));
+    n.text.setAttribute('x',x); n.text.setAttribute('y',(n.y+R(n)+12).toFixed(1));
+  });
+  E.forEach(e=>{
+    if(!e.a) return;
+    e.line.setAttribute('x1',e.a.x.toFixed(1)); e.line.setAttribute('y1',e.a.y.toFixed(1));
+    e.line.setAttribute('x2',e.b.x.toFixed(1)); e.line.setAttribute('y2',e.b.y.toFixed(1));
+    e.text.setAttribute('x',((e.a.x+e.b.x)/2).toFixed(1));
+    e.text.setAttribute('y',((e.a.y+e.b.y)/2-2).toFixed(1));
+  });
+  fit();
+}
+
+// ── fit ─────────────────────────────────────────────────────────────────
+// The simulation decides the shape; this decides how much of the frame the
+// shape gets. Without it a 52-node graph settles into the middle third and
+// the labels are small because the drawing is small, not because the type is.
+// Eased rather than snapped, so a drag does not make the whole map jump.
+const FIT_M=26, FIT_MAX=1.45, FIT_MIN=0.6;
+let fitS=1, fitX=0, fitY=0, fitInit=false;
+function fit(){
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  N.forEach(n=>{ x0=Math.min(x0,n.x-n.hw); x1=Math.max(x1,n.x+n.hw);
+                 y0=Math.min(y0,n.y-R(n)-4); y1=Math.max(y1,n.y+n.hh); });
+  const bw=Math.max(x1-x0,1), bh=Math.max(y1-y0,1);
+  const s=Math.max(FIT_MIN,Math.min(FIT_MAX,Math.min((W-2*FIT_M)/bw,(H-2*FIT_M)/bh)));
+  const tx=W/2-s*(x0+x1)/2, ty=H/2-s*(y0+y1)/2;
+  const k=fitInit?0.10:1; fitInit=true;
+  fitS+=(s-fitS)*k; fitX+=(tx-fitX)*k; fitY+=(ty-fitY)*k;
+  gRoot.setAttribute('transform',`translate(${fitX.toFixed(2)},${fitY.toFixed(2)}) scale(${fitS.toFixed(4)})`);
+}
+
+function loop(){
+  tick();
+  if(alpha>ALPHA_MIN || alphaTarget>0) requestAnimationFrame(loop);
+  else running=false;
+}
+function kick(a){ alpha=Math.max(alpha,a==null?0.42:a); if(!running){ running=true; requestAnimationFrame(loop); } }
+
+render();
+kick(0.55);   // short settle from the generator's positions, with labels now measured
+
+// ── drag ────────────────────────────────────────────────────────────────
+function svgPt(ev){
+  const m=gRoot.getScreenCTM().inverse();
+  const p=svg.createSVGPoint(); p.x=ev.clientX; p.y=ev.clientY;
+  return p.matrixTransform(m);
+}
+let dragging=null;
+N.forEach(n=>{
+  n.g.addEventListener('pointerdown',ev=>{
+    ev.preventDefault();
+    dragging=n; n.g.classList.add('drag'); n.g.setPointerCapture(ev.pointerId);
+    const p=svgPt(ev); n.fx=p.x; n.fy=p.y;
+    alphaTarget=0.3; kick(0.3);
+  });
+  n.g.addEventListener('pointermove',ev=>{
+    if(dragging!==n) return;
+    const p=svgPt(ev); n.fx=p.x; n.fy=p.y;
+  });
+  const end=ev=>{
+    if(dragging!==n) return;
+    dragging=null; n.g.classList.remove('drag'); n.g.classList.add('pin');
+    alphaTarget=0; kick(0.22);          // node stays where it was dropped
+  };
+  n.g.addEventListener('pointerup',end);
+  n.g.addEventListener('pointercancel',end);
+  n.g.addEventListener('dblclick',()=>{ n.fx=n.fy=null; n.g.classList.remove('pin'); kick(0.35); });
+});
+
+// ── hover: isolate the node and its neighbours, reveal only its edges ────
+function hover(n,on){
+  if(on){
+    const keep=new Set([n.id,...nbr[n.id]]);
+    N.forEach(m=>{ m.g.classList.toggle('fade',!keep.has(m.id)); m.g.classList.toggle('hi',keep.has(m.id)); });
+    E.forEach(e=>{ if(!e.a) return;
+      const inc = e.source===n.id||e.target===n.id;
+      e.text.style.opacity = inc?0.95:(showEdgeLabels?0.16:0);
+      e.line.setAttribute('stroke', inc?`var(${TC[n.type]||'--t-concept'})`:'var(--edge)');
+      e.line.setAttribute('stroke-opacity', inc?0.9:e.o*0.3);
+      e.line.setAttribute('stroke-width', inc?1.7:e.w);
+    });
+  } else {
+    N.forEach(m=>m.g.classList.remove('fade','hi'));
+    E.forEach(e=>{ if(!e.a) return;
+      e.text.style.opacity = showEdgeLabels?0.55:0;
+      e.line.setAttribute('stroke','var(--edge)');
+      e.line.setAttribute('stroke-opacity',e.o);
+      e.line.setAttribute('stroke-width',e.w);
+    });
+  }
+}
+N.forEach(n=>{
+  n.g.addEventListener('mouseenter',()=>hover(n,true));
+  n.g.addEventListener('mousemove',ev=>{
+    const s=n.state==='unknown'
+      ? `<div class="d" style="margin-top:5px;color:var(--text-muted)">state unknown — no first-party evidence read</div>`
+      : `<div class="d" style="margin-top:5px"><span style="color:var(${SC[n.state]})">●</span> <strong>${n.state}</strong> — ${n.why||''}</div>${n.cite?`<div class="c">${n.cite}</div>`:''}`;
+    const prov = n.origin==='derived'
+      ? 'derived from the workspace'
+      : 'declared — a concept, person or external system the workspace cannot confirm';
+    tip.innerHTML=`<div class="t">${n.type}</div><div class="n">${n.label}</div><div class="d">${n.desc}</div>${s}<div class="c">${n.deg} connection${n.deg!==1?'s':''} · ${prov}</div>`;
+    tip.style.opacity=1; tip.style.left=Math.min(ev.clientX+14,innerWidth-342)+'px'; tip.style.top=(ev.clientY+15)+'px';
+  });
+  n.g.addEventListener('mouseleave',()=>{ tip.style.opacity=0; hover(n,false); });
+});
+
+// ── controls ────────────────────────────────────────────────────────────
+let showEdgeLabels=false;
+const elb=document.getElementById('elab');
+elb.onclick=()=>{ showEdgeLabels=!showEdgeLabels; elb.classList.toggle('on',showEdgeLabels);
+  E.forEach(e=>{ if(e.text) e.text.style.opacity=showEdgeLabels?0.55:0; }); };
+document.getElementById('reheat').onclick=()=>kick(0.75);
+document.getElementById('unpin').onclick=()=>{ N.forEach(n=>{ n.fx=n.fy=null; n.g.classList.remove('pin'); }); kick(0.6); };
+document.getElementById('tgl').onclick=()=>{const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark';};
+
+const types=[...new Set(N.map(n=>n.type))].sort(), active=new Set(types);
+const fb=document.getElementById('filters');
+types.forEach(t=>{
+  const b=document.createElement('button'); b.className='pill on'; b.textContent=t;
+  b.style.color=`var(${TC[t]})`;
+  b.onclick=()=>{ active.has(t)?(active.delete(t),b.classList.remove('on')):(active.add(t),b.classList.add('on')); apply(); };
+  fb.appendChild(b);
+});
+function apply(){
+  N.forEach(n=>n.g.classList.toggle('dim',!active.has(n.type)));
+  E.forEach(e=>{ if(!e.a) return;
+    const ok=active.has(e.a.type)&&active.has(e.b.type);
+    e.line.style.opacity=ok?1:.04;
+    e.text.style.opacity=ok?(showEdgeLabels?.55:0):0;
+  });
+}
+
+document.getElementById('lg-type').innerHTML=types.map(t=>
+  `<span style="display:inline-flex;align-items:center;gap:5px"><i class="sw" style="background:var(${TC[t]})"></i>${t}</span>`).join('');
+document.getElementById('lg-state').innerHTML=['live','partial','unwired','absent','unknown']
+  .filter(k=>G.counts[k]).map(k=>{
+    const b=k==='unknown'?'1px dashed var(--text-muted)':`1.5px ${k==='absent'?'dashed':'solid'} var(${SC[k]})`;
+    return `<span style="display:inline-flex;align-items:center;gap:5px"><i class="ring" style="border:${b}"></i>${k} <span style="color:var(--text-muted)">${G.counts[k]}</span></span>`;
+  }).join('');
+document.getElementById('lg-origin').innerHTML=[
+  ['derived','solid','measured from the workspace'],['declared','dashed','asserted; the workspace cannot confirm it']
+].map(([k,d])=>`<span style="display:inline-flex;align-items:center;gap:5px" title="${d}"><i class="sw" style="border-radius:50%;background:none;border:1.4px ${k==='declared'?'dashed':'solid'} var(--text-muted)"></i>${k} <span style="color:var(--text-muted)">${(G.origins||{})[k]||0}</span></span>`).join('');
+document.getElementById('tbl').innerHTML=N.filter(n=>n.state!=='unknown')
+  .sort((a,b)=>['unwired','absent','partial','live'].indexOf(a.state)-['unwired','absent','partial','live'].indexOf(b.state)||a.label.localeCompare(b.label))
+  .map(n=>`<tr><td><strong>${n.label}</strong></td><td style="color:var(--text-muted)">${n.type}</td>
+    <td><span style="color:var(${SC[n.state]})">●</span> ${n.state}</td>
+    <td style="color:var(--text-secondary)">${n.why||''}${n.cite?`<div class="mono" style="color:var(--text-muted);margin-top:2px">${n.cite}</div>`:''}</td></tr>`).join('');
+document.getElementById('cmt').textContent=G.generated_from_commit||'';
+document.getElementById('ft').innerHTML=
+  `Generated by <code>tools/ecosystem-state/ecosystem_state.py</code> from <code>crates/zp-server/assets/ecosystem.js</code> (nodes and edges), `+
+  `<code>docs/lenses/source-manifest.json</code> (every workspace crate, its dependency edges and its dependents) `+
+  `and a cited evidence table. The node set is derived, not curated: the generator diffs its nodes against `+
+  `<code>crates/</code> every run and exits non-zero if any crate is missing, so silence and coverage cannot `+
+  `look alike. Subsystems that live inside a crate rather than as one — the credential vault — are found by `+
+  `probing for their defining type and their edges are counted call sites, not assertions. `+
+  `Positions are seeded by a spring embedder at generation time, then refined in the browser by an inlined `+
+  `velocity-Verlet simulation whose collision force separates measured <em>label boxes</em> rather than circles — `+
+  `no d3, no network. The seed makes the starting picture identical for a given commit. `+
+  `Data: <code>dashboard/data/ecosystem-graph.json</code>. The same overlay ships into the live server graph at `+
+  `<code>/ecosystem</code> via <code>ecosystem-state.js</code>.`;
+</script></body></html>

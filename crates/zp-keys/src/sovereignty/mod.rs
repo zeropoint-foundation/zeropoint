@@ -765,9 +765,7 @@ fn load_active_genesis_secret_dispatch(
 /// Best-effort read of sovereignty_mode from genesis.json.
 /// Returns `None` if the file is missing, unreadable, or has no mode field.
 /// Callers must handle None as "legacy install" — not an error.
-fn read_sovereignty_mode(
-    genesis_record_path: &std::path::Path,
-) -> Option<SovereigntyMode> {
+fn read_sovereignty_mode(genesis_record_path: &std::path::Path) -> Option<SovereigntyMode> {
     if !genesis_record_path.exists() {
         return None;
     }
@@ -791,9 +789,8 @@ pub fn provider_for_genesis_record(
             "genesis.json not found — run `zp init` first".into(),
         ));
     }
-    let raw = std::fs::read_to_string(genesis_record_path).map_err(|e| {
-        KeyError::InvalidKeyMaterial(format!("failed to read genesis.json: {}", e))
-    })?;
+    let raw = std::fs::read_to_string(genesis_record_path)
+        .map_err(|e| KeyError::InvalidKeyMaterial(format!("failed to read genesis.json: {}", e)))?;
     let record: serde_json::Value = serde_json::from_str(&raw).map_err(|e| {
         KeyError::InvalidKeyMaterial(format!("failed to parse genesis.json: {}", e))
     })?;
@@ -943,8 +940,8 @@ mod tests {
 
     #[test]
     fn test_provider_capabilities_serde_roundtrip() {
-        let caps = ProviderCapabilities::CAN_UPGRADE
-            .union(ProviderCapabilities::HAS_BIOMETRIC_EVIDENCE);
+        let caps =
+            ProviderCapabilities::CAN_UPGRADE.union(ProviderCapabilities::HAS_BIOMETRIC_EVIDENCE);
 
         let json = serde_json::to_string(&caps).unwrap();
         assert!(json.contains("can_upgrade"));
@@ -1010,10 +1007,12 @@ mod tests {
             let json = format!(r#"{{"sovereignty_mode": "{}"}}"#, mode_str);
             std::fs::write(&genesis_path, &json).unwrap();
 
-            let provider =
-                provider_for_genesis_record(&genesis_path).unwrap_or_else(|e| {
-                    panic!("provider_for_genesis_record failed for '{}': {}", mode_str, e)
-                });
+            let provider = provider_for_genesis_record(&genesis_path).unwrap_or_else(|e| {
+                panic!(
+                    "provider_for_genesis_record failed for '{}': {}",
+                    mode_str, e
+                )
+            });
             assert_eq!(
                 provider.mode(),
                 expected,
@@ -1071,8 +1070,16 @@ mod tests {
         // When genesis.json doesn't exist the fast path (Keychain) may also
         // fail (no item in test namespace), but the provider path gives a
         // clearer error. This test verifies the error message is actionable.
-        let dir = tempfile::tempdir().unwrap();
-        let genesis_path = dir.path().join("genesis.json");
+        //
+        // The guard is load-bearing, not decoration. Until 2026-08-12 this
+        // test took no guard at all, so it installed no mock credential store
+        // and read the operator's real Keychain — meaning it passed or failed
+        // according to whether some *other* test had happened to install the
+        // mock first. That is a scheduling-dependent flake, and on a machine
+        // with a provisioned Genesis it resolves a real root and the assertion
+        // below is simply false.
+        let zp = crate::test_sync::isolated_zp_home();
+        let genesis_path = zp.path().join("genesis.json");
         // Do NOT write genesis.json
         let result = load_sovereign_root(&genesis_path);
         // Either the Keychain fast path failed or the provider path failed;
@@ -1184,7 +1191,10 @@ mod tests {
 
         // No genesis.json written — should fail with a clear message.
         let result = keyring.genesis_secret();
-        assert!(result.is_err(), "genesis_secret() must fail without genesis.json");
+        assert!(
+            result.is_err(),
+            "genesis_secret() must fail without genesis.json"
+        );
         let msg = format!("{}", result.unwrap_err());
         assert!(
             msg.contains("genesis.json not found") || msg.contains("No genesis.json"),

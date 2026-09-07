@@ -176,13 +176,16 @@ impl GovernanceEvent {
     ) -> Self {
         let creator = match &actor {
             GovernanceActor::Human { id } => id.clone(),
-            GovernanceActor::Agent { destination_hash, .. } => destination_hash.clone(),
+            GovernanceActor::Agent {
+                destination_hash, ..
+            } => destination_hash.clone(),
             GovernanceActor::System { component } => component.clone(),
         };
 
         let origin = match &event_type {
-            GovernanceEventType::GuardEvaluation
-            | GovernanceEventType::PolicyEvaluation => EventOrigin::PolicyEvaluation,
+            GovernanceEventType::GuardEvaluation | GovernanceEventType::PolicyEvaluation => {
+                EventOrigin::PolicyEvaluation
+            }
             _ => match &actor {
                 GovernanceActor::Human { .. } => EventOrigin::UserAction,
                 GovernanceActor::System { .. } => EventOrigin::SystemInternal,
@@ -808,7 +811,12 @@ impl ActionContext {
             } => (
                 "InferenceRequest".to_string(),
                 Some(format!("{}@{}", model, session_id)),
-                if tool_names.is_empty() { "Medium" } else { "High" }.to_string(),
+                if tool_names.is_empty() {
+                    "Medium"
+                } else {
+                    "High"
+                }
+                .to_string(),
             ),
         };
 
@@ -1645,9 +1653,7 @@ mod tests {
             trust_tier: 0,
             risk_level: "Low".to_string(),
         };
-        let decision = GovernanceDecision::Allow {
-            conditions: vec![],
-        };
+        let decision = GovernanceDecision::Allow { conditions: vec![] };
 
         let event = GovernanceEvent::guard_evaluation(actor, ctx, decision)
             .with_provenance(EventProvenance::user_action("user-1"));
@@ -1667,9 +1673,7 @@ mod tests {
             trust_tier: 0,
             risk_level: "Low".to_string(),
         };
-        let decision = GovernanceDecision::Allow {
-            conditions: vec![],
-        };
+        let decision = GovernanceDecision::Allow { conditions: vec![] };
 
         let event_no_prov =
             GovernanceEvent::guard_evaluation(actor.clone(), ctx.clone(), decision.clone());
@@ -1687,8 +1691,8 @@ mod tests {
 
     #[test]
     fn test_provenance_survives_serialization() {
-        let prov = EventProvenance::policy_evaluation("policy-engine")
-            .with_authorization("receipt-789");
+        let prov =
+            EventProvenance::policy_evaluation("policy-engine").with_authorization("receipt-789");
 
         let json = serde_json::to_string(&prov).unwrap();
         let restored: EventProvenance = serde_json::from_str(&json).unwrap();

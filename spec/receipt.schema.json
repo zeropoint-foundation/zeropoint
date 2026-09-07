@@ -8,8 +8,8 @@
   "properties": {
     "id": {
       "type": "string",
-      "pattern": "^(rcpt|intn|dsgn|appr)-[a-f0-9]{8,}$",
-      "description": "Unique receipt identifier. Prefixed by type: rcpt- (execution), intn- (intent), dsgn- (design), appr- (approval)."
+      "pattern": "^(mrouted|llmpol|mpres|mpsel|accs|appr|arsg|auth|cano|cfgr|dlgt|dsgn|fcap|fmac|fmgr|infc|infd|inff|infr|intn|mcap|midx|mpro|mreg|mret|mrvk|ndac|ndgr|nrtr|nrtv|obsv|plcy|port|pric|pymt|rcpt|revk|rflt|xanc)-[a-f0-9]{8,}$",
+      "description": "Unique receipt identifier, prefixed by receipt type per `ReceiptType::id_prefix()`. Note `port` is shared by port_allocated and port_released, so the prefix identifies the family and not the type uniquely."
     },
     "version": {
       "type": "string",
@@ -18,8 +18,49 @@
     },
     "receipt_type": {
       "type": "string",
-      "enum": ["intent", "design", "approval", "execution", "payment", "access"],
-      "description": "The stage in the provenance chain this receipt represents. 'payment' and 'access' extend the chain for the agent web."
+      "enum": [
+        "intent",
+        "design",
+        "approval",
+        "execution",
+        "payment",
+        "access",
+        "observation_claim",
+        "policy_claim",
+        "authorization_claim",
+        "memory_promotion_claim",
+        "delegation_claim",
+        "narrative_synthesis_claim",
+        "revocation_claim",
+        "reflection_claim",
+        "configuration_claim",
+        "canonicalized_claim",
+        "node_delegation_accepted",
+        "node_delegation_granted",
+        "node_role_transition",
+        "fleet_membership_granted",
+        "fleet_membership_accepted",
+        "external_anchor",
+        "financial_capability_grant",
+        "port_allocated",
+        "port_released",
+        "pricing_refresh_claim",
+        "artifact_signed_claim",
+        "memory_indexed",
+        "memory_retrieved_by_agent",
+        "memory_revoked_from_index",
+        "model_preference_selected",
+        "model_preference_resolved",
+        "model_routed",
+        "preference_llm_policy_set",
+        "inference_dispatched",
+        "inference_completed",
+        "inference_failed",
+        "model_registered",
+        "model_capability_updated",
+        "inference_routed"
+      ],
+      "description": "Stage or claim family. MUST equal the serde (snake_case) name of a `zp_receipt::ReceiptType` variant. Kept in exact set-equality with the Rust enum by crates/zp-receipt/tests/schema_conformance.rs \u2014 this list is generated from that enum, not maintained by hand."
     },
     "parent_receipt_id": {
       "type": ["string", "null"],

@@ -2,7 +2,9 @@
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use zp_core::{InferenceTier, ProviderCapabilities, ProviderHealth, ProviderId, ToolDefinition, ZpError};
+use zp_core::{
+    InferenceTier, ProviderCapabilities, ProviderHealth, ProviderId, ToolDefinition, ZpError,
+};
 
 /// Core trait that all LLM providers must implement.
 #[async_trait]

@@ -1,0 +1,251 @@
+{
+  "title": "WebAssembly in 2025 — What Actually Changed",
+  "subtitle": "A YouTube explainer taking apart the \"WASM is replacing JavaScript\" headline: the language was never the target, the monopoly was — and the decisive 2025 moves were garbage collection landing in Wasm 3.0 and WASI 0.2 plus the component model turning the server, not the browser, into the real prize.",
+  "center": {
+    "label": "Not the language — the monopoly",
+    "emoji": "🧱"
+  },
+  "branches": [
+    {
+      "label": "The Claim, Defused",
+      "emoji": "⚖️",
+      "color": "coral",
+      "children": [
+        {
+          "label": "The honest answer",
+          "children": [
+            {"label": "\"No. And also, kind of yes\""},
+            {"label": "JS \"more entrenched than ever\""},
+            {"label": "\"Nobody sane wants it gone\""}
+          ]
+        },
+        {
+          "label": "What actually dies",
+          "children": [
+            {"label": "\"Not the language, a belief\""},
+            {"label": "One browser, one language"},
+            {"label": "A 30-year rule, broken"}
+          ]
+        },
+        {
+          "label": "Why JS won honestly",
+          "children": [
+            {"label": "Everywhere, zero setup"},
+            {"label": "Fine for forms and dashboards"},
+            {"label": "Dynamic, GC'd, figured out at runtime"}
+          ]
+        },
+        {
+          "label": "Where it hits the wall",
+          "children": [
+            {"label": "Video editors, games, 3D engines"},
+            {"label": "\"Slam face first into a wall\""},
+            {"label": "Developers hit it early"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "How We Got Here",
+      "emoji": "🕰️",
+      "color": "teal",
+      "children": [
+        {
+          "label": "The asm.js hack",
+          "children": [
+            {"label": "Figma's editor was C++, 2017"},
+            {"label": "Cross-compiled to a JS subset"},
+            {"label": "\"It worked, but it was a hack\""}
+          ]
+        },
+        {
+          "label": "Made official",
+          "children": [
+            {"label": "2017: all four browsers ship"},
+            {"label": "Compact bytecode, near-native"},
+            {"label": "A serious second language"}
+          ]
+        },
+        {
+          "label": "Version one's hard limit",
+          "children": [
+            {"label": "One flat block of memory"},
+            {"label": "Raw numbers, nothing else"},
+            {"label": "Perfect for C++ and Rust"}
+          ]
+        },
+        {
+          "label": "Everyone else suffered",
+          "children": [
+            {"label": "Java, C#, Kotlin, Go need a GC"},
+            {"label": "Ship a collector in the module"},
+            {"label": "\"Megabytes of dead weight\""}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "WebAssembly 3.0",
+      "emoji": "🚀",
+      "color": "lavender",
+      "children": [
+        {
+          "label": "Garbage collection lands",
+          "children": [
+            {"label": "\"Most boring name in computing\""},
+            {"label": "Borrow the browser's collector"},
+            {"label": "Overhead gone \"overnight\""}
+          ]
+        },
+        {
+          "label": "The languages flooded in",
+          "children": [
+            {"label": "Java, Kotlin, Dart, Scala, OCaml"},
+            {"label": "Real backends in a single year"},
+            {"label": "Doors that were shut, now open"}
+          ]
+        },
+        {
+          "label": "64-bit memory",
+          "children": [
+            {"label": "Old ceiling: 4 GB"},
+            {"label": "In-browser now 16 GB"},
+            {"label": "On a server, effectively none"}
+          ]
+        },
+        {
+          "label": "The rest of the release",
+          "children": [
+            {"label": "Multiple memories"},
+            {"label": "Native exceptions, tail calls"},
+            {"label": "Faster vector math"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "The Server Is the Real Prize",
+      "emoji": "🖥️",
+      "color": "saffron",
+      "children": [
+        {
+          "label": "WASI opens the door",
+          "children": [
+            {"label": "\"The browser was a training ground\""},
+            {"label": "Sandboxed files, network, clock"},
+            {"label": "WASI 0.2 stabilized in 2025"}
+          ]
+        },
+        {
+          "label": "The component model",
+          "children": [
+            {"label": "\"Build software like Lego bricks\""},
+            {"label": "A Go part snaps into a Rust part"},
+            {"label": "No glue code wedged between"}
+          ]
+        },
+        {
+          "label": "Versus the container",
+          "children": [
+            {"label": "Docker drags a whole OS along"},
+            {"label": "Cold start under one millisecond"},
+            {"label": "\"An entirely different category\""}
+          ]
+        },
+        {
+          "label": "Safe by default",
+          "children": [
+            {"label": "Does nothing unless permitted"},
+            {"label": "No file, no socket, no access"},
+            {"label": "\"Running a stranger's code\""}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Where the Money Went",
+      "emoji": "💰",
+      "color": "sage",
+      "children": [
+        {
+          "label": "The edge went all in",
+          "children": [
+            {"label": "Cloudflare Workers, Fastly Compute"},
+            {"label": "Fermyon running in production"},
+            {"label": "Hundreds of data centers"}
+          ]
+        },
+        {
+          "label": "The acquisition",
+          "children": [
+            {"label": "Akamai bought Fermyon, Dec 2025"},
+            {"label": "Serverless WebAssembly, outright"},
+            {"label": "\"The money spoke loudly\""}
+          ]
+        },
+        {
+          "label": "Incumbents made room",
+          "children": [
+            {"label": "Docker runs Wasm containers"},
+            {"label": "Kubernetes schedules Wasm work"},
+            {"label": "Shopify swapping hot paths"}
+          ]
+        },
+        {
+          "label": "Who leads in the browser",
+          "children": [
+            {"label": "Blazor ≈42% of live Wasm"},
+            {"label": "C++ via Emscripten ≈10%"},
+            {"label": "Rust ~1.5%, Go a rounding error"}
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Cold Water",
+      "emoji": "🧊",
+      "color": "rose",
+      "children": [
+        {
+          "label": "The adoption numbers",
+          "children": [
+            {"label": "~0.35% of all websites"},
+            {"label": "Flat for two straight years"},
+            {"label": "~2% of the top 1,000 sites"}
+          ]
+        },
+        {
+          "label": "Real limits remain",
+          "children": [
+            {"label": "Cannot touch the page directly"},
+            {"label": "Reaches back through JS per pixel"},
+            {"label": "Debugging rough, tooling young"}
+          ]
+        },
+        {
+          "label": "JavaScript is still the host",
+          "children": [
+            {"label": "It boots every Wasm app"},
+            {"label": "It owns the DOM, clicks, pixels"},
+            {"label": "\"You literally cannot start\" without it"}
+          ]
+        },
+        {
+          "label": "The actual advice",
+          "children": [
+            {"label": "\"Do not go rewrite anything\""},
+            {"label": "Learn Rust, Go, some C#"},
+            {"label": "\"Keep one eye on the component model\""}
+          ]
+        }
+      ]
+    }
+  ],
+  "footnotes": [
+    "9m37s YouTube explainer (`youtu.be/VQHRUQDCh_Q`), channel unnamed in the transcript. Register is hype-deflation: the thesis is that the headline is wrong on its face and interesting underneath it.",
+    "The load-bearing reframe: JavaScript and WebAssembly are not rivals for one throne. \"JavaScript is the glue and the friendly face of the app. WebAssembly is the engine room where the heavy lifting quietly happens.\"",
+    "Sourcing caveat — the numbers are asserted without citation: Blazor at ~42% of live Wasm, C++/Emscripten ~10%, Rust ~1.5%, 0.35% of all sites versus ~2% of the top thousand, sub-millisecond cold starts. Directionally consistent with public trackers; treat the specific figures as unverified.",
+    "Two claims carry dates worth pinning: WebAssembly 3.0 shipping with built-in GC, and WASI 0.2 plus the component model stabilizing — both placed in 2025. Akamai's acquisition of Fermyon is placed in December 2025.",
+    "ZP resonance (my framing, not the video's): KEEL §II.19 already names WASM modules implementing declared trait interfaces as the substrate's *single* composition primitive, and §V.1–V.3 spec host-import surfaces for Officer, Cartographer and Regent cores. The video's two 2025 developments land directly on that commitment — the component model is a stronger version of what the Extension Surface manifest is reaching for, and WASI 0.2 is the capability vocabulary `QUARANTINE-PLANE-2026-07.md` flags as an open position. The divergence: the video's sandbox is about running strangers' code fast, while ZP's is about proving who authorized a module to run at all. Same mechanism, different question."
+  ]
+}

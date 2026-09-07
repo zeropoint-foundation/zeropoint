@@ -93,6 +93,6 @@ Neither assertion requires symbol matching, which §2 established is unsound. Bo
 ## 6. Non-goals
 
 - **Not a claim that the substrate is broken.** Every absence found is planned and tracked in code. The finding concerns how the corpus represents its own state.
-- **Not a proposal to implement the missing components.** Sequencing for the cognitive-layer members sits in `COGNITIVE-PRIMITIVES-ARC-PLAN-2026-07.md`.
+- **Not a proposal to implement the missing components.** Sequencing for the cognitive-layer members sits in `docs/handoffs/COGNITIVE-PRIMITIVES-ARC-PLAN-2026-07.md`.
 - **Not an audit of implementation quality.** A resolving citation is evidence a module exists and claims a spec, not evidence it satisfies it.
 - **Not a corpus-wide sweep.** Layer A and the cognitive path only. Extending it is an open position, not a commitment.

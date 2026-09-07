@@ -42,11 +42,7 @@ use zp_net::{bind_loopback, CancellationToken};
 #[tokio::test]
 async fn dual_stack_http_drains_on_token_cancel() {
     let listener = bind_loopback(0).await.expect("bind_loopback failed");
-    let v4_port = listener
-        .v4
-        .local_addr()
-        .expect("v4 local_addr")
-        .port();
+    let v4_port = listener.v4.local_addr().expect("v4 local_addr").port();
     let v6_present = listener.v6.is_some();
 
     let app = Router::new().route("/healthz", get(|| async { "ok" }));
@@ -128,8 +124,7 @@ fn cleanup_launched_tools_removes_server_pid_and_tolerates_empty_dir() {
 
     // Populate: server.pid + one dead tool pid file.
     std::fs::write(&server_pid, "99999").expect("write server.pid");
-    std::fs::write(pid_dir.join("ghost-tool.pid"), "99998")
-        .expect("write tool.pid");
+    std::fs::write(pid_dir.join("ghost-tool.pid"), "99998").expect("write tool.pid");
 
     zp_server::cleanup_launched_tools(pid_dir, &server_pid);
 

@@ -16,6 +16,7 @@
 //! See `docs/ARCHITECTURE-2026-07.md` Part II for the full cognitive
 //! architecture specification.
 
+pub mod approvals;
 pub mod awareness;
 pub mod cognitive_observer;
 pub mod cognitive_observer_semantic;
@@ -26,13 +27,18 @@ pub mod error;
 pub mod evaluation;
 pub mod events;
 pub mod inference;
+pub mod inference_classifier;
 pub mod intent;
 pub mod loop_runner;
 pub mod memory;
+pub mod onboarding;
 pub mod persona;
+pub mod precedent;
 pub mod regent;
 pub mod routing;
 pub mod shadow_validation;
+pub mod text;
+pub mod tools;
 
 // Re-export key types for ergonomic access from downstream crates.
 pub use regent::{OperatorModelPin, PinStatus, ShadowCandidate, ShadowCandidateState};

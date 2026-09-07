@@ -191,7 +191,7 @@ impl CanaryRuntime {
             Ok(s) => s,
             Err(e) => return ProbeOutcome::Unresponsive(format!("lock poisoned: {}", e)),
         };
-        let chain = ChainReader::new(&*store);
+        let chain = ChainReader::new(&store);
 
         let entries = match chain.recent_entries(limit) {
             Ok(e) => e,
@@ -298,13 +298,7 @@ impl CanaryRuntime {
         ));
     }
 
-    fn emit_missed(
-        &self,
-        observer_id: &str,
-        canary_id: u64,
-        probe_ms: u64,
-        probed_entries: usize,
-    ) {
+    fn emit_missed(&self, observer_id: &str, canary_id: u64, probe_ms: u64, probed_entries: usize) {
         self.emit_event(format!(
             "chain:canary:missed {} {} probe_ms={} probed_entries={}",
             observer_id, canary_id, probe_ms, probed_entries
@@ -384,10 +378,7 @@ mod tests {
         (Arc::new(std::sync::Mutex::new(store)), tmp)
     }
 
-    fn count_events_with_prefix(
-        store: &Arc<std::sync::Mutex<AuditStore>>,
-        prefix: &str,
-    ) -> usize {
+    fn count_events_with_prefix(store: &Arc<std::sync::Mutex<AuditStore>>, prefix: &str) -> usize {
         let store = store.lock().expect("lock");
         store
             .search_chain_by_action_keyword(prefix, 1024)

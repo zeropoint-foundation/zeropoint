@@ -8,6 +8,16 @@ implementation-plural.*
 *Updates to this doc are architectural acts and should be treated as
 such — not edited casually.*
 
+*Indexed 2026-08-14 as Tier 2 (Meta-discipline). It had never appeared in
+`CANONICAL-CORPUS-INDEX-2026-07.md` and therefore fell under the Tier-3
+catch-all — "read as historical unless explicitly reclassified" — which
+contradicted the hub status this header declares and would have made the
+2026-08-14 external-falsifier note an amendment to a frozen document.
+Resolved in favour of the header. Owed: an explicit declaration of which
+KEEL sections this contract elaborates, since it predates the July 2026
+KEEL declaration; and a reconciliation of its "eight principles" with
+KEEL's nine.*
+
 ---
 
 ## 1. What this doc is
@@ -108,6 +118,132 @@ Mechanism: the eight delegation invariants in `DelegationChain::verify()`.
 Falsifier: a delegation chain that widens authority anywhere along its
 length. Currently believed to hold; not yet adversarially tested under
 full delegation pressure.
+
+**External falsifier vocabulary (added 2026-08-14).**
+`draft-reece-wimse-cross-org-delegation` — an IETF **individual**
+Internet-Draft, -00 published 22 June 2026, marked on its own face as
+not endorsed by the IETF and carrying no standards standing — states
+nine requirements for cross-organisational agent delegation and
+explicitly declines to specify a solution. Four are this section's
+discipline written by someone with no knowledge of ZeroPoint, which is
+worth more than an internally-authored falsifier because it lets Claims
+2 and 4 be scored by a stranger.
+
+- **R1** — a relying party verifies *from the conveyed authority alone*
+  that no hop exceeds its predecessor. Mechanism here:
+  `DelegationChain::verify()` walks parent-link, depth increment, depth
+  ceiling, grantor-equals-parent's-grantee,
+  `parent.capability.contains(child.capability)`, and lease
+  non-escalation. ZP passes on its face. One subtlety worth carrying
+  rather than glossing: ZP verifies with the **whole chain in hand**,
+  where R1 asks what a relying party can verify **from the credential it
+  was handed**. Same property, different possession assumption — and the
+  difference is what an offline third-party verifier meets first.
+- **R3** — an authorization decision without a synchronous call to the
+  originating organization on the critical path. ZP is structurally
+  stronger: there is no originating organization.
+- **R7** — revocation verifiable offline and **whose staleness is
+  bounded**, so a relying party can fail safe. Revocation here is
+  chain-anchored and offline-verifiable; *bounded staleness under
+  partition* is not specified anywhere the corpus currently reaches.
+  **Treat R7 as the open one.**
+- **R8** — each participant's record resistant to undetectable
+  alteration, the records composing into an end-to-end account of an
+  action's provenance. This is Claim 2, whose status above is "mechanism
+  exists; not yet load-tested against adversarial peers." R8 supplies
+  that load test a vocabulary that did not originate here.
+
+**Where it diverges, and why that matters more than the agreement.** R2
+roots verification in another organization's trust anchor: the principal
+is bound but not sovereign. The draft's §7 names substitution of a
+relying party's trust root as the attack a solution must prevent, while
+rooting every chain in an institution. That is the Sovereign/Companion
+axis of `SUBSTRATE-FORM-2026-07` arriving at the delegation layer — see
+that document's §"Trust-chain reach is stated per layer". Recording the
+convergence without recording the divergence would be the misreading:
+the mechanisms are converging and the root question is untouched.
+Three sweeps across the WIMSE, OAuth and AIP drafts and OIDC-A have
+found no draft that roots the chain in the principal's own key.
+
+Source: `AI-LANDSCAPE-SIGNAL-2026-07.md` §"Signal 5". Read in full at
+datatracker by the landscape sweep; the requirement text above is that
+reading, not a re-read. Confidence is high on what the draft says and
+low on what it becomes — individual drafts frequently expire without
+issue, which is why nothing above is a claim change.
+
+**Amended 2026-08-15 (E13).** A second external falsifier vocabulary,
+adopted on a stronger warrant than the first: it was arrived at twice,
+independently. Two standards lineages have converged on the same four
+authorization primitives by different routes — IETF/OAuth via the `act`
+claim, and DID/VC via NIST SP 800-162 ABAC and RFC 9396. Independent
+convergence is the best available evidence that a primitive set is
+right, and it hands the substrate a conformance checklist it did not
+have to author. Scored against the tree on 2026-08-15:
+
+- **Deny-precedence** — a deny anywhere in the evaluation governs.
+  Mechanism here: the rule chain in `crates/zp-policy/src/engine.rs`
+  resolves most-restrictive-wins across all rules, native and WASM
+  alike. ZP passes on its face.
+- **Attenuation-only delegation** — no hop widens what it received.
+  Mechanism here: `CapabilityGrant::delegate()` requires equal-or-
+  narrower scope, enforced by `GrantedCapability::contains`
+  (`crates/zp-core/src/capability_grant.rs:646`). This is the same
+  mechanism R1 scores, reached from the other lineage, and it passes for
+  the same reason.
+- **Mandatory expiry** — an authorization that never lapses is not
+  bounded. **ZP fails, at the constructor.** `CapabilityGrant::new()`
+  defaults `expires_at` to `None` (`capability_grant.rs:333`), so
+  non-expiring is what a caller receives by omission rather than by
+  decision. The defect is in the default, which is the most load-bearing
+  place it could be: every grant that nobody thought about is unbounded.
+  **Amended 2026-08-17.** The constructor default is unchanged and this
+  verdict stands as written. What changed is the instance:
+  `PERENNIAL-GRANT-2026-08` traced the default to the two production
+  sites in `zp-server` that took it — wildcard `ToolCall` grants,
+  perennial by construction and defended as such in their own doc
+  comments — and both now attach `LeasePolicy::standard_8h()` by
+  operator ruling. So the primitive is satisfied where it was being
+  violated, and still absent where it would be enforced: the boundary
+  remedy at `validate_issuance` is unimplemented, and a caller who omits
+  an expiry today still receives an unbounded grant. Read this bullet as
+  scoring the default, not the call sites.
+- **Default-deny** — absent an authorizing rule, refuse. **Treat this as
+  the open one, and note that it is open rather than failed.** The
+  substrate has two layers with opposite defaults. The capability layer
+  *is* default-deny: nothing acts outside a grant's scope. The policy
+  engine is default-allow by written design — `DefaultAllowRule` is the
+  permissive baseline, evaluated last — per `ARCHITECTURE.md` §13.3's
+  install-and-run posture. Those two have never been reconciled in a
+  single statement, and this convergence is the occasion to do it, not
+  the authority to overrule it.
+
+**Where this differs from the R1/R3/R7/R8 reading, and why it is worth
+recording separately.** E10's vocabulary came from one lineage and
+tested the *shape* of delegation. This one came from two and tests the
+*defaults*, which is a different and less flattering question: a
+substrate can implement every mechanism correctly and still ship a
+posture that grants more than intended, because a default is what
+happens when nobody decides. The two failures found here are both
+defaults — one at a constructor, one at a rule chain — and neither would
+have surfaced by scoring mechanisms.
+
+**On the remedy for expiry, corrected.** A first reading called this a
+one-line type change. It is not: there are 118 `CapabilityGrant`
+construction sites across the workspace, and making the field
+non-optional is a refactor rather than a fix. The proportionate remedy
+is at the boundary — `validate_issuance` already gates issuance and
+already refuses external provenance on credential access; refusing a
+grant issued without an expiry belongs there, and costs nothing at the
+118 sites. Enforce where the thing crosses, not by rewriting every
+caller.
+
+Source: the 2026-08-15 landscape sweep, which read Chinese-language and
+arXiv primary sources and surfaced the DID/VC lineage the log had not
+previously tracked. The convergence claim rests on that sweep's reading
+of both lineages, not on a re-read here. Confidence is high on the
+primitive set — two independent arrivals is the point — and the scoring
+above is a direct read of the tree on that date, pinned by the line
+citations.
 
 ### The eight principles
 
@@ -714,9 +850,16 @@ In order of appearance in this document:
   specification; the Tier 6 spoke candidate
 - `docs/SUPPLY-CHAIN-MANIFEST.md` — the partial Tier 11 spoke; currently
   covers public-site asset SRI
-- `docs/whitepaper-v2.md` — the public thesis; §6.1 (governance by
-  protocol, not by rules) is the source for §7's governance-by-decree
-  point
+- `docs/whitepaper-v9.md` — the public thesis; §5 (The Governance Model —
+  *"Governance in ZeroPoint is protocol, not policy. It is enforced by
+  structure — evaluation order, invariant checks, cryptographic
+  verification — rather than by trust in an organization"*) is the source
+  for §7's governance-by-decree point. **Repointed 2026-08-14**: this cited
+  `whitepaper-v2.md` §6.1, and no v2 exists — the file is v8 and v9, of
+  which v9 is what the rest of the corpus cites. The section number moved
+  too, so repointing to §6.1 of either extant draft would have produced a
+  citation that *resolves and is wrong*, which is worse than one that
+  dangles.
 - `CLAUDE.md` workflow heuristics — the cockpit-projection heuristic
   (project-not-decide pattern), the propose-not-sign heuristic, and the
   singular-sovereign-root heuristic that the integration patterns

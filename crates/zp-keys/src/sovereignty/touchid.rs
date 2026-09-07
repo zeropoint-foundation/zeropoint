@@ -54,7 +54,11 @@ impl SovereigntyProvider for TouchIdProvider {
             return save_touchid_secret_v2(secret);
         }
 
-        #[cfg(all(target_os = "macos", feature = "os-keychain", not(feature = "biometric-keychain")))]
+        #[cfg(all(
+            target_os = "macos",
+            feature = "os-keychain",
+            not(feature = "biometric-keychain")
+        ))]
         {
             return save_touchid_secret_v1(secret);
         }
@@ -75,7 +79,11 @@ impl SovereigntyProvider for TouchIdProvider {
             return load_touchid_secret_v2();
         }
 
-        #[cfg(all(target_os = "macos", feature = "os-keychain", not(feature = "biometric-keychain")))]
+        #[cfg(all(
+            target_os = "macos",
+            feature = "os-keychain",
+            not(feature = "biometric-keychain")
+        ))]
         {
             return load_touchid_secret_v1();
         }
@@ -127,9 +135,17 @@ impl SovereigntyProvider for TouchIdProvider {
         self.save_secret(secret)?;
         let tier = {
             #[cfg(all(target_os = "macos", feature = "biometric-keychain"))]
-            { if is_os_enforced() { "Tier 2: OS-enforced via kSecAccessControlBiometryCurrentSet" } else { "Tier 1: application-layer biometric" } }
+            {
+                if is_os_enforced() {
+                    "Tier 2: OS-enforced via kSecAccessControlBiometryCurrentSet"
+                } else {
+                    "Tier 1: application-layer biometric"
+                }
+            }
             #[cfg(not(all(target_os = "macos", feature = "biometric-keychain")))]
-            { "Tier 1: application-layer biometric" }
+            {
+                "Tier 1: application-layer biometric"
+            }
         };
         Ok(Some(super::EnrollmentResult {
             enrollment_data: Vec::new(),
@@ -196,9 +212,13 @@ fn collect_biometric_evidence() -> Option<BiometricEvidence> {
     // at runtime (errSecMissingEntitlement / -34018).
     let os_enforced = {
         #[cfg(all(target_os = "macos", feature = "biometric-keychain"))]
-        { is_os_enforced() }
+        {
+            is_os_enforced()
+        }
         #[cfg(not(all(target_os = "macos", feature = "biometric-keychain")))]
-        { false }
+        {
+            false
+        }
     };
 
     Some(BiometricEvidence {
@@ -382,19 +402,17 @@ mod secure_keychain {
     use core_foundation::string::CFString;
     use core_foundation_sys::base::{kCFAllocatorDefault, CFRelease, CFTypeRef, OSStatus};
     use core_foundation_sys::dictionary::{
-        CFDictionaryCreate, kCFTypeDictionaryKeyCallBacks, kCFTypeDictionaryValueCallBacks,
+        kCFTypeDictionaryKeyCallBacks, kCFTypeDictionaryValueCallBacks, CFDictionaryCreate,
     };
     use security_framework_sys::access_control::{
-        SecAccessControlCreateWithFlags, kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly,
+        kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly, SecAccessControlCreateWithFlags,
     };
     use security_framework_sys::base::{errSecDuplicateItem, errSecItemNotFound, errSecSuccess};
     use security_framework_sys::item::{
         kSecAttrAccessControl, kSecAttrAccount, kSecAttrService, kSecClass,
         kSecClassGenericPassword, kSecReturnData, kSecValueData,
     };
-    use security_framework_sys::keychain_item::{
-        SecItemAdd, SecItemCopyMatching, SecItemDelete,
-    };
+    use security_framework_sys::keychain_item::{SecItemAdd, SecItemCopyMatching, SecItemDelete};
     use std::ffi::c_void;
 
     /// Apple: kSecAccessControlBiometryCurrentSet = 1 << 3
@@ -477,8 +495,7 @@ mod secure_keychain {
             let access_control = SecAccessControlCreateWithFlags(
                 kCFAllocatorDefault,
                 kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly as CFTypeRef,
-                SEC_ACCESS_CONTROL_BIOMETRY_CURRENT_SET
-                    as core_foundation_sys::base::CFOptionFlags,
+                SEC_ACCESS_CONTROL_BIOMETRY_CURRENT_SET as core_foundation_sys::base::CFOptionFlags,
                 &mut error,
             );
 
@@ -572,9 +589,7 @@ mod secure_keychain {
         // error) from "subsequent cached failure" (show the re-run hint).
         let already_cached = CACHED.get().is_some();
 
-        let result = CACHED.get_or_init(|| {
-            load_uncached().map_err(|e| format!("{}", e))
-        });
+        let result = CACHED.get_or_init(|| load_uncached().map_err(|e| format!("{}", e)));
         match result {
             Ok(s) => Ok(*s),
             Err(msg) => {
@@ -639,8 +654,7 @@ mod secure_keychain {
 
                     let hex_str = std::str::from_utf8(bytes).map_err(|_| {
                         KeyError::CredentialStore(
-                            "Corrupted secret in Keychain (not valid UTF-8)"
-                                .into(),
+                            "Corrupted secret in Keychain (not valid UTF-8)".into(),
                         )
                     })?;
 
@@ -660,9 +674,7 @@ mod secure_keychain {
                     let mut secret = [0u8; 32];
                     secret.copy_from_slice(&decoded);
 
-                    tracing::info!(
-                        "Genesis secret loaded from biometric-gated Keychain (v0.2)"
-                    );
+                    tracing::info!("Genesis secret loaded from biometric-gated Keychain (v0.2)");
                     Ok(secret)
                 }
                 s if s == errSecItemNotFound => Err(KeyError::CredentialStore(
@@ -834,7 +846,11 @@ fn load_touchid_secret_v2() -> Result<[u8; 32], KeyError> {
 
 /// v0.1: Store via `keyring` crate (standard Keychain access).
 /// Biometric verification happens at load time via `bioutil -w`.
-#[cfg(all(target_os = "macos", feature = "os-keychain", not(feature = "biometric-keychain")))]
+#[cfg(all(
+    target_os = "macos",
+    feature = "os-keychain",
+    not(feature = "biometric-keychain")
+))]
 fn save_touchid_secret_v1(secret: &[u8; 32]) -> Result<(), KeyError> {
     // First, verify Touch ID works — prompt the user now
     // so they know it's active and consent to biometric gating.
@@ -865,7 +881,11 @@ fn save_touchid_secret_v1(secret: &[u8; 32]) -> Result<(), KeyError> {
 }
 
 /// v0.1: Load the Genesis secret, requiring application-layer biometric check first.
-#[cfg(all(target_os = "macos", feature = "os-keychain", not(feature = "biometric-keychain")))]
+#[cfg(all(
+    target_os = "macos",
+    feature = "os-keychain",
+    not(feature = "biometric-keychain")
+))]
 fn load_touchid_secret_v1() -> Result<[u8; 32], KeyError> {
     verify_touchid()?;
     crate::keyring::load_genesis_from_credential_store()

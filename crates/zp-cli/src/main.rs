@@ -119,6 +119,23 @@ enum Commands {
     /// Persist across cycles; consumed at Tier 1 of Regent's cognitive input.
     #[command(subcommand)]
     Correction(CorrectionCmd),
+    /// Approval requests the Regent has raised, and the operator's answers.
+    ///
+    /// `Intent::RequestApproval` chain-anchors the ask; these verbs
+    /// chain-anchor the answer. Per P9 the approval is the operator's act,
+    /// not the Regent's reading of a conversation.
+    #[command(subcommand)]
+    Approval(ApprovalCmd),
+
+    /// The Regent's autonomous envelope — what it may do without asking.
+    ///
+    /// Precedent is the only thing that widens that envelope, and it widens
+    /// permanently until withdrawn. Per KEEL §III.10 the envelope grows
+    /// through operator-signed precedent and narrows through revocation, and
+    /// both are chain events. These verbs are how an operator sees the first
+    /// and performs the second.
+    #[command(subcommand)]
+    Precedent(PrecedentCmd),
     /// Audit trail operations
     #[command(subcommand)]
     Audit(AuditCmd),
@@ -381,7 +398,7 @@ enum Commands {
     /// use `zp configure exec --name <tool> -- <cmd>` first.
     ///
     /// Example:
-    ///   zp update --name ironclaw
+    ///   zp update --name ember
     #[cfg(feature = "embedded-server")]
     Update {
         /// Tool name (must match `zp port list` output)
@@ -439,7 +456,7 @@ enum Commands {
     /// or chain-grounded reasoning about that tool can proceed.
     ///
     /// Example:
-    ///   zp canonicalize --name ironclaw --path ~/projects/ironclaw
+    ///   zp canonicalize --name ember --path ~/projects/ember
     #[cfg(feature = "embedded-server")]
     Canonicalize {
         /// Tool name (must match `zp port list` / `zp discover` output)
@@ -536,10 +553,24 @@ enum Commands {
     },
 
     /// P4 (#197) — Revoke a standing delegation grant.
+    ///
+    /// Exactly one of `--grant-id` or `--grantee` is required.
+    ///
+    /// `--grantee` exists because revocation is per-grant-id and cockpit
+    /// launch mints a fresh grant every time: an agent in service for a
+    /// while holds many live grants, and revoking one leaves the rest
+    /// authorised. `--cascade` does not help — it walks the delegation
+    /// subtree (children of a grant), not sibling grants of the same
+    /// grantee. See docs/design/PERENNIAL-GRANT-2026-08.md §4.
     Revoke {
-        /// Target grant id (`grant-...`).
+        /// Target grant id (`grant-...`). Mutually exclusive with `--grantee`.
+        #[arg(long, conflicts_with = "grantee", required_unless_present = "grantee")]
+        grant_id: Option<String>,
+
+        /// Revoke every live grant held by this grantee. Mutually exclusive
+        /// with `--grant-id`.
         #[arg(long)]
-        grant_id: String,
+        grantee: Option<String>,
 
         /// Cascade policy: `grant-only`, `subtree-halt`, `subtree-reroot`.
         #[arg(long, default_value = "subtree-halt")]
@@ -666,7 +697,6 @@ enum Commands {
     /// Pricing freshness — fetch live pricing data or manually attest pricing.
     #[command(subcommand)]
     Pricing(PricingCmd),
-
 }
 
 #[derive(Subcommand)]
@@ -699,6 +729,55 @@ enum SubstrateCmd {
 
 #[derive(Subcommand)]
 enum VaultCmd {
+    /// List key names held in the vault. Never prints values.
+    ///
+    /// Until 2026-08 the vault had no operator surface at all — no way to see
+    /// what it held. The one report on it was Steward's `vault_empty` finding,
+    /// which says "contains no entries" whether the key is unresolved, the
+    /// vault is unreadable, or it is genuinely empty. This distinguishes them.
+    List {
+        /// Emit result as raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Store a secret. The value is read from stdin, never from an argument.
+    ///
+    /// Passing a secret on the command line puts it in shell history, the
+    /// process table, and any shell-integration log. Piping keeps it out of
+    /// all three:
+    ///
+    ///   printf %s "$SECRET" | zp vault put system/regent/inference/api_key
+    Put {
+        /// Vault key path, e.g. `system/regent/inference/api_key`.
+        /// The leading segment selects the encryption tier.
+        key: String,
+        /// Emit result as raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Print a secret's value to stdout.
+    ///
+    /// The only verb that emits secret material, and present on purpose.
+    /// Per delegable safety (KEEL §III.18) a restriction with no sanctioned
+    /// path gets bypassed — an operator who cannot recover a secret from the
+    /// vault keeps their secrets somewhere else, which defeats the discipline
+    /// the omission was meant to protect. The read is chain-anchored so it is
+    /// auditable; the value never reaches the chain.
+    Reveal {
+        /// Vault key path.
+        key: String,
+        /// Emit result as raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Remove a secret by key name.
+    Remove {
+        /// Vault key path.
+        key: String,
+        /// Emit result as raw JSON
+        #[arg(long)]
+        json: bool,
+    },
     /// Probe a vault-stored provider credential for validity.
     ///
     /// Retrieves credential server-side (never in cognitive layer per aligned
@@ -721,6 +800,50 @@ enum VaultCmd {
 }
 
 #[derive(Subcommand)]
+enum PrecedentCmd {
+    /// List every call the Regent may now make without asking.
+    List {
+        /// Emit raw JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Withdraw a precedent. Accepts a context-signature prefix.
+    Revoke {
+        /// Context signature (from `zp precedent list`); a unique prefix is enough.
+        context_signature: String,
+        /// Optional note recorded with the revocation.
+        #[arg(long)]
+        reason: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum ApprovalCmd {
+    /// List approval requests awaiting an answer.
+    List {
+        /// Emit raw JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Grant a pending request. Accepts a hash prefix.
+    Grant {
+        /// Request hash (from `zp approval list`); a unique prefix is enough.
+        request_hash: String,
+        /// Optional note recorded with the approval.
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Deny a pending request. Accepts a hash prefix.
+    Deny {
+        /// Request hash (from `zp approval list`); a unique prefix is enough.
+        request_hash: String,
+        /// Optional note recorded with the denial.
+        #[arg(long)]
+        reason: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
 enum CorrectionCmd {
     /// Issue a new standing correction.
     ///
@@ -735,6 +858,9 @@ enum CorrectionCmd {
     ///   zp correction issue --type prohibition --domain cognitive.narration.tone.day_shape \
     ///     --assertion "Regent may mirror day-shape framing when operator sets it" \
     ///     --negation "Do not open with 'good morning'" --priority 70
+    ///
+    ///   zp correction issue --type factual --domain cognitive.self_reference.aegis_scope \
+    ///     --assertion "..." --supersedes 911ff194606f40f1 --priority 90
     ///
     ///   cat correction.json | zp correction issue --json -
     Issue {
@@ -756,6 +882,15 @@ enum CorrectionCmd {
         /// Priority (0-100). Default scale: 100=existential, 50-99=high, 10-49=moderate, 1-9=soft.
         #[arg(long, default_value = "50")]
         priority: u32,
+        /// Correction id this one supersedes. Repeat for several.
+        ///
+        /// The superseded correction goes inactive from this receipt forward and
+        /// stays chain-preserved, per the schema's ordered-evolution lifecycle.
+        /// Prefer this over `correction revoke` followed by a fresh issue: revoke
+        /// leaves no link between the old claim and its replacement, so the chain
+        /// records that something was withdrawn but not what replaced it or why.
+        #[arg(long)]
+        supersedes: Vec<String>,
         /// Read full StandingCorrection JSON payload from file path (or "-" for stdin)
         #[arg(long)]
         json: Option<String>,
@@ -886,8 +1021,14 @@ enum PolicySetCmd {
     /// Set the LLM inference policy — backend, routing strategy, allowlist, and cost cap.
     ///
     /// Emits a signed `preference:llm:policy:set` receipt to the audit chain.
-    /// IronClaw reads this receipt at startup; `selected_model` in config.toml
-    /// becomes a true fallback only when no receipt exists yet.
+    /// Governed tools read this receipt at startup; `selected_model` in
+    /// config.toml becomes a true fallback only when no receipt exists yet.
+    ///
+    /// Note: this is the policy for *governed tools*, not for the Regent. Her
+    /// inference tier is chosen by the router from the model dossier corpus and
+    /// pinned by `regent:config:inference` receipts. As of 2026-08-06 there is
+    /// no operator verb for that pin, which is a gap worth closing — the model
+    /// serving cognition should be something the operator signs.
     ///
     /// Examples:
     ///   zp policy set inference --backend https://routellm.abacus.ai/v1 --strategy route-llm
@@ -1316,14 +1457,14 @@ enum ConfigureCmd {
         #[arg(long)]
         value: Option<String>,
     },
-    /// Store a tool-specific env var in the vault (e.g. OPENAI_API_KEY for ironclaw).
+    /// Store a tool-specific env var in the vault (e.g. OPENAI_API_KEY for a governed tool).
     /// The cockpit launch handler reads these via tools/{tool}/{VAR} and injects them
     /// into the process env at launch time — no .env files, no key pasting.
     ///
-    ///   zp configure vault-set-tool-env --tool ironclaw --var OPENAI_API_KEY
-    ///   zp configure vault-set-tool-env --tool ironclaw --var OPENAI_BASE_URL --value https://api.venice.ai/api/v1
+    ///   zp configure vault-set-tool-env --tool ember --var OPENAI_API_KEY
+    ///   zp configure vault-set-tool-env --tool ember --var OPENAI_BASE_URL --value https://api.venice.ai/api/v1
     VaultSetToolEnv {
-        /// Tool name (e.g., ironclaw, ember)
+        /// Tool name (e.g., ember, shannon)
         #[arg(long)]
         tool: String,
 
@@ -1410,7 +1551,7 @@ enum ConfigureCmd {
     /// identically-named vars already in the current environment.
     ///
     /// Example:
-    ///   zp configure exec --name ironclaw -- bash -c 'echo key_len=${#OPENAI_API_KEY}'
+    ///   zp configure exec --name ember -- bash -c 'echo key_len=${#OPENAI_API_KEY}'
     Exec {
         /// Tool name (matches what was used in `configure tool --name`)
         #[arg(long)]
@@ -1444,11 +1585,21 @@ enum CfgCmd {
     /// Show all configuration with provenance (where each value came from)
     Show,
     /// Set a configuration value in ~/ZeroPoint/config.toml
+    ///
+    /// Refuses when a higher-precedence layer (env var or project-local
+    /// ./zeropoint.toml) already sets the same key -- the write would
+    /// land on disk but the resolved value would not change (W6,
+    /// HARNESS-SEAM sensor S5). Pass --force to write anyway.
     Set {
         /// Config key (e.g. "port", "posture", "log_level")
         key: String,
         /// New value
         value: String,
+        /// Write even if a higher-precedence layer would shadow the
+        /// result. The value stays shadowed at runtime until that
+        /// layer changes.
+        #[arg(long)]
+        force: bool,
     },
     /// Validate configuration for internal consistency
     Validate {
@@ -1636,7 +1787,7 @@ async fn main() -> anyhow::Result<()> {
     // Resolution order:  ZP_HOME env var  →  ~/ZeroPoint/data  →  clap default.
     // We only promote when the resolved directory exists, so dev environments that
     // haven't initialized ~/ZeroPoint/ yet keep falling back to the relative path.
-    if args.data_dir == std::path::PathBuf::from("./data/zeropoint") {
+    if args.data_dir == std::path::Path::new("./data/zeropoint") {
         if let Ok(zp_home) = zp_core::paths::home() {
             let zp_data = zp_home.join("data");
             if zp_data.exists() {
@@ -1645,9 +1796,17 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
+    // ANSI only when a human is watching. Redirected to a file, the escape
+    // codes land *between* the message and its field names — so
+    // `turns=1` is stored as `turns\x1b[0m=1` and no grep for `turns=` ever
+    // matches. Observed 2026-07-31: three separate field-level queries against
+    // /tmp/zp-serve.log returned empty against 239k lines that plainly
+    // contained the fields, because the terminal renders the escapes
+    // invisibly on paste. A log that cannot be queried is not a log.
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .with_writer(std::io::stderr)
+        .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stderr()))
         .init();
 
     // Serve runs the HTTP server with verification surface
@@ -1685,11 +1844,56 @@ async fn main() -> anyhow::Result<()> {
         let genesis_record_path = commands::resolve_zp_home().join("genesis.json");
         if genesis_record_path.exists() {
             if let Err(e) = zp_keys::load_sovereign_root(&genesis_record_path) {
-                eprintln!("\x1b[31m✗\x1b[0m  Sovereignty authentication failed: {}", e);
-                eprintln!("  Run `zp recover` with your 24-word mnemonic to restore access.");
+                // An operator declining or mistyping is not a lost Genesis.
+                //
+                // Both outcomes previously printed "Run `zp recover` with your
+                // 24-word mnemonic to restore access." Observed 2026-08-06: a
+                // mistyped Trezor PIN produced that line, which is correct
+                // guidance for an unrecoverable sovereign root and dangerous
+                // guidance for a typo — it invites a recovery ceremony in
+                // response to pressing the wrong key, and an operator who
+                // follows it is doing something irreversible for no reason.
+                //
+                // Matching on the message rather than a typed error because the
+                // provider surfaces cancellation as a string today. A typed
+                // `SovereigntyError::Cancelled` would be better and is a
+                // separate change; the message is the part that misleads now.
+                let msg = e.to_string();
+                let cancelled = msg.contains("cancelled")
+                    || msg.contains("canceled")
+                    || msg.contains("PIN entry");
+
+                if cancelled {
+                    eprintln!("\x1b[33m✗\x1b[0m  Sovereignty ceremony cancelled on device.");
+                    eprintln!("  Nothing is wrong and nothing was changed — run the same");
+                    eprintln!("  command again and re-enter when the device asks.");
+                } else {
+                    eprintln!("\x1b[31m✗\x1b[0m  Sovereignty authentication failed: {}", e);
+                    eprintln!("  If the device is connected and unlocked, try again first.");
+                    eprintln!("  `zp recover` with your 24-word mnemonic is the last resort,");
+                    eprintln!("  not the first response — it re-establishes Genesis.");
+                }
                 std::process::exit(1);
             }
         }
+
+        // Bedrock invariants are evaluated in `AppState::init` and surfaced by
+        // `zp-dev.sh`, not here.
+        //
+        // A version of this block briefly lived at this point, on the reasoning
+        // that `zp serve` daemonizes and the child's stderr goes to the logfile,
+        // so the operator-facing report belonged in the parent. That reasoning
+        // was wrong twice over: `zp-dev.sh` launches with `--foreground` under
+        // `nohup … >> "$LOG" 2>&1`, so there is no parent outside the redirect,
+        // and *nothing* the binary writes reaches the terminal. The Trezor block
+        // letters that appear during boot are printed by the script, which greps
+        // the log and renders them — the binary only logs a line the script
+        // recognises.
+        //
+        // So the terminal is the script's to own, and the correct fix was in
+        // `zp-dev.sh`, which already solves exactly this for the touch prompt.
+        // Its comment states the principle: "The prompt existed — at INFO, in a
+        // logfile, where nobody was looking. Put it where the person is."
 
         // Daemonize by default on Unix so `zp serve` returns the terminal immediately.
         // `--foreground` keeps it attached (debug use, or for callers that manage the
@@ -1698,7 +1902,10 @@ async fn main() -> anyhow::Result<()> {
         #[cfg(unix)]
         if !foreground {
             let log_path = spawn_serve_daemon(port, bind, *no_open);
-            println!("\x1b[32m▶\x1b[0m  zp serve started  (logs: {})", log_path.display());
+            println!(
+                "\x1b[32m▶\x1b[0m  zp serve started  (logs: {})",
+                log_path.display()
+            );
             return Ok(());
         }
 
@@ -1819,10 +2026,7 @@ async fn main() -> anyhow::Result<()> {
                                 .args(["-KILL", &pid.to_string()])
                                 .status();
                         }
-                        println!(
-                            "\x1b[33m↻\x1b[0m  Stopped {} (pid {})",
-                            tool_name, pid
-                        );
+                        println!("\x1b[33m↻\x1b[0m  Stopped {} (pid {})", tool_name, pid);
                         registry.release(
                             tool_name,
                             zp_server::tool_ports::ReleaseReason::OperatorKill,
@@ -1880,9 +2084,7 @@ async fn main() -> anyhow::Result<()> {
         }
         #[cfg(not(feature = "embedded-server"))]
         if name.is_some() {
-            eprintln!(
-                "\x1b[31m✗\x1b[0m  zp restart --name requires the embedded-server feature"
-            );
+            eprintln!("\x1b[31m✗\x1b[0m  zp restart --name requires the embedded-server feature");
             std::process::exit(1);
         }
 
@@ -1915,9 +2117,7 @@ async fn main() -> anyhow::Result<()> {
         }
         #[cfg(not(feature = "embedded-server"))]
         if *all {
-            eprintln!(
-                "\x1b[31m✗\x1b[0m  zp restart --all requires the embedded-server feature"
-            );
+            eprintln!("\x1b[31m✗\x1b[0m  zp restart --all requires the embedded-server feature");
             std::process::exit(1);
         }
 
@@ -1941,7 +2141,10 @@ async fn main() -> anyhow::Result<()> {
             std::process::exit(0);
         }
         bindings.sort_by(|a, b| a.tool.cmp(&b.tool));
-        println!("{:<20} {:<10} {:<10} {:<10} {:<10}", "TOOL", "ALLOCATED", "ACTUAL", "PID", "PROXY");
+        println!(
+            "{:<20} {:<10} {:<10} {:<10} {:<10}",
+            "TOOL", "ALLOCATED", "ACTUAL", "PID", "PROXY"
+        );
         println!("{}", "─".repeat(62));
         for b in bindings {
             println!(
@@ -1963,9 +2166,7 @@ async fn main() -> anyhow::Result<()> {
     }
     #[cfg(not(feature = "embedded-server"))]
     if matches!(&args.command, Some(Commands::Port(_))) {
-        eprintln!(
-            "\x1b[31m✗\x1b[0m  zp port requires the embedded-server feature"
-        );
+        eprintln!("\x1b[31m✗\x1b[0m  zp port requires the embedded-server feature");
         std::process::exit(1);
     }
 
@@ -1985,7 +2186,10 @@ async fn main() -> anyhow::Result<()> {
                     std::process::exit(0);
                 }
                 bindings.sort_by(|a, b| a.tool.cmp(&b.tool));
-                println!("{:<20} {:<10} {:<10} {:<10} {:<10}", "TOOL", "ALLOCATED", "ACTUAL", "PID", "PROXY");
+                println!(
+                    "{:<20} {:<10} {:<10} {:<10} {:<10}",
+                    "TOOL", "ALLOCATED", "ACTUAL", "PID", "PROXY"
+                );
                 println!("{}", "─".repeat(62));
                 for b in bindings {
                     println!(
@@ -2018,10 +2222,10 @@ async fn main() -> anyhow::Result<()> {
                     }
                 };
 
-                let pid_alive = binding.pid.map_or(false, |p| {
-                    zp_server::tool_ports::is_pid_alive(p)
-                });
-                let working_dir = binding.launch_command.as_ref()
+                let pid_alive = binding.pid.is_some_and(zp_server::tool_ports::is_pid_alive);
+                let working_dir = binding
+                    .launch_command
+                    .as_ref()
                     .and_then(|lc| lc.working_dir.as_deref());
                 let env_zp_exists = working_dir
                     .map(|d| std::path::Path::new(d).join(".env.zp").exists())
@@ -2035,7 +2239,12 @@ async fn main() -> anyhow::Result<()> {
                     }
                     println!("  • Deallocate port :{}", binding.port);
                     if env_zp_exists {
-                        println!("  • Delete {}", std::path::Path::new(working_dir.unwrap()).join(".env.zp").display());
+                        println!(
+                            "  • Delete {}",
+                            std::path::Path::new(working_dir.unwrap())
+                                .join(".env.zp")
+                                .display()
+                        );
                     }
                     print!("\nProceed? [y/N] ");
                     use std::io::Write;
@@ -2058,11 +2267,7 @@ async fn main() -> anyhow::Result<()> {
                     &format!("/api/v1/tools/{}/remove", name_lower),
                 );
                 let server_result = std::process::Command::new("curl")
-                    .args([
-                        "-s", "-X", "POST",
-                        "-w", "\n%{http_code}",
-                        &server_url,
-                    ])
+                    .args(["-s", "-X", "POST", "-w", "\n%{http_code}", &server_url])
                     .output();
 
                 let used_server = match server_result {
@@ -2076,11 +2281,17 @@ async fn main() -> anyhow::Result<()> {
                                 // Server handled the full removal.
                                 if let Ok(resp) = serde_json::from_str::<serde_json::Value>(&body) {
                                     let mut parts: Vec<String> = Vec::new();
-                                    if let Some(pid) = resp.get("pid_killed").and_then(|v| v.as_u64()) {
+                                    if let Some(pid) =
+                                        resp.get("pid_killed").and_then(|v| v.as_u64())
+                                    {
                                         parts.push(format!("killed pid {}", pid));
                                     }
                                     parts.push(format!("deallocated :{}", binding.port));
-                                    if resp.get("env_zp_deleted").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                    if resp
+                                        .get("env_zp_deleted")
+                                        .and_then(|v| v.as_bool())
+                                        .unwrap_or(false)
+                                    {
                                         parts.push("deleted .env.zp".to_string());
                                     }
                                     println!(
@@ -2089,7 +2300,10 @@ async fn main() -> anyhow::Result<()> {
                                         parts.join(", ")
                                     );
                                 } else {
-                                    println!("\x1b[32m✓\x1b[0m  Removed {} via server.", binding.tool);
+                                    println!(
+                                        "\x1b[32m✓\x1b[0m  Removed {} via server.",
+                                        binding.tool
+                                    );
                                 }
                                 true
                             } else {
@@ -2136,9 +2350,14 @@ async fn main() -> anyhow::Result<()> {
 
                     // Delete .env.zp
                     if env_zp_exists {
-                        let env_zp_path = std::path::Path::new(working_dir.unwrap()).join(".env.zp");
+                        let env_zp_path =
+                            std::path::Path::new(working_dir.unwrap()).join(".env.zp");
                         if let Err(e) = std::fs::remove_file(&env_zp_path) {
-                            eprintln!("  Warning: could not delete {}: {}", env_zp_path.display(), e);
+                            eprintln!(
+                                "  Warning: could not delete {}: {}",
+                                env_zp_path.display(),
+                                e
+                            );
                         } else {
                             summary_parts.push("deleted .env.zp".to_string());
                         }
@@ -2157,9 +2376,7 @@ async fn main() -> anyhow::Result<()> {
     }
     #[cfg(not(feature = "embedded-server"))]
     if matches!(&args.command, Some(Commands::Tool(_))) {
-        eprintln!(
-            "\x1b[31m✗\x1b[0m  zp tool requires the embedded-server feature"
-        );
+        eprintln!("\x1b[31m✗\x1b[0m  zp tool requires the embedded-server feature");
         std::process::exit(1);
     }
 
@@ -2400,7 +2617,10 @@ async fn main() -> anyhow::Result<()> {
                 match zp_trust::vault::CredentialVault::load_or_create(&padded_key, &vault_path) {
                     Ok(mut vault) => {
                         let val = value.clone().unwrap_or_else(|| {
-                            eprint!("Enter value for {}/{} (input hidden by terminal): ", tool, var);
+                            eprint!(
+                                "Enter value for {}/{} (input hidden by terminal): ",
+                                tool, var
+                            );
                             // Use rpassword-style stdin read so key bytes don't echo.
                             // Fall back to plain readline if rpassword isn't available.
                             let mut input = String::new();
@@ -2489,7 +2709,7 @@ async fn main() -> anyhow::Result<()> {
                     eprintln!("  \x1b[31mNo command specified.\x1b[0m");
                     eprintln!();
                     eprintln!("  Usage: zp configure exec --name <tool> -- <command> [args...]");
-                    eprintln!("  Example: zp configure exec --name ironclaw -- bash -c 'echo hi'");
+                    eprintln!("  Example: zp configure exec --name mytool -- bash -c 'echo hi'");
                     eprintln!();
                     1
                 } else {
@@ -2564,7 +2784,9 @@ async fn main() -> anyhow::Result<()> {
                                             Ok(kr) => {
                                                 // genesis_secret is an OnceLock cache hit —
                                                 // resolve_vault_key() already loaded it above.
-                                                let genesis_secret = crate::commands::load_genesis_secret_composed().ok();
+                                                let genesis_secret =
+                                                    crate::commands::load_genesis_secret_composed()
+                                                        .ok();
                                                 let receipt_fields = run::LaunchReceiptFields {
                                                     tool_name: name,
                                                     manifest_hash:
@@ -2615,9 +2837,8 @@ async fn main() -> anyhow::Result<()> {
                                         // vault.retrieve("session/*").
                                         //
                                         // Retained during Step 3 of the genesis-signed-gate-requests
-                                        // migration. The new envelope path (ZP-Sig) reaches IronClaw
-                                        // via IRONCLAW_ZP_GENESIS_PATH below; the bearer token is
-                                        // dead code once Step 4 removes legacy bearer acceptance.
+                                        // migration; the bearer token is dead code once Step 4
+                                        // removes legacy bearer acceptance.
                                         match read_zp_session_token() {
                                             Ok(tok) => {
                                                 child.env("ZP_SESSION_TOKEN", tok);
@@ -2631,15 +2852,6 @@ async fn main() -> anyhow::Result<()> {
                                             }
                                         }
 
-                                        // Inject Genesis record path for the ZP-Sig envelope signer.
-                                        // IronClaw loads the operator's Genesis via load_sovereign_root,
-                                        // derives the gate signer with derive_gate_signer_seed, and
-                                        // produces a fresh signed envelope on every gate request. The
-                                        // path is *not* a secret — it points at genesis.json, whose
-                                        // contents IronClaw never reads directly.
-                                        if let Ok(genesis_path) = zp_core::paths::genesis_record_path() {
-                                            child.env("IRONCLAW_ZP_GENESIS_PATH", genesis_path);
-                                        }
                                         #[cfg(unix)]
                                         {
                                             // With embedded-server: spawn() so we can capture the
@@ -2654,32 +2866,53 @@ async fn main() -> anyhow::Result<()> {
                                                 match child.spawn() {
                                                     Ok(spawned) => {
                                                         let child_pid = spawned.id();
-                                                        eprintln!("spawned {} (pid {})", name, child_pid);
+                                                        eprintln!(
+                                                            "spawned {} (pid {})",
+                                                            name, child_pid
+                                                        );
                                                         // Wire 1: record PID + launch command in port registry.
                                                         let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
                                                         let data_dir = cfg.data_dir.value.clone();
                                                         let registry = zp_server::tool_ports::PortRegistry::new(&data_dir);
-                                                        if let Err(_) = registry.update_pid(name, child_pid) {
+                                                        if registry
+                                                            .update_pid(name, child_pid)
+                                                            .is_err()
+                                                        {
                                                             // No binding yet — auto-allocate from the resolved
                                                             // env_map. Scan for PORT-like vars; the vault values
                                                             // already carry the operator's intended port numbers,
                                                             // so pass them as preferred hints.
                                                             use zp_server::tool_ports::PreferenceSource;
-                                                            let mut port_vars: Vec<(String, Option<u16>)> = env_map
+                                                            let mut port_vars: Vec<(
+                                                                String,
+                                                                Option<u16>,
+                                                            )> = env_map
                                                                 .iter()
-                                                                .filter(|(k, _)| *k == "PORT" || k.ends_with("_PORT"))
+                                                                .filter(|(k, _)| {
+                                                                    *k == "PORT"
+                                                                        || k.ends_with("_PORT")
+                                                                })
                                                                 .map(|(k, v)| {
-                                                                    let preferred = std::str::from_utf8(v)
-                                                                        .ok()
-                                                                        .and_then(|s| s.trim().parse::<u16>().ok());
+                                                                    let preferred =
+                                                                        std::str::from_utf8(v)
+                                                                            .ok()
+                                                                            .and_then(|s| {
+                                                                                s.trim()
+                                                                                    .parse::<u16>()
+                                                                                    .ok()
+                                                                            });
                                                                     (k.clone(), preferred)
                                                                 })
                                                                 .collect();
                                                             // Sort deterministically; prefer HTTP_PORT, then PORT.
                                                             port_vars.sort_by_key(|(k, _)| {
-                                                                if k == "HTTP_PORT" { 0u8 }
-                                                                else if k == "PORT" { 1 }
-                                                                else { 2 }
+                                                                if k == "HTTP_PORT" {
+                                                                    0u8
+                                                                } else if k == "PORT" {
+                                                                    1
+                                                                } else {
+                                                                    2
+                                                                }
                                                             });
                                                             let primary_var = port_vars
                                                                 .first()
@@ -2718,13 +2951,14 @@ async fn main() -> anyhow::Result<()> {
                                                         // Capture working dir (CWD at spawn time) for
                                                         // version provenance and restart replay.
                                                         let cwd = std::env::current_dir().ok();
-                                                        let cwd_str = cwd.as_deref()
+                                                        let cwd_str = cwd
+                                                            .as_deref()
                                                             .and_then(|p| p.to_str())
                                                             .map(|s| s.to_string());
                                                         let _ = registry.store_launch_command(
                                                             name,
                                                             &command[0],
-                                                            &command[1..].to_vec(),
+                                                            &command[1..],
                                                             cwd_str.as_deref(),
                                                         );
                                                         // Wire 1b: auto-canonicalize.
@@ -2736,33 +2970,37 @@ async fn main() -> anyhow::Result<()> {
                                                         // Best-effort: failures never block launch.
                                                         {
                                                             let db_path = data_dir.join("audit.db");
-                                                            let auto_canon: anyhow::Result<()> = (|| {
-                                                                use std::sync::{Arc, Mutex};
-                                                                let keyring = crate::commands::open_keyring()
+                                                            let auto_canon: anyhow::Result<()> =
+                                                                (|| {
+                                                                    use std::sync::{Arc, Mutex};
+                                                                    let keyring = crate::commands::open_keyring()
                                                                     .context("open keyring")?;
-                                                                let genesis_secret = crate::commands::load_genesis_secret_composed()
+                                                                    let genesis_secret = crate::commands::load_genesis_secret_composed()
                                                                     .context("genesis secret")?;
-                                                                let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
-                                                                let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
-                                                                let store = Arc::new(Mutex::new(
+                                                                    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+                                                                    let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+                                                                    let store = Arc::new(Mutex::new(
                                                                     zp_audit::AuditStore::open_signed(&db_path, audit_signer)
                                                                         .context("open audit store")?,
                                                                 ));
-                                                                // Idempotent: returns None if already canonicalized.
-                                                                let bead_zeros = zp_server::tool_chain::query_bead_zeros(&store);
-                                                                if bead_zeros.contains_key(&format!("tool:{}", name)) {
-                                                                    return Ok(()); // already on chain
-                                                                }
-                                                                let operator_secret: [u8; 32] = crate::commands::load_operator_composed(&keyring)
+                                                                    // Idempotent: returns None if already canonicalized.
+                                                                    let bead_zeros = zp_server::tool_chain::query_bead_zeros(&store);
+                                                                    if bead_zeros.contains_key(
+                                                                        &format!("tool:{}", name),
+                                                                    ) {
+                                                                        return Ok(());
+                                                                        // already on chain
+                                                                    }
+                                                                    let operator_secret: [u8; 32] = crate::commands::load_operator_composed(&keyring)
                                                                     .context("operator key")?
                                                                     .secret_key();
-                                                                let signing_key = ed25519_dalek::SigningKey::from_bytes(&operator_secret);
-                                                                let initial_state = serde_json::json!({
-                                                                    "tool": name,
-                                                                    "path": cwd_str,
-                                                                    "canonicalized_at": chrono::Utc::now().to_rfc3339(),
-                                                                });
-                                                                zp_server::tool_chain::emit_signed_canonicalization_receipt(
+                                                                    let signing_key = ed25519_dalek::SigningKey::from_bytes(&operator_secret);
+                                                                    let initial_state = serde_json::json!({
+                                                                        "tool": name,
+                                                                        "path": cwd_str,
+                                                                        "canonicalized_at": chrono::Utc::now().to_rfc3339(),
+                                                                    });
+                                                                    zp_server::tool_chain::emit_signed_canonicalization_receipt(
                                                                     &store,
                                                                     "tool",
                                                                     name,
@@ -2771,9 +3009,10 @@ async fn main() -> anyhow::Result<()> {
                                                                     "zp-configure-exec",
                                                                     Some(&signing_key),
                                                                 );
-                                                                eprintln!("  canon    tool:{} (bead-zero emitted)", name);
-                                                                Ok(())
-                                                            })();
+                                                                    eprintln!("  canon    tool:{} (bead-zero emitted)", name);
+                                                                    Ok(())
+                                                                })(
+                                                                );
                                                             if let Err(e) = auto_canon {
                                                                 eprintln!("  \u{26a0}  auto-canonicalize skipped: {}", e);
                                                             }
@@ -2786,33 +3025,45 @@ async fn main() -> anyhow::Result<()> {
                                                                 capture_tool_version,
                                                                 resolve_binary_path,
                                                             };
-                                                            let bin_path = resolve_binary_path(&command[0]);
+                                                            let bin_path =
+                                                                resolve_binary_path(&command[0]);
                                                             let version = capture_tool_version(
                                                                 cwd.as_deref(),
                                                                 bin_path.as_deref(),
                                                             );
                                                             // Print captured provenance for operator visibility.
-                                                            if let Some(ref commit) = version.source_commit {
-                                                                let dirty = version.source_dirty.unwrap_or(false);
+                                                            if let Some(ref commit) =
+                                                                version.source_commit
+                                                            {
+                                                                let dirty = version
+                                                                    .source_dirty
+                                                                    .unwrap_or(false);
                                                                 eprintln!(
                                                                     "  version  {} @ {}{}",
                                                                     name,
                                                                     &commit[..commit.len().min(12)],
-                                                                    if dirty { " (dirty)" } else { "" }
+                                                                    if dirty {
+                                                                        " (dirty)"
+                                                                    } else {
+                                                                        ""
+                                                                    }
                                                                 );
                                                             }
-                                                            if let Some(ref hash) = version.binary_hash {
+                                                            if let Some(ref hash) =
+                                                                version.binary_hash
+                                                            {
                                                                 eprintln!(
                                                                     "  binary   {}…",
                                                                     &hash[..hash.len().min(16)]
                                                                 );
                                                             }
-                                                            let _ = registry.store_tool_version(name, version.clone());
+                                                            let _ = registry.store_tool_version(
+                                                                name,
+                                                                version.clone(),
+                                                            );
                                                             // Emit chain receipt: tool:launched:<name>
                                                             emit::emit_tool_launch_receipt(
-                                                                name,
-                                                                &version,
-                                                                &data_dir,
+                                                                name, &version, &data_dir,
                                                             );
                                                         }
                                                         // Wire 2: post-launch port reconciliation.
@@ -2846,7 +3097,8 @@ async fn main() -> anyhow::Result<()> {
                                                                     .unwrap_or(child_pid);
                                                             // (d) update registry with real PID
                                                             if actual_pid != child_pid {
-                                                                let _ = registry.update_pid(name, actual_pid);
+                                                                let _ = registry
+                                                                    .update_pid(name, actual_pid);
                                                                 eprintln!(
                                                                     "  pid      {} launcher={} actual={}",
                                                                     name, child_pid, actual_pid
@@ -3212,11 +3464,8 @@ async fn main() -> anyhow::Result<()> {
         }
         // ── Foundation-relayed receipts on the LOCAL chain ─────────────────
         if *foundation_receipts {
-            let exit = verify_foundation_receipts_local(
-                audit_db.as_deref(),
-                operator.as_deref(),
-                *json,
-            );
+            let exit =
+                verify_foundation_receipts_local(audit_db.as_deref(), operator.as_deref(), *json);
             std::process::exit(exit);
         }
         // Resolve the target server address from topology config.
@@ -3388,7 +3637,9 @@ async fn main() -> anyhow::Result<()> {
 
         // Fallback: direct DB access (server not running).
         // args.data_dir is already resolved from ZP_HOME / ~/ZeroPoint/data at startup.
-        let db_path = audit_db.clone().unwrap_or_else(|| args.data_dir.join("audit.db"));
+        let db_path = audit_db
+            .clone()
+            .unwrap_or_else(|| args.data_dir.join("audit.db"));
         let store = match zp_audit::AuditStore::open_readonly(&db_path) {
             Ok(s) => s,
             Err(e) => {
@@ -3725,14 +3976,31 @@ async fn main() -> anyhow::Result<()> {
     }
     if let Some(Commands::Revoke {
         grant_id,
+        grantee,
         cascade,
         reason,
         audit_db,
         json,
     }) = &args.command
     {
+        let target = match (grant_id.as_deref(), grantee.as_deref()) {
+            (Some(id), None) => RevokeTarget::Grant(id.to_string()),
+            (None, Some(g)) => RevokeTarget::Grantee(g.to_string()),
+            // clap's conflicts_with / required_unless_present make both of
+            // these unreachable via the CLI; keep them as refusals rather
+            // than unreachable!() so a future programmatic caller cannot
+            // reach a panic.
+            (Some(_), Some(_)) => {
+                eprintln!("error: --grant-id and --grantee are mutually exclusive");
+                std::process::exit(2);
+            }
+            (None, None) => {
+                eprintln!("error: one of --grant-id or --grantee is required");
+                std::process::exit(2);
+            }
+        };
         let exit_code = run_revoke(
-            grant_id,
+            target,
             cascade,
             reason,
             audit_db.clone(),
@@ -3771,8 +4039,13 @@ async fn main() -> anyhow::Result<()> {
         json,
     }) = &args.command
     {
-        let exit_code =
-            run_canonicalize(name, path.as_deref(), audit_db.as_deref(), &args.data_dir, *json);
+        let exit_code = run_canonicalize(
+            name,
+            path.as_deref(),
+            audit_db.as_deref(),
+            &args.data_dir,
+            *json,
+        );
         std::process::exit(exit_code);
     }
 
@@ -3963,7 +4236,7 @@ async fn main() -> anyhow::Result<()> {
     // Samples lsof system-wide, attributes via PortRegistry, prints table.
     if let Some(Commands::Ps { json, tools }) = &args.command {
         use zp_server::tool_ports::{
-            ProcessAttribution, lsof_all_listen, PostureSnapshot, PortRegistry,
+            lsof_all_listen, PortRegistry, PostureSnapshot, ProcessAttribution,
         };
 
         let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
@@ -3976,21 +4249,20 @@ async fn main() -> anyhow::Result<()> {
         if *json {
             let to_obj = |ap: &zp_server::tool_ports::AttributedProcess| {
                 let (kind, detail) = match &ap.attribution {
-                    ProcessAttribution::SubstrateManaged { tool_name, allocated_receipt_id } => (
+                    ProcessAttribution::SubstrateManaged {
+                        tool_name,
+                        allocated_receipt_id,
+                    } => (
                         "substrate_managed",
                         serde_json::json!({
                             "tool_name": tool_name,
                             "allocated_receipt_id": allocated_receipt_id
                         }),
                     ),
-                    ProcessAttribution::KnownSystem { category } => (
-                        "known_system",
-                        serde_json::json!({ "category": category }),
-                    ),
-                    ProcessAttribution::Unknown => (
-                        "unknown",
-                        serde_json::json!({}),
-                    ),
+                    ProcessAttribution::KnownSystem { category } => {
+                        ("known_system", serde_json::json!({ "category": category }))
+                    }
+                    ProcessAttribution::Unknown => ("unknown", serde_json::json!({})),
                 };
                 serde_json::json!({
                     "pid": ap.process.pid,
@@ -4017,15 +4289,21 @@ async fn main() -> anyhow::Result<()> {
             if !snapshot.substrate_managed.is_empty() {
                 println!("\x1b[32m● Substrate-managed\x1b[0m");
                 for ap in &snapshot.substrate_managed {
-                    if let ProcessAttribution::SubstrateManaged { tool_name, .. } = &ap.attribution {
+                    if let ProcessAttribution::SubstrateManaged { tool_name, .. } = &ap.attribution
+                    {
                         // Fetch version info from registry binding.
-                        let version_str = registry.get_assigned(tool_name)
+                        let version_str = registry
+                            .get_assigned(tool_name)
                             .and_then(|b| b.last_version)
                             .map(|v| {
                                 let mut parts = Vec::new();
                                 if let Some(ref c) = v.source_commit {
                                     let short = &c[..c.len().min(8)];
-                                    let dirty = if v.source_dirty.unwrap_or(false) { "*" } else { "" };
+                                    let dirty = if v.source_dirty.unwrap_or(false) {
+                                        "*"
+                                    } else {
+                                        ""
+                                    };
                                     parts.push(format!("commit:{}{}", short, dirty));
                                 }
                                 if let Some(ref h) = v.binary_hash {
@@ -4046,7 +4324,11 @@ async fn main() -> anyhow::Result<()> {
                         } else {
                             println!(
                                 "  {:5}  {:20}  :{:<6}  → {}  \x1b[2m[{}]\x1b[0m",
-                                ap.process.pid, ap.process.name, ap.process.port, tool_name, version_str
+                                ap.process.pid,
+                                ap.process.name,
+                                ap.process.port,
+                                tool_name,
+                                version_str
                             );
                         }
                     }
@@ -4102,9 +4384,8 @@ async fn main() -> anyhow::Result<()> {
 
                 for binding in &bindings {
                     // ── Collect all ports this tool should have bound ──────
-                    let mut port_checks: Vec<(String, u16)> = vec![
-                        (binding.port_var.clone(), binding.port),
-                    ];
+                    let mut port_checks: Vec<(String, u16)> =
+                        vec![(binding.port_var.clone(), binding.port)];
                     for (var, &port) in &binding.extra_ports {
                         port_checks.push((var.clone(), port));
                     }
@@ -4142,7 +4423,8 @@ async fn main() -> anyhow::Result<()> {
                         let (status, ct) = match authed {
                             Ok(r) => {
                                 let s = r.status().as_u16();
-                                let c = r.headers()
+                                let c = r
+                                    .headers()
                                     .get("content-type")
                                     .and_then(|v| v.to_str().ok())
                                     .map(|s| s.split(';').next().unwrap_or(s).trim().to_string());
@@ -4215,29 +4497,31 @@ async fn main() -> anyhow::Result<()> {
                     println!("  {} \x1b[1m{}\x1b[0m", status_icon, binding.tool);
 
                     // Ports line
-                    let ports_str: Vec<String> = port_status.iter().map(|(var, port, pid)| {
-                        match pid {
+                    let ports_str: Vec<String> = port_status
+                        .iter()
+                        .map(|(var, port, pid)| match pid {
                             Some(p) => format!("  :{} {} pid={}", port, var, p),
                             None if var == "proxy_target" => format!("  :{} proxy_target", port),
                             None => format!("  :{} {} \x1b[31m✗ not listening\x1b[0m", port, var),
-                        }
-                    }).collect();
+                        })
+                        .collect();
                     println!("    Ports:{}", ports_str.join("  "));
 
                     // Probe line
                     let probe_str = match (authed_status, &authed_ct) {
                         (Some(200), Some(ct)) => format!(
-                            ":{} GET / → \x1b[32m200 {}\x1b[0m \x1b[32m✓\x1b[0m", proxy_target, ct
+                            ":{} GET / → \x1b[32m200 {}\x1b[0m \x1b[32m✓\x1b[0m",
+                            proxy_target, ct
                         ),
-                        (Some(s), _) => format!(
-                            ":{} GET / → \x1b[31m{}\x1b[0m", proxy_target, s
-                        ),
-                        (None, _) => format!(
-                            ":{} GET / → \x1b[31mno response\x1b[0m", proxy_target
-                        ),
+                        (Some(s), _) => format!(":{} GET / → \x1b[31m{}\x1b[0m", proxy_target, s),
+                        (None, _) => {
+                            format!(":{} GET / → \x1b[31mno response\x1b[0m", proxy_target)
+                        }
                     };
                     let unauthed_str = match unauthed_status {
-                        Some(200) => " \x1b[33m(unauthed also 200 — no auth gate)\x1b[0m".to_string(),
+                        Some(200) => {
+                            " \x1b[33m(unauthed also 200 — no auth gate)\x1b[0m".to_string()
+                        }
                         Some(s) => format!(" (unauthed→{})", s),
                         None => String::new(),
                     };
@@ -4276,7 +4560,9 @@ async fn main() -> anyhow::Result<()> {
             }
         };
 
-        let working_dir_str = binding.launch_command.as_ref()
+        let working_dir_str = binding
+            .launch_command
+            .as_ref()
             .and_then(|lc| lc.working_dir.clone());
         let working_dir = working_dir_str.as_deref().map(std::path::Path::new);
 
@@ -4288,19 +4574,23 @@ async fn main() -> anyhow::Result<()> {
 
         if let Some(ref commit) = version.source_commit {
             let dirty = version.source_dirty.unwrap_or(false);
-            println!("  commit   {}{}",
+            println!(
+                "  commit   {}{}",
                 &commit[..commit.len().min(12)],
-                if dirty { " (dirty — uncommitted changes present)" } else { "" }
+                if dirty {
+                    " (dirty — uncommitted changes present)"
+                } else {
+                    ""
+                }
             );
         } else {
             println!("  commit   (not a git working directory)");
         }
         if let Some(ref hash) = version.binary_hash {
-            println!("  binary   {}…  ({})",
+            println!(
+                "  binary   {}…  ({})",
                 &hash[..hash.len().min(16)],
-                bin_path.as_deref()
-                    .and_then(|p| p.to_str())
-                    .unwrap_or("?")
+                bin_path.as_deref().and_then(|p| p.to_str()).unwrap_or("?")
             );
         }
 
@@ -4312,12 +4602,14 @@ async fn main() -> anyhow::Result<()> {
             let new_hash = version.binary_hash.as_deref().unwrap_or("?");
 
             if prev_hash != new_hash {
-                println!("  \x1b[33m⚑ binary changed\x1b[0m  {} → {}",
+                println!(
+                    "  \x1b[33m⚑ binary changed\x1b[0m  {} → {}",
                     &prev_hash[..prev_hash.len().min(8)],
                     &new_hash[..new_hash.len().min(8)]
                 );
             } else if prev_commit != new_commit {
-                println!("  \x1b[33m⚑ commit changed\x1b[0m  {} → {}",
+                println!(
+                    "  \x1b[33m⚑ commit changed\x1b[0m  {} → {}",
                     &prev_commit[..prev_commit.len().min(8)],
                     &new_commit[..new_commit.len().min(8)]
                 );
@@ -4376,7 +4668,12 @@ async fn main() -> anyhow::Result<()> {
                 std::process::exit(1);
             }
         };
-        println!("  relaunching  {} via `{} {}`", name, lc.command, lc.args.join(" "));
+        println!(
+            "  relaunching  {} via `{} {}`",
+            name,
+            lc.command,
+            lc.args.join(" ")
+        );
         let mut relaunch = std::process::Command::new("zp");
         relaunch.args(["configure", "exec", "--name", name, "--"]);
         relaunch.arg(&lc.command);
@@ -4390,7 +4687,10 @@ async fn main() -> anyhow::Result<()> {
                 std::process::exit(0);
             }
             Ok(s) => {
-                eprintln!("  \x1b[31m✗\x1b[0m  relaunch exited {}", s.code().unwrap_or(-1));
+                eprintln!(
+                    "  \x1b[31m✗\x1b[0m  relaunch exited {}",
+                    s.code().unwrap_or(-1)
+                );
                 std::process::exit(1);
             }
             Err(e) => {
@@ -4407,16 +4707,55 @@ async fn main() -> anyhow::Result<()> {
                 let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
                 println!("{}", cfg.show());
             }
-            CfgCmd::Set { key, value } => match zp_config::resolve::config_set(key, value) {
-                Ok(()) => {
-                    println!("\x1b[32m✓\x1b[0m {} = {}", key, value);
-                    println!("  Written to ~/ZeroPoint/config.toml");
+            CfgCmd::Set { key, value, force } => {
+                match zp_config::resolve::config_set(key, value, *force) {
+                    Ok(zp_config::resolve::ConfigSetOutcome::Written) => {
+                        println!("\x1b[32m✓\x1b[0m {} = {}", key, value);
+                        println!("  Written to ~/ZeroPoint/config.toml");
+                    }
+                    Ok(zp_config::resolve::ConfigSetOutcome::WrittenButShadowed {
+                        shadow_layer,
+                        shadow_value,
+                    }) => {
+                        println!("\x1b[32m✓\x1b[0m {} = {}", key, value);
+                        println!("  Written to ~/ZeroPoint/config.toml");
+                        println!(
+                        "\x1b[33m⚠\x1b[0m  shadowed by {} (currently sets: {}) — the resolved value stays {} until that layer changes",
+                        shadow_layer, shadow_value, shadow_value
+                    );
+                    }
+                    Err(zp_config::ConfigError::Shadowed {
+                        key,
+                        target_layer,
+                        target_value,
+                        shadow_layer,
+                        shadow_value,
+                    }) => {
+                        eprintln!("error: zp config set: refusing to write shadowed key");
+                        eprintln!("  key:           {}", key);
+                        eprintln!("  target layer:  {}", target_layer);
+                        eprintln!("  target value:  {}", target_value);
+                        eprintln!(
+                            "  shadowed by:   {} (currently sets: {})",
+                            shadow_layer, shadow_value
+                        );
+                        eprintln!();
+                        eprintln!("  This write would succeed but not change the resolved value.");
+                        eprintln!("  You can:");
+                        eprintln!("    - Edit {} to change the resolved value.", shadow_layer);
+                        eprintln!(
+                            "    - Re-run with `--force` to write to {} anyway",
+                            target_layer
+                        );
+                        eprintln!("      (the value will remain shadowed at runtime).");
+                        std::process::exit(1);
+                    }
+                    Err(e) => {
+                        eprintln!("\x1b[31m✗\x1b[0m {}", e);
+                        std::process::exit(1);
+                    }
                 }
-                Err(e) => {
-                    eprintln!("\x1b[31m✗\x1b[0m {}", e);
-                    std::process::exit(1);
-                }
-            },
+            }
             CfgCmd::Validate { json } => {
                 let cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
                 let errors = zp_config::validate(&cfg);
@@ -4690,16 +5029,13 @@ async fn main() -> anyhow::Result<()> {
 
                         if let Ok(item) = serde_json::from_str::<serde_json::Value>(&data) {
                             let elapsed = t0.elapsed().as_millis();
-                            let phase = item.get("event_type")
+                            let phase = item
+                                .get("event_type")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("?");
-                            let summary = item.get("summary")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("");
-                            eprintln!(
-                                "\x1b[2m[{:>6}ms] {:<30} {}\x1b[0m",
-                                elapsed, phase, summary
-                            );
+                            let summary =
+                                item.get("summary").and_then(|v| v.as_str()).unwrap_or("");
+                            eprintln!("\x1b[2m[{:>6}ms] {:<30} {}\x1b[0m", elapsed, phase, summary);
                         }
                     }
                 }
@@ -4731,10 +5067,16 @@ async fn main() -> anyhow::Result<()> {
                     if let Some(text) = body.get("response").and_then(|v| v.as_str()) {
                         println!("{}", text);
                     } else {
-                        println!("{}", serde_json::to_string_pretty(&body).unwrap_or_default());
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&body).unwrap_or_default()
+                        );
                     }
                 } else {
-                    let err = body.get("error").and_then(|v| v.as_str()).unwrap_or("unknown error");
+                    let err = body
+                        .get("error")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown error");
                     eprintln!("regent: {}", err);
                     std::process::exit(1);
                 }
@@ -4784,16 +5126,22 @@ async fn main() -> anyhow::Result<()> {
             .ok()
             .and_then(|p| std::fs::canonicalize(p).ok())
             .and_then(|p| {
-                p.parent()                         // target/debug/
-                    .and_then(|p| p.parent())      // target/
-                    .and_then(|p| p.parent())      // repo root
+                p.parent() // target/debug/
+                    .and_then(|p| p.parent()) // target/
+                    .and_then(|p| p.parent()) // repo root
                     .map(|p| p.to_path_buf())
             });
         let head_hash = repo_dir
             .as_deref()
             .and_then(|dir| {
                 std::process::Command::new("git")
-                    .args(["-C", dir.to_str().unwrap_or("."), "rev-parse", "--short", "HEAD"])
+                    .args([
+                        "-C",
+                        dir.to_str().unwrap_or("."),
+                        "rev-parse",
+                        "--short",
+                        "HEAD",
+                    ])
                     .output()
                     .ok()
                     .and_then(|o| {
@@ -5541,10 +5889,7 @@ async fn main() -> anyhow::Result<()> {
                 checks.push(Check {
                     label: "Compute surface".into(),
                     status: "warn",
-                    detail: format!(
-                        "{unknown_count} unknown listener(s): {}",
-                        names.join(", ")
-                    ),
+                    detail: format!("{unknown_count} unknown listener(s): {}", names.join(", ")),
                     fix: "Run `zp ps` to review. Investigate with `lsof -p <pid>`.".into(),
                 });
             }
@@ -5574,9 +5919,9 @@ async fn main() -> anyhow::Result<()> {
                             continue; // No hash to compare against.
                         }
                         // Resolve current binary and re-hash.
-                        let bin_cmd = binding.launch_command.as_ref()
-                            .map(|lc| lc.command.clone());
-                        let current_hash = bin_cmd.as_deref()
+                        let bin_cmd = binding.launch_command.as_ref().map(|lc| lc.command.clone());
+                        let current_hash = bin_cmd
+                            .as_deref()
                             .and_then(resolve_binary_path)
                             .and_then(|p| std::fs::read(&p).ok())
                             .map(|b| blake3::hash(&b).to_hex().to_string());
@@ -5602,7 +5947,8 @@ async fn main() -> anyhow::Result<()> {
                         drifted.len(),
                         drifted.join(", ")
                     ),
-                    fix: "Run `zp update --name <tool>` to record the new version and relaunch.".into(),
+                    fix: "Run `zp update --name <tool>` to record the new version and relaunch."
+                        .into(),
                 });
             } else if !no_version.is_empty() {
                 checks.push(Check {
@@ -5632,8 +5978,8 @@ async fn main() -> anyhow::Result<()> {
         // Per-tool facet computation from chain evidence + port registry.
         {
             use zp_officers::governance_posture::{
-                compute_postures, GovernanceFacet, RegisteredToolInfo,
-                ToolRegistrySnapshot, UnregisteredTools,
+                compute_postures, GovernanceFacet, RegisteredToolInfo, ToolRegistrySnapshot,
+                UnregisteredTools,
             };
 
             let registry = zp_server::tool_ports::PortRegistry::new(data);
@@ -5662,9 +6008,7 @@ async fn main() -> anyhow::Result<()> {
                 None
             };
             let fallback = zp_audit::AuditStore::open_readonly(":memory:").unwrap();
-            let chain = zp_officers::officer::ChainReader::new(
-                store.as_ref().unwrap_or(&fallback),
-            );
+            let chain = zp_officers::officer::ChainReader::new(store.as_ref().unwrap_or(&fallback));
             let postures = compute_postures(&chain, &snapshot, &unregistered);
 
             if postures.is_empty() {
@@ -5676,17 +6020,22 @@ async fn main() -> anyhow::Result<()> {
                 });
             } else {
                 for p in &postures {
-                    let status = if p.has(GovernanceFacet::Hardened) || p.has(GovernanceFacet::Governed) {
-                        "pass"
-                    } else if p.has(GovernanceFacet::Registered) || p.has(GovernanceFacet::Unregistered) {
-                        "warn"
-                    } else {
-                        "info"
-                    };
+                    let status =
+                        if p.has(GovernanceFacet::Hardened) || p.has(GovernanceFacet::Governed) {
+                            "pass"
+                        } else if p.has(GovernanceFacet::Registered)
+                            || p.has(GovernanceFacet::Unregistered)
+                        {
+                            "warn"
+                        } else {
+                            "info"
+                        };
 
                     let fix = if p.has(GovernanceFacet::Unregistered) {
                         "Run: zp configure <tool> to register".into()
-                    } else if p.has(GovernanceFacet::Registered) && !p.has(GovernanceFacet::Governed) {
+                    } else if p.has(GovernanceFacet::Registered)
+                        && !p.has(GovernanceFacet::Governed)
+                    {
                         "Launch via: zp configure exec <tool>".into()
                     } else {
                         String::new()
@@ -5764,11 +6113,8 @@ async fn main() -> anyhow::Result<()> {
                 .ok()
                 .and_then(|p| p.parse().ok())
                 .unwrap_or(17770);
-            let url = zp_net::peer_url_with_path(
-                "127.0.0.1",
-                port,
-                "/api/v1/security/policy-version",
-            );
+            let url =
+                zp_net::peer_url_with_path("127.0.0.1", port, "/api/v1/security/policy-version");
             let client = reqwest::Client::new();
             match client.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => {
@@ -5811,9 +6157,9 @@ async fn main() -> anyhow::Result<()> {
             PolicyCmd::Status => policy_commands::status(),
             PolicyCmd::Verify => policy_commands::verify(),
             PolicyCmd::Remove { identifier } => policy_commands::remove(identifier),
-            PolicyCmd::Version => unreachable!(),   // handled above
-            PolicyCmd::Set(_) => unreachable!(),    // handled above (async path)
-            PolicyCmd::Show(_) => unreachable!(),   // handled above (async path)
+            PolicyCmd::Version => unreachable!(), // handled above
+            PolicyCmd::Set(_) => unreachable!(),  // handled above (async path)
+            PolicyCmd::Show(_) => unreachable!(), // handled above (async path)
         };
         #[cfg(not(feature = "policy-wasm"))]
         let exit_code = {
@@ -5849,8 +6195,66 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
+    // ── Approval surface — handled ahead of pipeline construction ────────
+    //
+    // Everything below this point unlocks the sovereign root:
+    // `load_genesis_secret_composed()` prompts a hardware touch, to derive an
+    // audit signer these three commands never use. `zp approval list` reads a
+    // token file and issues an HTTP GET. It has no business asking the
+    // operator to press a button.
+    //
+    // Observed 2026-07-31: `zp approval list` printed the Trezor banner, took
+    // the touch, and *then* failed `session_stale` — the operator paid a
+    // physical confirmation for a command that never reached the network.
+    //
+    // This is a P9 surface, which is why it matters past the annoyance. The
+    // signature is the operator's act, so the queue of things awaiting it is
+    // something they must be able to check freely and often. A queue that
+    // costs a ceremony to read is a queue that stops being read, and an
+    // unread approval queue is indistinguishable from no approval queue at
+    // all — which is the exact failure the Regent's confabulated "it needs
+    // your signature" was already simulating.
+    //
+    // `zp regent` sits above for the same reason; this is the second member
+    // of a group that will keep growing. The general form — commands declaring
+    // whether they need the sovereign root, rather than paying for it by
+    // position in main() — is the right fix and is not this one.
+    //
+    // 2026-08-05: the group grew exactly as forecast. `zp correction` landed
+    // after the note above was written, was never added to the early-exit set,
+    // and inherited the defect by position — an operator checking or amending
+    // the corrections that steer Regent's cognition paid a hardware touch per
+    // invocation, for an audit signer none of those three verbs construct.
+    //
+    // Membership is now declared by `is_session_token_only` rather than by
+    // where a block happens to sit in this function, and dispatch runs through
+    // one arm instead of one block per command group. That does not reach the
+    // full general form — every command declaring its own requirement — but it
+    // removes the failure mode that produced this recurrence: a new verb can
+    // no longer inherit the touch silently, because adding it to the session
+    // surface means naming it in one predicate.
+    if let Some(cmd) = &args.command {
+        if is_session_token_only(cmd) {
+            run_session_token_command(cmd).await?;
+            std::process::exit(0);
+        }
+    }
+
     let config = PipelineConfig {
-        operator_identity: OperatorIdentity::default(),
+        // `OperatorIdentity::default()` sets `name: "ZeroPoint"` — the
+        // substrate's own name, not the operator's. Using the default here
+        // meant `zp chat` ran with no knowledge of who it served, while the
+        // server (lib.rs, AppState::init) populated the same field from
+        // `config.operator_name`. Two entry points, two identities, one field.
+        //
+        // Resolved toward the server's reading: `name` is the operator. See
+        // PromptBuilder::system_prompt.
+        operator_identity: OperatorIdentity {
+            name: zp_config::ConfigResolver::resolve_standard_or_exit()
+                .operator_name
+                .value,
+            base_prompt: OperatorIdentity::default().base_prompt,
+        },
         trust_tier,
         data_dir: args.data_dir,
         mesh: mesh_config.clone(),
@@ -5861,8 +6265,12 @@ async fn main() -> anyhow::Result<()> {
     let audit_db = config.data_dir.join("audit.db");
     std::fs::create_dir_all(&config.data_dir).ok();
 
+    // audit.db is created immediately below, under ~/ZeroPoint. Harden the
+    // directory first (CROSS-USER-01) — this was previously an unnamed side
+    // effect of `open_keyring()`, whose value went unused after the
+    // composed-loader refactor.
+    crate::commands::harden_zp_home().context("Failed to prepare the ZeroPoint home directory")?;
     // Derive the audit signer from the Genesis secret
-    let keyring = crate::commands::open_keyring().context("Failed to open keyring")?;
     let genesis_secret = crate::commands::load_genesis_secret_composed()
         .context("Failed to load Genesis secret for audit signer")?;
     let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
@@ -5873,6 +6281,60 @@ async fn main() -> anyhow::Result<()> {
             .map_err(|e| anyhow::anyhow!("audit store open: {}", e))?,
     ));
     let mut pipeline = Pipeline::new(config, audit_store.clone())?;
+
+    // Populate the provider pool.
+    //
+    // HARNESS-SEAM-2026-08 S3: both entry points must behave identically. The
+    // server wires this at AppState::init; without the same call here the CLI
+    // holds a well-formed pipeline that cannot serve, and `zp` fails with
+    // NoProvider while the server works — one substrate, two behaviours.
+    //
+    // Model election is read from zp-config (crossing C1, sole authority).
+    // Providers route through the running server's proxy on cfg.port, so CLI
+    // completions are receipted on the same terms as server completions.
+    //
+    // Unlike the server this is NOT boot-fatal, and the difference is principled
+    // rather than a concession. The server exists to serve, so its process start
+    // IS its point of use. The CLI's point of use is the verb: `zp keys`,
+    // `zp verify` and `zp config` do not depend on inference, and killing them
+    // over a model tag would be its own incoherence.
+    //
+    // §4 invariant — *no verb silently degrades*. That is satisfied by the
+    // diagnostic living on PipelineError::NoProvider, which fires at the moment
+    // a verb actually depends on the crossing. Warning here instead would print
+    // noise on every invocation that does not care, and a warning nobody reads
+    // is the silent failure wearing a hat.
+    //
+    // The signer derives from the same `genesis_secret` already loaded above
+    // for the audit signer — one sovereign-root load, two domain-separated
+    // subkeys, no second ceremony. `derive_gate_signer_seed` is the only
+    // derivation permitted (the `no_inline_gate_signer_derivation` pin), and
+    // the resulting kid matches the server's `expected_kid` by construction
+    // because both sides derive from the same root.
+    {
+        let llm_cfg = zp_config::ConfigResolver::resolve_standard_or_exit();
+        if llm_cfg.llm_enabled.value {
+            let gate_seed = zp_keys::derive_gate_signer_seed(&genesis_secret);
+            let signer: std::sync::Arc<dyn zp_core::provider::RequestSigner> =
+                std::sync::Arc::new(zp_gate_envelope::GateRequestSigner::from_seed(&gate_seed));
+            match pipeline
+                .init_providers(
+                    llm_cfg.port.value,
+                    &llm_cfg.llm_provider.value,
+                    &llm_cfg.llm_model.value,
+                    &llm_cfg.llm_escalation_model.value,
+                    llm_cfg.llm_supports_tools.value,
+                    signer,
+                )
+                .await
+            {
+                Ok(n) => tracing::debug!(providers = n, "CLI provider pool ready"),
+                // Deliberately not user-facing. The verb that depends on this
+                // will say so, with the full diagnostic, at the point of use.
+                Err(e) => tracing::debug!(error = %e, "CLI provider pool unavailable"),
+            }
+        }
+    }
 
     // Initialize execution engine — governed via HostContext so every sandboxed
     // file write and process spawn passes through the governance gate.
@@ -5897,46 +6359,15 @@ async fn main() -> anyhow::Result<()> {
     match args.command {
         None | Some(Commands::Chat) => chat::run(&pipeline).await?,
         Some(Commands::Health) => commands::health(&pipeline).await?,
-        Some(Commands::Officer(OfficerCmd::Sweep { name, json })) => {
-            run_officer_sweep(name.as_deref(), json).await?;
-        }
-        Some(Commands::Vault(VaultCmd::Test { provider, json })) => {
-            run_vault_test(&provider, json).await?;
-        }
-        Some(Commands::Substrate(SubstrateCmd::Validate { json })) => {
-            run_substrate_validate(json).await?;
-        }
-        Some(Commands::Correction(CorrectionCmd::Issue {
-            correction_type,
-            domain,
-            assertion,
-            negation,
-            context,
-            priority,
-            json,
-            json_out,
-        })) => {
-            run_correction_issue(
-                correction_type.as_deref(),
-                domain.as_deref(),
-                assertion.as_deref(),
-                negation.as_deref(),
-                context.as_deref(),
-                priority,
-                json.as_deref(),
-                json_out,
-            )
-            .await?;
-        }
-        Some(Commands::Correction(CorrectionCmd::List { json })) => {
-            run_correction_list(json).await?;
-        }
-        Some(Commands::Correction(CorrectionCmd::Revoke {
-            correction_id,
-            json,
-        })) => {
-            run_correction_revoke(&correction_id, json).await?;
-        }
+        // Session-token surface — handled above, before pipeline construction.
+        Some(Commands::Officer(OfficerCmd::Sweep { .. })) => unreachable!(),
+        Some(Commands::Vault(_)) => unreachable!(), // handled above
+        Some(Commands::Substrate(SubstrateCmd::Validate { .. })) => unreachable!(),
+        // Session-token surface — dispatched before pipeline construction so
+        // it never unlocks the sovereign root. See `is_session_token_only`.
+        Some(Commands::Approval(_)) => unreachable!(), // handled above
+        Some(Commands::Precedent(_)) => unreachable!(), // handled above
+        Some(Commands::Correction(_)) => unreachable!(), // handled above
         Some(Commands::Audit(AuditCmd::Verify)) => commands::audit_verify(&pipeline).await?,
         Some(Commands::Audit(AuditCmd::Log { limit, category })) => {
             commands::audit_log(&pipeline, limit, category.as_deref()).await?
@@ -5944,9 +6375,12 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Audit(AuditCmd::Compact { retain })) => {
             commands::audit_compact(&pipeline, retain).await?
         }
-        Some(Commands::Chain(ChainCmd::Story { limit, domain, summary, json })) => {
-            commands::chain_story(&pipeline, limit, domain.as_deref(), summary, json).await?
-        }
+        Some(Commands::Chain(ChainCmd::Story {
+            limit,
+            domain,
+            summary,
+            json,
+        })) => commands::chain_story(&pipeline, limit, domain.as_deref(), summary, json).await?,
         Some(Commands::Guard { .. }) => unreachable!(), // handled above
         Some(Commands::Serve { .. }) => unreachable!(), // handled above
         Some(Commands::Restart { .. }) => unreachable!(), // handled above
@@ -5968,7 +6402,7 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Revoke { .. }) => unreachable!(), // handled above
         Some(Commands::Grants { .. }) => unreachable!(), // handled above
         Some(Commands::Cfg(_)) => unreachable!(),       // handled above
-        Some(Commands::Regent { .. }) => unreachable!(),  // handled above
+        Some(Commands::Regent { .. }) => unreachable!(), // handled above
         Some(Commands::Doctor { .. }) => unreachable!(), // handled above
         Some(Commands::Ps { .. }) => unreachable!(),    // handled above
         #[cfg(feature = "embedded-server")]
@@ -5978,7 +6412,7 @@ async fn main() -> anyhow::Result<()> {
         #[cfg(feature = "embedded-server")]
         Some(Commands::Canonicalize { .. }) => unreachable!(), // handled above
         Some(Commands::Adapt { .. }) => unreachable!(), // handled above
-        Some(Commands::Pricing(_)) => unreachable!(),  // handled above
+        Some(Commands::Pricing(_)) => unreachable!(),   // handled above
         Some(Commands::Scan { .. }) => unreachable!(),  // handled above
         Some(Commands::Operator(_)) => unreachable!(),  // handled above
         Some(Commands::Emit { .. }) => unreachable!(),  // handled above
@@ -6198,12 +6632,20 @@ fn run_canonicalize(
     // Capture git commit from the tool's working directory (best-effort).
     let source_commit: Option<String> = path.and_then(|dir| {
         std::process::Command::new("git")
-            .args(["-C", dir.to_str().unwrap_or("."), "rev-parse", "--short", "HEAD"])
+            .args([
+                "-C",
+                dir.to_str().unwrap_or("."),
+                "rev-parse",
+                "--short",
+                "HEAD",
+            ])
             .output()
             .ok()
             .and_then(|o| {
                 if o.status.success() {
-                    String::from_utf8(o.stdout).ok().map(|s| s.trim().to_string())
+                    String::from_utf8(o.stdout)
+                        .ok()
+                        .map(|s| s.trim().to_string())
                 } else {
                     None
                 }
@@ -6276,7 +6718,11 @@ fn run_canonicalize(
             })
         );
     } else if let Some(hash) = result {
-        println!("✓ canonicalized  tool:{}  ({})", name, &hash[..hash.len().min(16)]);
+        println!(
+            "✓ canonicalized  tool:{}  ({})",
+            name,
+            &hash[..hash.len().min(16)]
+        );
     } else {
         println!("✓ already canonicalized  tool:{}", name);
     }
@@ -6340,14 +6786,16 @@ fn run_adapt(
     let entry_hash = {
         use std::sync::{Arc, Mutex};
 
+        // audit.db lives under ~/ZeroPoint; harden the directory before
+        // creating it (CROSS-USER-01).
+        if let Err(e) = crate::commands::harden_zp_home() {
+            eprintln!(
+                "\x1b[31merror\x1b[0m: failed to prepare the ZeroPoint home directory: {}",
+                e
+            );
+            return 2;
+        }
         // Derive the audit signer from the Genesis secret
-        let keyring = match crate::commands::open_keyring() {
-            Ok(k) => k,
-            Err(e) => {
-                eprintln!("\x1b[31merror\x1b[0m: failed to open keyring: {}", e);
-                return 2;
-            }
-        };
         let genesis_secret = match crate::commands::load_genesis_secret_composed() {
             Ok(s) => s,
             Err(e) => {
@@ -6614,7 +7062,10 @@ fn verify_foundation_receipts_local(
                 .collect::<Vec<_>>(),
             "entries": relayed.iter().map(|e| relayed_entry_json(e)).collect::<Vec<_>>(),
         });
-        println!("{}", serde_json::to_string_pretty(&payload).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&payload).unwrap_or_default()
+        );
         return if anomalies.is_empty() { 0 } else { 1 };
     }
 
@@ -6654,9 +7105,9 @@ fn verify_foundation_receipts_local(
         eprintln!("  \x1b[1mEntries:\x1b[0m");
         for entry in &relayed {
             let claim = match &entry.action {
-                zp_core::AuditAction::SystemEvent { event } => {
-                    event.strip_prefix("foundation_relay:").unwrap_or(event.as_str())
-                }
+                zp_core::AuditAction::SystemEvent { event } => event
+                    .strip_prefix("foundation_relay:")
+                    .unwrap_or(event.as_str()),
                 _ => "(unknown)",
             };
             let operator_str = match &entry.actor {
@@ -6699,9 +7150,7 @@ fn verify_foundation_receipts_local(
     eprintln!();
     if anomalies.is_empty() {
         if relayed.is_empty() {
-            eprintln!(
-                "  \x1b[2m(No foundation-relayed receipts on this chain yet.)\x1b[0m"
-            );
+            eprintln!("  \x1b[2m(No foundation-relayed receipts on this chain yet.)\x1b[0m");
         } else {
             eprintln!("  \x1b[32m✓\x1b[0m  All foundation-relayed receipts verify cleanly.");
         }
@@ -6717,9 +7166,9 @@ fn verify_foundation_receipts_local(
 
 fn relayed_entry_json(entry: &zp_core::AuditEntry) -> serde_json::Value {
     let claim = match &entry.action {
-        zp_core::AuditAction::SystemEvent { event } => {
-            event.strip_prefix("foundation_relay:").unwrap_or(event.as_str())
-        }
+        zp_core::AuditAction::SystemEvent { event } => event
+            .strip_prefix("foundation_relay:")
+            .unwrap_or(event.as_str()),
         _ => "",
     };
     let operator = match &entry.actor {
@@ -6744,7 +7193,7 @@ fn relayed_entry_json(entry: &zp_core::AuditEntry) -> serde_json::Value {
 /// Returns the process exit code: 0 = pass, 1 = verification failure, 2 = error.
 async fn verify_foundation_chain(url_override: Option<&str>, emit_json: bool) -> i32 {
     use zp_verify::foundation::{
-        FoundationChainResponse, FoundationPubkeyResponse, verify_foundation_chain as verify_chain,
+        verify_foundation_chain as verify_chain, FoundationChainResponse, FoundationPubkeyResponse,
     };
 
     let base_url = url_override
@@ -6760,10 +7209,16 @@ async fn verify_foundation_chain(url_override: Option<&str>, emit_json: bool) ->
     })() {
         Some(t) => t,
         None => {
-            eprintln!(
-                "\x1b[31m✗\x1b[0m  No session token at ~/ZeroPoint/session.json"
-            );
-            eprintln!("    Log in first: zp session login");
+            // The session file is written by the server, not by any CLI verb —
+            // `SessionAuth::new` mints a token at startup and persists it. There
+            // is no login command. This message named `zp session login` until
+            // 2026-08-05, sending operators after a verb that has never existed.
+            // Per *the chain configures the cockpit*: output must not name
+            // affordances absent from the verb set.
+            eprintln!("\x1b[31m✗\x1b[0m  No session token at ~/ZeroPoint/session.json");
+            eprintln!("    The server mints this file at startup — start it with `zp serve`.");
+            eprintln!("    If it is already running, the token has aged out past");
+            eprintln!("    ZP_SESSION_MAX_AGE_SECONDS (default 8h); `zp restart` re-mints it.");
             return 2;
         }
     };
@@ -6868,9 +7323,7 @@ async fn verify_foundation_chain(url_override: Option<&str>, emit_json: bool) ->
         });
         println!("{}", serde_json::to_string_pretty(&out).unwrap());
     } else {
-        println!(
-            "\x1b[1mzp verify --foundation — Foundation Chain Attestation\x1b[0m"
-        );
+        println!("\x1b[1mzp verify --foundation — Foundation Chain Attestation\x1b[0m");
         println!("  chain_id : {}", chain_id);
         println!("  url      : {}", base_url);
         println!();
@@ -6893,27 +7346,29 @@ async fn verify_foundation_chain(url_override: Option<&str>, emit_json: bool) ->
                     zp_verify::FindingSeverity::Warning => "\x1b[33mWARN \x1b[0m",
                     zp_verify::FindingSeverity::Info => "\x1b[36mINFO \x1b[0m",
                 };
-                println!("  [{}] [{}] {} — {}", label, f.rule, f.entry_id, f.description);
+                println!(
+                    "  [{}] [{}] {} — {}",
+                    label, f.rule, f.entry_id, f.description
+                );
             }
         }
         println!();
     }
 
-    if report.passed { 0 } else { 1 }
+    if report.passed {
+        0
+    } else {
+        1
+    }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/// Default audit DB path: ~/ZeroPoint/data/audit.db
-/// Used as smart fallback when the server is down and no --data-dir given.
-///
-/// Seam 19: thin delegate to the canonical resolver `zp_core::paths::audit_db_path`.
+// The default-audit-DB-path helper that used to live here (a thin Seam 19
+// delegate to `zp_core::paths::audit_db_path`) is gone; only its doc comment
+// survived, silently documenting whatever came next. Plain `//` so it cannot
+// do that again.
 
-/// Read the ZP session token from `~/ZeroPoint/session.json`.
-///
-/// Delegates to `read_zp_session_token_from` with the canonical path so the
-/// path-resolution logic can be tested independently without touching the real
-/// `~/ZeroPoint` directory.
 /// Trigger a manual officer sweep via the running substrate's HTTP API.
 ///
 /// Hits `GET /api/v1/officer/sweep?officer=<name>` with session-token auth.
@@ -6931,8 +7386,9 @@ async fn run_officer_sweep(name: Option<&str>, json_out: bool) -> anyhow::Result
     let port = cfg.port.value;
 
     // Read session token
-    let token = read_zp_session_token()
-        .map_err(|e| anyhow::anyhow!("Cannot read session token (is the server running?): {}", e))?;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
 
     // Officer names are known-safe (alphanumeric, no URL-special chars).
     // Reject anything else to avoid injection into the query string.
@@ -7060,8 +7516,9 @@ async fn run_vault_test(provider: &str, json_out: bool) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
     let port = cfg.port.value;
 
-    let token = read_zp_session_token()
-        .map_err(|e| anyhow::anyhow!("Cannot read session token (is the server running?): {}", e))?;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
 
     let url = zp_net::peer_url_with_path(
         "127.0.0.1",
@@ -7093,9 +7550,8 @@ async fn run_vault_test(provider: &str, json_out: bool) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let v: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
-        anyhow::anyhow!("Failed to parse response JSON: {} (body: {})", e, body)
-    })?;
+    let v: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse response JSON: {} (body: {})", e, body))?;
 
     if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
         eprintln!("\x1b[31m✗\x1b[0m  {}", err);
@@ -7112,12 +7568,12 @@ async fn run_vault_test(provider: &str, json_out: bool) -> anyhow::Result<()> {
     let latency = v["latency_ms"].as_u64().unwrap_or(0);
 
     let (icon, color) = match probe_status {
-        "credential_valid" => ("✓", "\x1b[32m"),         // green
-        "credential_rejected" => ("✗", "\x1b[31m"),      // red
-        "credential_not_found" => ("?", "\x1b[33m"),     // yellow
-        "rate_limited" => ("~", "\x1b[33m"),             // yellow
-        "provider_error" => ("!", "\x1b[33m"),           // yellow
-        "network_error" => ("~", "\x1b[33m"),            // yellow
+        "credential_valid" => ("✓", "\x1b[32m"),     // green
+        "credential_rejected" => ("✗", "\x1b[31m"),  // red
+        "credential_not_found" => ("?", "\x1b[33m"), // yellow
+        "rate_limited" => ("~", "\x1b[33m"),         // yellow
+        "provider_error" => ("!", "\x1b[33m"),       // yellow
+        "network_error" => ("~", "\x1b[33m"),        // yellow
         _ => ("?", "\x1b[0m"),
     };
 
@@ -7126,10 +7582,7 @@ async fn run_vault_test(provider: &str, json_out: bool) -> anyhow::Result<()> {
     println!("\x1b[2m───────────\x1b[0m");
     println!();
     println!("  Provider:      {}", provider_display);
-    println!(
-        "  Probe status:  {}{} {}\x1b[0m",
-        color, icon, probe_status
-    );
+    println!("  Probe status:  {}{} {}\x1b[0m", color, icon, probe_status);
     if http_status > 0 {
         println!("  HTTP status:   {}", http_status);
     }
@@ -7169,8 +7622,9 @@ async fn run_substrate_validate(json_out: bool) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
     let port = cfg.port.value;
 
-    let token = read_zp_session_token()
-        .map_err(|e| anyhow::anyhow!("Cannot read session token (is the server running?): {}", e))?;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
 
     let url = zp_net::peer_url_with_path("127.0.0.1", port, "/api/v1/substrate/validate");
 
@@ -7227,7 +7681,10 @@ async fn run_substrate_validate(json_out: bool) -> anyhow::Result<()> {
     println!("\x1b[1mSubstrate Validation\x1b[0m");
     println!("\x1b[2m────────────────────\x1b[0m");
     println!();
-    println!("  Posture:        {}{} {}\x1b[0m", posture_color, posture_icon, posture);
+    println!(
+        "  Posture:        {}{} {}\x1b[0m",
+        posture_color, posture_icon, posture
+    );
     println!("  Validation ID:  {}", validation_id);
     println!("  Timestamp:      {}", validated_at);
     if let Some(short) = evidence_hash.get(..evidence_hash.len().min(16)) {
@@ -7248,7 +7705,10 @@ async fn run_substrate_validate(json_out: bool) -> anyhow::Result<()> {
                 "critical" | "failed" | "inactive" | "missing" => ("✗", "\x1b[31m"),
                 _ => ("?", "\x1b[0m"),
             };
-            println!("    {}{} {}\x1b[0m  {} — {}", color, icon, check_status, name, check_status);
+            println!(
+                "    {}{} {}\x1b[0m  {} — {}",
+                color, icon, check_status, name, check_status
+            );
         }
         println!();
     }
@@ -7287,6 +7747,7 @@ async fn run_correction_issue(
     negation: Option<&str>,
     context: Option<&str>,
     priority: u32,
+    supersedes: &[String],
     json_source: Option<&str>,
     json_out: bool,
 ) -> anyhow::Result<()> {
@@ -7307,10 +7768,9 @@ async fn run_correction_issue(
         let ct = correction_type.ok_or_else(|| {
             anyhow::anyhow!("--type is required (or use --json for full payload)")
         })?;
-        let dom = domain
-            .ok_or_else(|| anyhow::anyhow!("--domain is required (or use --json)"))?;
-        let ass = assertion
-            .ok_or_else(|| anyhow::anyhow!("--assertion is required (or use --json)"))?;
+        let dom = domain.ok_or_else(|| anyhow::anyhow!("--domain is required (or use --json)"))?;
+        let ass =
+            assertion.ok_or_else(|| anyhow::anyhow!("--assertion is required (or use --json)"))?;
 
         let mut content = serde_json::json!({ "assertion": ass });
         if let Some(n) = negation {
@@ -7320,12 +7780,19 @@ async fn run_correction_issue(
             content["context"] = serde_json::json!(c);
         }
 
-        serde_json::json!({
+        let mut body = serde_json::json!({
             "correction_type": ct,
             "domain": dom,
             "content": content,
             "priority": priority,
-        })
+        });
+        // Omit when empty rather than sending `[]` — `supersedes` is
+        // `#[serde(default, skip_serializing_if = "Vec::is_empty")]`, and an
+        // absent field round-trips identically to an empty one.
+        if !supersedes.is_empty() {
+            body["supersedes"] = serde_json::json!(supersedes);
+        }
+        body
     };
 
     let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
@@ -7386,6 +7853,567 @@ async fn run_correction_issue(
 }
 
 /// List all currently active standing corrections (priority-sorted descending).
+/// Show the Regent's autonomous envelope.
+///
+/// Prints the whole call, never a summary of it — the same discipline the
+/// approval queue follows. A precedent is standing permission for a specific
+/// call, and an operator reviewing what they have permitted needs to read it
+/// as precisely as they read it when they granted it.
+async fn run_precedent_list(json_out: bool) -> anyhow::Result<()> {
+    let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
+    let url = zp_net::peer_url_with_path("127.0.0.1", cfg.port.value, "/api/v1/regent/precedents");
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
+    let body = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to reach substrate: {}", e))?
+        .text()
+        .await?;
+
+    if json_out {
+        println!("{body}");
+        return Ok(());
+    }
+
+    let v: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse response: {}", e))?;
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        eprintln!("\x1b[31m✗\x1b[0m  {err}");
+        std::process::exit(1);
+    }
+
+    let count = v["count"].as_u64().unwrap_or(0);
+    println!();
+    println!("\x1b[1mCalls the Regent may make without asking: {count}\x1b[0m");
+    println!("\x1b[2m──────────────────────────────────────\x1b[0m");
+    if count == 0 {
+        println!("\x1b[2mNone. Every act requiring a signature will be proposed.\x1b[0m");
+        println!();
+        return Ok(());
+    }
+    if let Some(list) = v["precedents"].as_array() {
+        for p in list {
+            let sig = p["context_signature"].as_str().unwrap_or("?");
+            let tool = p["tool"].as_str().unwrap_or("?");
+            let granted_at = p["granted_at"].as_str().unwrap_or("?");
+            let req = p["granted_request"].as_str().unwrap_or("?");
+            println!("  \x1b[1m{sig}\x1b[0m");
+            println!("    {tool}");
+            println!(
+                "    \x1b[2mfrom your signature on {} at {}\x1b[0m",
+                &req[..12.min(req.len())],
+                granted_at
+            );
+            println!();
+        }
+    }
+    println!("\x1b[2mzp precedent revoke <signature> --reason \"...\"\x1b[0m");
+    println!();
+    Ok(())
+}
+
+/// Withdraw a precedent, narrowing the autonomous envelope.
+async fn run_precedent_revoke(context_signature: &str, reason: Option<&str>) -> anyhow::Result<()> {
+    let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
+    let url = zp_net::peer_url_with_path(
+        "127.0.0.1",
+        cfg.port.value,
+        &format!("/api/v1/regent/precedents/{context_signature}/revoke"),
+    );
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
+    let body = client
+        .post(&url)
+        .bearer_auth(&token)
+        .json(&serde_json::json!({ "reason": reason.unwrap_or("") }))
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to reach substrate: {}", e))?
+        .text()
+        .await?;
+
+    let v: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse response: {}", e))?;
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        eprintln!("\x1b[31m✗\x1b[0m  {err}");
+        std::process::exit(1);
+    }
+
+    println!();
+    println!(
+        "\x1b[32m✓\x1b[0m  revoked — {} may no longer run unasked",
+        v["tool"].as_str().unwrap_or("?")
+    );
+    println!(
+        "    \x1b[2msignature {}\x1b[0m",
+        v["context_signature"].as_str().unwrap_or("?")
+    );
+    println!(
+        "    \x1b[2manchored {}\x1b[0m",
+        v["anchored"].as_str().unwrap_or("?")
+    );
+    println!();
+    Ok(())
+}
+
+/// List approval requests awaiting an operator answer.
+async fn run_approval_list(json_out: bool) -> anyhow::Result<()> {
+    let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    let port = cfg.port.value;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
+
+    let url = zp_net::peer_url_with_path("127.0.0.1", port, "/api/v1/regent/approvals");
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
+
+    let resp = client
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to reach substrate: {}", e))?;
+    let body = resp.text().await?;
+
+    if json_out {
+        println!("{}", body);
+        return Ok(());
+    }
+
+    let v: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse response: {}", e))?;
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        eprintln!("\x1b[31m✗\x1b[0m  {}", err);
+        std::process::exit(1);
+    }
+
+    let count = v["pending_count"].as_u64().unwrap_or(0);
+    println!();
+    println!(
+        "\x1b[1mApproval requests awaiting an answer: {}\x1b[0m",
+        count
+    );
+    println!("\x1b[2m──────────────────────────────────────\x1b[0m");
+    if count == 0 {
+        println!("\x1b[2mNothing pending.\x1b[0m");
+        println!();
+        return Ok(());
+    }
+    if let Some(list) = v["pending"].as_array() {
+        for item in list {
+            let hash = item["request_hash"].as_str().unwrap_or("?");
+            let action = item["action"].as_str().unwrap_or("?");
+            let at = item["requested_at"].as_str().unwrap_or("?");
+            println!("  \x1b[1m{}\x1b[0m", &hash[..hash.len().min(12)]);
+            println!("    {}", action);
+            // What granting this actually runs. Never summarised — the
+            // operator signs a call, and a summary of a call is not the call.
+            match item.get("enactment") {
+                Some(e) if !e.is_null() => {
+                    let tool = e["tool"].as_str().unwrap_or("?");
+                    let params = e
+                        .get("params")
+                        .map(|p| p.to_string())
+                        .unwrap_or_else(|| "{}".to_string());
+                    println!("    \x1b[1mwould run:\x1b[0m {} {}", tool, params);
+                }
+                _ => {
+                    println!(
+                        "    \x1b[2mno automatic action — approving records \
+                         consent only\x1b[0m"
+                    );
+                }
+            }
+            println!("    \x1b[2masked {}\x1b[0m", at);
+            println!();
+        }
+    }
+    println!(
+        "\x1b[2mzp approval grant <hash>   |   zp approval deny <hash> --reason \"...\"\x1b[0m"
+    );
+    println!();
+    Ok(())
+}
+
+/// Record the operator's answer. `decision` is "granted" or "denied".
+async fn run_approval_resolve(
+    request_hash: &str,
+    decision: &str,
+    reason: Option<&str>,
+) -> anyhow::Result<()> {
+    let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    let port = cfg.port.value;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
+
+    let url = zp_net::peer_url_with_path(
+        "127.0.0.1",
+        port,
+        &format!("/api/v1/regent/approvals/{}/resolve", request_hash),
+    );
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
+
+    let resp = client
+        .post(&url)
+        .bearer_auth(&token)
+        .json(&serde_json::json!({
+            "decision": decision,
+            "reason": reason.unwrap_or(""),
+        }))
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to reach substrate: {}", e))?;
+    let body = resp.text().await?;
+
+    let v: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse response: {}", e))?;
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        eprintln!("\x1b[31m✗\x1b[0m  {}", err);
+        std::process::exit(1);
+    }
+
+    let mark = if decision == "granted" { "✓" } else { "•" };
+    println!();
+    println!(
+        "\x1b[32m{}\x1b[0m  {} — {}",
+        mark,
+        decision,
+        v["action"].as_str().unwrap_or("(request)")
+    );
+    println!(
+        "    \x1b[2mrequest {}\x1b[0m",
+        v["request_hash"].as_str().unwrap_or("?")
+    );
+    println!(
+        "    \x1b[2manchored {}\x1b[0m",
+        v["entry_hash"].as_str().unwrap_or("?")
+    );
+    println!();
+    Ok(())
+}
+
+/// True when a command reaches the substrate over HTTP carrying the session
+/// token, and signs nothing locally.
+///
+/// # Why this predicate exists
+///
+/// Pipeline construction in `main()` calls `load_genesis_secret_composed()` to
+/// derive an audit signer. On a hardware-Genesis substrate that prompts a
+/// physical touch. Commands listed here never construct that signer — they read
+/// `~/ZeroPoint/session.json` and issue an HTTP request — so paying a ceremony
+/// for them buys nothing.
+///
+/// It matters past the annoyance because these are P9 surfaces. The signature is
+/// the operator's act, so the queue of things awaiting it, the precedents that
+/// authorise autonomous action, and the corrections that steer Regent's
+/// cognition must all be freely inspectable and freely amendable. A queue that
+/// costs a ceremony to read is a queue that stops being read; a correction that
+/// costs a ceremony to issue is a correction that does not get issued. And a
+/// ceremony spent on a command that cannot complete — observed twice, 2026-07-31
+/// and 2026-08-05, both times ending in `session_stale` or a connection failure
+/// *after* the touch — teaches the operator that touches are cheap, which is the
+/// opposite of what a signing ceremony exists to establish.
+///
+/// # Adding a command
+///
+/// Name it here. Membership is deliberately a declaration rather than a
+/// consequence of where a block sits in `main()`: `zp correction` inherited the
+/// touch for months precisely because it landed below pipeline construction and
+/// nobody had to say otherwise.
+///
+/// The full general form — every command declaring its own sovereign-root
+/// requirement, checked exhaustively so the compiler forces the decision — is
+/// still the right destination. This is the narrower step that closes the
+/// silent-inheritance path.
+/// Membership was derived 2026-08-06 by scanning every caller of
+/// `read_zp_session_token()` — the marker for "talks to the substrate over
+/// HTTP" — rather than by noticing verbs one complaint at a time. Three
+/// families beyond the original set turned up: substrate validation, officer
+/// sweeps, and vault provider tests.
+///
+/// Note the granularity difference. `Precedent`, `Approval` and `Correction`
+/// match whole-group because every subcommand in each is an HTTP call.
+/// `Substrate`, `Officer` and `Vault` match per-subcommand: their siblings
+/// (`vault list`, `vault revoke`, `officer list`) were not audited and may
+/// legitimately need the root, so they keep the default path.
+fn is_session_token_only(cmd: &Commands) -> bool {
+    matches!(
+        cmd,
+        Commands::Precedent(_)
+            | Commands::Approval(_)
+            | Commands::Correction(_)
+            | Commands::Substrate(SubstrateCmd::Validate { .. })
+            | Commands::Officer(OfficerCmd::Sweep { .. })
+            | Commands::Vault(VaultCmd::Test { .. })
+            // The vault verbs proxy to the server, which already holds the
+            // master key from the boot ceremony. Unlocking the sovereign root
+            // again here would be a second root — see `singular_sovereign_root`.
+            | Commands::Vault(VaultCmd::List { .. })
+            | Commands::Vault(VaultCmd::Put { .. })
+            | Commands::Vault(VaultCmd::Reveal { .. })
+            | Commands::Vault(VaultCmd::Remove { .. })
+    )
+}
+
+/// Dispatch a session-token-only command.
+///
+/// Callers must gate on [`is_session_token_only`] first. The two are a pair:
+/// the predicate decides membership, this decides behaviour, and a command in
+/// one but not the other is a bug the `unreachable!` arm will surface loudly
+/// rather than silently falling through to a hardware prompt.
+async fn run_session_token_command(cmd: &Commands) -> anyhow::Result<()> {
+    match cmd {
+        Commands::Precedent(PrecedentCmd::List { json }) => run_precedent_list(*json).await,
+        Commands::Precedent(PrecedentCmd::Revoke {
+            context_signature,
+            reason,
+        }) => run_precedent_revoke(context_signature, reason.as_deref()).await,
+
+        Commands::Approval(ApprovalCmd::List { json }) => run_approval_list(*json).await,
+        Commands::Approval(ApprovalCmd::Grant {
+            request_hash,
+            reason,
+        }) => run_approval_resolve(request_hash, "granted", reason.as_deref()).await,
+        Commands::Approval(ApprovalCmd::Deny {
+            request_hash,
+            reason,
+        }) => run_approval_resolve(request_hash, "denied", reason.as_deref()).await,
+
+        Commands::Correction(CorrectionCmd::Issue {
+            correction_type,
+            domain,
+            assertion,
+            negation,
+            context,
+            priority,
+            supersedes,
+            json,
+            json_out,
+        }) => {
+            run_correction_issue(
+                correction_type.as_deref(),
+                domain.as_deref(),
+                assertion.as_deref(),
+                negation.as_deref(),
+                context.as_deref(),
+                *priority,
+                supersedes,
+                json.as_deref(),
+                *json_out,
+            )
+            .await
+        }
+        Commands::Correction(CorrectionCmd::List { json }) => run_correction_list(*json).await,
+        Commands::Correction(CorrectionCmd::Revoke {
+            correction_id,
+            json,
+        }) => run_correction_revoke(correction_id, *json).await,
+
+        Commands::Substrate(SubstrateCmd::Validate { json }) => run_substrate_validate(*json).await,
+        Commands::Officer(OfficerCmd::Sweep { name, json }) => {
+            run_officer_sweep(name.as_deref(), *json).await
+        }
+        Commands::Vault(VaultCmd::Test { provider, json }) => run_vault_test(provider, *json).await,
+        Commands::Vault(VaultCmd::List { json }) => run_vault_list(*json).await,
+        Commands::Vault(VaultCmd::Put { key, json }) => run_vault_put(key, *json).await,
+        Commands::Vault(VaultCmd::Reveal { key, json }) => run_vault_reveal(key, *json).await,
+        Commands::Vault(VaultCmd::Remove { key, json }) => run_vault_remove(key, *json).await,
+
+        _ => unreachable!(
+            "run_session_token_command reached for a command \
+             is_session_token_only does not claim"
+        ),
+    }
+}
+
+/// Shared plumbing for the vault verbs: config, session token, HTTP client.
+///
+/// All four talk to the running server rather than opening the vault directly.
+/// The server already holds the vault master key, derived once from the boot
+/// ceremony; unlocking the sovereign root again in the CLI would be a second
+/// root in all but name, which `singular_sovereign_root` forbids.
+async fn vault_request(
+    path: &str,
+    method: reqwest::Method,
+    body: Option<serde_json::Value>,
+) -> anyhow::Result<serde_json::Value> {
+    let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
+        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
+    let port = cfg.port.value;
+    let token = read_zp_session_token().map_err(|e| {
+        anyhow::anyhow!("Cannot read session token (is the server running?): {}", e)
+    })?;
+
+    let url = zp_net::peer_url_with_path("127.0.0.1", port, path);
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(15))
+        .build()?;
+
+    let mut req = client.request(method, &url).bearer_auth(&token);
+    if let Some(b) = body {
+        req = req.json(&b);
+    }
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to reach substrate at 127.0.0.1:{}: {}", port, e))?;
+    let body = resp.text().await?;
+    serde_json::from_str(&body)
+        .map_err(|e| anyhow::anyhow!("Failed to parse response: {} (body: {})", e, body))
+}
+
+/// Print `{"error": ..., "detail": ...}` if present. Returns true when handled.
+fn vault_report_error(v: &serde_json::Value) -> bool {
+    if let Some(err) = v.get("error").and_then(|e| e.as_str()) {
+        eprintln!("\x1b[31m✗\x1b[0m  {}", err);
+        if let Some(d) = v.get("detail").and_then(|d| d.as_str()) {
+            eprintln!("    {}", d);
+        }
+        return true;
+    }
+    false
+}
+
+async fn run_vault_list(json_out: bool) -> anyhow::Result<()> {
+    let v = vault_request("/api/v1/vault/list", reqwest::Method::GET, None).await?;
+    if json_out {
+        println!("{}", v);
+        return Ok(());
+    }
+    if vault_report_error(&v) {
+        std::process::exit(1);
+    }
+    let keys: Vec<&str> = v["keys"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|k| k.as_str()).collect())
+        .unwrap_or_default();
+    let exists = v["exists"].as_bool().unwrap_or(false);
+    let path = v["vault_path"].as_str().unwrap_or("?");
+
+    println!();
+    if keys.is_empty() {
+        println!("Vault holds no secrets.");
+        println!("─────────────────────────");
+        // The distinction Steward's finding cannot make.
+        if exists {
+            println!("  The vault file exists and is empty.");
+        } else {
+            println!("  No vault file yet at {}", path);
+            println!("  It is created the first time a secret is stored, not at startup.");
+        }
+    } else {
+        println!("Vault secrets: {}", keys.len());
+        println!("─────────────────────────");
+        for k in &keys {
+            println!("  {}", k);
+        }
+        println!();
+        println!("  Key names only — values are never listed.");
+    }
+    println!();
+    Ok(())
+}
+
+async fn run_vault_put(key: &str, json_out: bool) -> anyhow::Result<()> {
+    use std::io::Read;
+    let mut value = String::new();
+    std::io::stdin().read_to_string(&mut value)?;
+    // Trailing newline from `echo` or a heredoc is almost never part of the
+    // secret, and a stray one produces an auth failure that is very hard to
+    // see. Strip it; a caller who needs the newline can use `--json` input.
+    let value = value.trim_end_matches(['\n', '\r']).to_string();
+    if value.is_empty() {
+        anyhow::bail!(
+            "No value on stdin. Pipe the secret in:\n    \
+             printf %s \"$SECRET\" | zp vault put {}",
+            key
+        );
+    }
+
+    let v = vault_request(
+        "/api/v1/vault/put",
+        reqwest::Method::POST,
+        Some(serde_json::json!({ "key": key, "value": value })),
+    )
+    .await?;
+    if json_out {
+        println!("{}", v);
+        return Ok(());
+    }
+    if vault_report_error(&v) {
+        std::process::exit(1);
+    }
+    println!("\x1b[32m✓\x1b[0m  Stored {} ({} bytes)", key, value.len());
+    Ok(())
+}
+
+async fn run_vault_reveal(key: &str, json_out: bool) -> anyhow::Result<()> {
+    let v = vault_request(
+        "/api/v1/vault/reveal",
+        reqwest::Method::POST,
+        Some(serde_json::json!({ "key": key })),
+    )
+    .await?;
+    if json_out {
+        println!("{}", v);
+        return Ok(());
+    }
+    if vault_report_error(&v) {
+        std::process::exit(1);
+    }
+    // Bare value on stdout, no decoration — so it composes with a pipe without
+    // the caller having to strip a banner.
+    if let Some(s) = v["value"].as_str() {
+        println!("{}", s);
+    }
+    Ok(())
+}
+
+async fn run_vault_remove(key: &str, json_out: bool) -> anyhow::Result<()> {
+    let v = vault_request(
+        "/api/v1/vault/remove",
+        reqwest::Method::POST,
+        Some(serde_json::json!({ "key": key })),
+    )
+    .await?;
+    if json_out {
+        println!("{}", v);
+        return Ok(());
+    }
+    if vault_report_error(&v) {
+        std::process::exit(1);
+    }
+    println!("\x1b[32m✓\x1b[0m  Removed {}", key);
+    Ok(())
+}
+
 async fn run_correction_list(json_out: bool) -> anyhow::Result<()> {
     let cfg = zp_config::resolve::ConfigResolver::resolve_standard()
         .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
@@ -7500,6 +8528,11 @@ async fn run_correction_revoke(correction_id: &str, json_out: bool) -> anyhow::R
     Ok(())
 }
 
+/// Read the ZP session token from `~/ZeroPoint/session.json`.
+///
+/// Delegates to `read_zp_session_token_from` with the canonical path so the
+/// path-resolution logic can be tested independently without touching the real
+/// `~/ZeroPoint` directory.
 fn read_zp_session_token() -> Result<String, Box<dyn std::error::Error>> {
     let path = zp_core::paths::session_path()?;
     read_zp_session_token_from(&path)
@@ -7623,14 +8656,17 @@ fn run_anchor(
 
     let db_path = audit_db.unwrap_or_else(|| data_dir.join("audit.db"));
 
+    // audit.db lives under ~/ZeroPoint; harden the directory before creating it
+    // (CROSS-USER-01). The Genesis secret itself comes from the sovereignty
+    // provider, not the keyring.
+    if let Err(e) = crate::commands::harden_zp_home() {
+        eprintln!(
+            "error: failed to prepare the ZeroPoint home directory: {}",
+            e
+        );
+        return 2;
+    }
     // Derive the audit signer from the Genesis secret
-    let keyring = match crate::commands::open_keyring() {
-        Ok(k) => k,
-        Err(e) => {
-            eprintln!("error: failed to open keyring: {}", e);
-            return 2;
-        }
-    };
     let genesis_secret = match crate::commands::load_genesis_secret_composed() {
         Ok(s) => s,
         Err(e) => {
@@ -7914,14 +8950,13 @@ fn parse_capabilities(spec: &str) -> Vec<zp_core::GrantedCapability> {
 
                 if end > 0 {
                     let json_str = &rest[..end];
-                    let parameters = serde_json::from_str(json_str)
-                        .unwrap_or_else(|_| {
-                            eprintln!(
-                                "warning: invalid JSON in capability '{}': {}, using Null",
-                                name, json_str
-                            );
-                            serde_json::Value::Null
-                        });
+                    let parameters = serde_json::from_str(json_str).unwrap_or_else(|_| {
+                        eprintln!(
+                            "warning: invalid JSON in capability '{}': {}, using Null",
+                            name, json_str
+                        );
+                        serde_json::Value::Null
+                    });
                     caps.push(zp_core::GrantedCapability::Custom { name, parameters });
                     remaining = &rest[end..];
                 } else {
@@ -8135,17 +9170,42 @@ fn run_delegate(
         grant.renews = Some(prior_id.clone());
     }
 
+    // M4-3 issuance validation on the CLI path.
+    //
+    // Until now `zp delegate` built a standing grant and wrote it straight to
+    // the chain with no issuance validation at all, so the SSRF self-grant
+    // protection `grant_handler` applies (`zp-server/src/lib.rs`, "M4-3:
+    // Validate issuance") did not cover this path. The hole was not that the
+    // CLI is externally reachable — it is not — but that `validate_issuance`
+    // is also where the non-delegable reserved set is refused, and that refusal
+    // is capability-intrinsic: it must fire regardless of who is asking.
+    //
+    // Provenance is `UserAction`, which is the honest description of an
+    // operator at a terminal and matches `EventOrigin::UserAction`'s own
+    // documentation ("CLI, API with authenticated session"). That keeps
+    // internal-only capabilities (ConfigChange, CredentialAccess) grantable
+    // here, which is correct — the external-request restriction exists to stop
+    // a fetch from granting itself credentials, not to stop the operator.
+    grant = grant.with_issued_via(zp_core::EventProvenance::user_action("zp-cli-delegate"));
+    if let Err(e) = grant.validate_issuance() {
+        eprintln!("error: grant issuance rejected: {}", e);
+        return 2;
+    }
+
     // Emit the chain receipt.
     let db_path = audit_db.unwrap_or_else(|| data_dir.join("audit.db"));
 
+    // audit.db lives under ~/ZeroPoint; harden the directory before creating it
+    // (CROSS-USER-01). The Genesis secret itself comes from the sovereignty
+    // provider, not the keyring.
+    if let Err(e) = crate::commands::harden_zp_home() {
+        eprintln!(
+            "error: failed to prepare the ZeroPoint home directory: {}",
+            e
+        );
+        return 2;
+    }
     // Derive the audit signer from the Genesis secret
-    let keyring = match crate::commands::open_keyring() {
-        Ok(k) => k,
-        Err(e) => {
-            eprintln!("error: failed to open keyring: {}", e);
-            return 2;
-        }
-    };
     let genesis_secret = match crate::commands::load_genesis_secret_composed() {
         Ok(s) => s,
         Err(e) => {
@@ -8167,7 +9227,8 @@ fn run_delegate(
     let store = Arc::new(Mutex::new(store));
 
     #[cfg(feature = "embedded-server")]
-    let entry_hash = zp_server::tool_chain::emit_delegation_receipt(&store, "granted", &grant, None);
+    let entry_hash =
+        zp_server::tool_chain::emit_delegation_receipt(&store, "granted", &grant, None);
     #[cfg(not(feature = "embedded-server"))]
     let entry_hash: Option<String> = {
         eprintln!("error: zp delegate requires the 'embedded-server' feature");
@@ -8292,7 +9353,9 @@ fn run_delegate_renew(
     data_dir: &std::path::Path,
     json: bool,
 ) -> i32 {
-    let db_path = audit_db.clone().unwrap_or_else(|| data_dir.join("audit.db"));
+    let db_path = audit_db
+        .clone()
+        .unwrap_or_else(|| data_dir.join("audit.db"));
 
     // Open the store read-only to look up the prior grant. We'll re-open
     // it (signed) inside run_delegate for the write.
@@ -8431,8 +9494,19 @@ fn run_delegate_renew(
     )
 }
 
+/// What `zp revoke` was pointed at.
+///
+/// `Grantee` is not sugar for "look up one id". An agent accumulates a live
+/// grant per cockpit launch, so revoking it means revoking all of them; a
+/// partial sweep leaves the agent authorised, which is the failure this
+/// variant exists to make unreachable.
+enum RevokeTarget {
+    Grant(String),
+    Grantee(String),
+}
+
 fn run_revoke(
-    grant_id: &str,
+    target: RevokeTarget,
     cascade: &str,
     reason: &str,
     audit_db: Option<PathBuf>,
@@ -8456,14 +9530,17 @@ fn run_revoke(
 
     let db_path = audit_db.unwrap_or_else(|| data_dir.join("audit.db"));
 
+    // audit.db lives under ~/ZeroPoint; harden the directory before creating it
+    // (CROSS-USER-01). The Genesis secret itself comes from the sovereignty
+    // provider, not the keyring.
+    if let Err(e) = crate::commands::harden_zp_home() {
+        eprintln!(
+            "error: failed to prepare the ZeroPoint home directory: {}",
+            e
+        );
+        return 2;
+    }
     // Derive the audit signer from the Genesis secret
-    let keyring = match crate::commands::open_keyring() {
-        Ok(k) => k,
-        Err(e) => {
-            eprintln!("error: failed to open keyring: {}", e);
-            return 2;
-        }
-    };
     let genesis_secret = match crate::commands::load_genesis_secret_composed() {
         Ok(s) => s,
         Err(e) => {
@@ -8493,63 +9570,129 @@ fn run_revoke(
             return 2;
         }
     };
-    let target_subject = match find_subject_for_grant(&chain, grant_id) {
-        Some(s) => s,
-        None => {
-            eprintln!(
-                "error: grant {} not found on chain — cannot revoke",
-                grant_id
-            );
-            return 2;
+    // Resolve the target to (grant_id, subject) pairs. One for --grant-id;
+    // every live grant for --grantee.
+    let targets: Vec<(String, String)> = match &target {
+        RevokeTarget::Grant(grant_id) => match find_subject_for_grant(&chain, grant_id) {
+            Some(s) => vec![(grant_id.clone(), s)],
+            None => {
+                eprintln!(
+                    "error: grant {} not found on chain — cannot revoke",
+                    grant_id
+                );
+                return 2;
+            }
+        },
+        RevokeTarget::Grantee(grantee) => {
+            // Already-revoked grants are skipped rather than re-revoked: the
+            // chain records revocation as permanent, and a second claim
+            // against the same id would be a second irreversible act with no
+            // effect. Skipping keeps the sweep idempotent.
+            let live: Vec<(String, String)> = reconstruct_grants(&chain)
+                .into_iter()
+                .filter(|s| !s.revoked && s.grant.grantee == *grantee)
+                .map(|s| (s.grant.id.clone(), s.grant.grantee.clone()))
+                .collect();
+            if live.is_empty() {
+                eprintln!(
+                    "error: no live grants for grantee {} — nothing to revoke",
+                    grantee
+                );
+                return 2;
+            }
+            live
         }
     };
 
-    let claim = zp_core::RevocationClaim::new(
-        grant_id,
-        "genesis".to_string(),
-        zp_core::AuthorityRef::genesis("revocation_authority"),
-        cascade_policy,
-        revocation_reason,
-    );
+    // Revoke every resolved grant. A failure part-way through leaves earlier
+    // revocations standing — they are chain entries and cannot be rolled
+    // back — so the count of what succeeded is reported, not just the failure.
+    let mut revoked: Vec<(String, String, String)> = Vec::new();
+    for (grant_id, target_subject) in &targets {
+        let claim = zp_core::RevocationClaim::new(
+            grant_id,
+            "genesis".to_string(),
+            zp_core::AuthorityRef::genesis("revocation_authority"),
+            cascade_policy,
+            revocation_reason.clone(),
+        );
 
-    #[cfg(feature = "embedded-server")]
-    let entry_hash =
-        zp_server::tool_chain::emit_revocation_receipt(&store, &target_subject, &claim);
-    #[cfg(not(feature = "embedded-server"))]
-    let entry_hash: Option<String> = {
-        eprintln!("error: zp revoke requires the 'embedded-server' feature");
-        return 2;
-    };
-
-    let entry_hash = match entry_hash {
-        Some(h) => h,
-        None => {
-            eprintln!("error: failed to append revocation receipt");
+        #[cfg(feature = "embedded-server")]
+        let entry_hash =
+            zp_server::tool_chain::emit_revocation_receipt(&store, target_subject, &claim);
+        #[cfg(not(feature = "embedded-server"))]
+        let entry_hash: Option<String> = {
+            eprintln!("error: zp revoke requires the 'embedded-server' feature");
             return 2;
+        };
+
+        match entry_hash {
+            Some(h) => revoked.push((claim.revocation_id.clone(), grant_id.clone(), h)),
+            None => {
+                eprintln!(
+                    "error: failed to append revocation receipt for {} ({} of {} succeeded)",
+                    grant_id,
+                    revoked.len(),
+                    targets.len()
+                );
+                return 2;
+            }
         }
-    };
+    }
+
+    let target_subject = targets[0].1.clone();
+    let (claim_id, grant_id, entry_hash) = revoked[0].clone();
+    let claim_cascade = format!("{:?}", cascade_policy);
+    let claim_reason = format!("{:?}", revocation_reason);
 
     if json {
+        // `revocations` is always present, including for the single-grant
+        // case, so a consumer never has to branch on which flag was used.
+        // The flat fields describe the first revocation and are kept for
+        // compatibility with callers written against the one-grant shape.
         println!(
             "{}",
             serde_json::json!({
-                "revocation_id": claim.revocation_id,
+                "revocation_id": claim_id,
                 "target_grant_id": grant_id,
                 "subject": target_subject,
-                "cascade": format!("{:?}", claim.cascade),
-                "reason": format!("{:?}", claim.reason),
+                "cascade": claim_cascade,
+                "reason": claim_reason,
                 "entry_hash": entry_hash,
+                "revoked_count": revoked.len(),
+                "revocations": revoked
+                    .iter()
+                    .map(|(rid, gid, hash)| serde_json::json!({
+                        "revocation_id": rid,
+                        "target_grant_id": gid,
+                        "entry_hash": hash,
+                    }))
+                    .collect::<Vec<_>>(),
             })
         );
-    } else {
+    } else if revoked.len() == 1 {
         println!("\x1b[1mzp revoke — grant revoked\x1b[0m");
-        println!("revocation_id:      {}", claim.revocation_id);
+        println!("revocation_id:      {}", claim_id);
         println!("target_grant_id:    {}", grant_id);
         println!("subject:            {}", target_subject);
-        println!("cascade:            {:?}", claim.cascade);
-        println!("reason:             {:?}", claim.reason);
+        println!("cascade:            {}", claim_cascade);
+        println!("reason:             {}", claim_reason);
         println!("entry_hash:         {}", short_hash(&entry_hash));
         println!("\x1b[32m✓\x1b[0m revoked");
+    } else {
+        println!("\x1b[1mzp revoke — {} grants revoked\x1b[0m", revoked.len());
+        println!("subject:            {}", target_subject);
+        println!("cascade:            {}", claim_cascade);
+        println!("reason:             {}", claim_reason);
+        println!();
+        for (rid, gid, hash) in &revoked {
+            println!("  {}  {}  {}", gid, short_hash(hash), rid);
+        }
+        println!();
+        println!(
+            "\x1b[32m✓\x1b[0m {} grants revoked — the grantee holds none",
+            revoked.len()
+        );
     }
     0
 }
@@ -9103,7 +10246,11 @@ async fn run_pricing(cmd: &PricingCmd, data_dir: &std::path::Path) -> anyhow::Re
     use zp_receipt::{ClaimMetadata, ReceiptBuilder, ReceiptType, Signer, Status};
 
     let (host_ids, audit_db, json, method) = match cmd {
-        PricingCmd::Refresh { hosts, audit_db, json } => {
+        PricingCmd::Refresh {
+            hosts,
+            audit_db,
+            json,
+        } => {
             let ids = if hosts.is_empty() {
                 vec!["abacus".to_string()]
             } else {
@@ -9111,7 +10258,11 @@ async fn run_pricing(cmd: &PricingCmd, data_dir: &std::path::Path) -> anyhow::Re
             };
             (ids, audit_db, *json, "fetch")
         }
-        PricingCmd::Attest { hosts, audit_db, json } => (hosts.clone(), audit_db, *json, "manual"),
+        PricingCmd::Attest {
+            hosts,
+            audit_db,
+            json,
+        } => (hosts.clone(), audit_db, *json, "manual"),
     };
 
     let db_path = audit_db
@@ -9222,16 +10373,24 @@ async fn run_pricing(cmd: &PricingCmd, data_dir: &std::path::Path) -> anyhow::Re
 ///
 /// Merges with any existing override file: entries with matching IDs are
 /// replaced; new entries are appended. Unknown existing entries are preserved.
-fn persist_pricing_overrides(host_ids: &[String], updated_profiles: &[zp_engine::providers::ProviderProfile]) {
+fn persist_pricing_overrides(
+    host_ids: &[String],
+    updated_profiles: &[zp_engine::providers::ProviderProfile],
+) {
     use zp_engine::providers::ProviderProfile;
 
-    let Ok(zp_home) = zp_core::paths::home() else { return };
+    let Ok(zp_home) = zp_core::paths::home() else {
+        return;
+    };
     let override_path = zp_home.join("config").join("providers.toml");
 
     // Load existing override file, or start with an empty list
     let mut existing: Vec<ProviderProfile> = if override_path.exists() {
         #[derive(serde::Deserialize, Default)]
-        struct Catalog { #[serde(default)] providers: Vec<ProviderProfile> }
+        struct Catalog {
+            #[serde(default)]
+            providers: Vec<ProviderProfile>,
+        }
         std::fs::read_to_string(&override_path)
             .ok()
             .and_then(|s| toml::from_str::<Catalog>(&s).ok())
@@ -9251,8 +10410,12 @@ fn persist_pricing_overrides(host_ids: &[String], updated_profiles: &[zp_engine:
     }
 
     #[derive(serde::Serialize)]
-    struct Catalog { providers: Vec<ProviderProfile> }
-    if let Ok(content) = toml::to_string_pretty(&Catalog { providers: existing }) {
+    struct Catalog {
+        providers: Vec<ProviderProfile>,
+    }
+    if let Ok(content) = toml::to_string_pretty(&Catalog {
+        providers: existing,
+    }) {
         std::fs::create_dir_all(override_path.parent().unwrap_or(std::path::Path::new("."))).ok();
         std::fs::write(&override_path, content).ok();
     }
@@ -9261,6 +10424,539 @@ fn persist_pricing_overrides(host_ids: &[String], updated_profiles: &[zp_engine:
 // ============================================================================
 // Tests
 // ============================================================================
+
+// ============================================================================
+// zp policy set inference / zp policy show inference
+// ============================================================================
+
+#[allow(clippy::too_many_arguments)]
+async fn run_policy_set_inference(
+    backend: &str,
+    strategy: &str,
+    allowlist: &str,
+    cost_cap_daily_usd: Option<f64>,
+    schema_compat: &str,
+    circuit_breaker_threshold: u32,
+    audit_db: Option<&std::path::Path>,
+    json: bool,
+    data_dir: &std::path::Path,
+) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use zp_audit::chain::UnsealedEntry;
+    use zp_audit::AuditStore;
+    use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
+    use zp_receipt::{ClaimMetadata, ClaimSemantics, ReceiptBuilder, ReceiptType, Signer, Status};
+
+    // Parse comma-separated allowlist / schema_compat, stripping blanks
+    let model_allowlist: Vec<String> = allowlist
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let schema_compat_vec: Vec<String> = schema_compat
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let circuit_breaker = if circuit_breaker_threshold == 0 {
+        None
+    } else {
+        Some(circuit_breaker_threshold)
+    };
+
+    // Signing keys
+    let keyring = crate::commands::open_keyring().context("Failed to open keyring")?;
+    let secret = crate::commands::load_operator_composed(&keyring)
+        .context("No operator key available — run `zp init` first")?
+        .secret_key();
+    let signer = Signer::from_secret(&secret);
+
+    // Build and sign the receipt
+    let mut receipt = ReceiptBuilder::new(ReceiptType::PreferenceLlmPolicySet, "zp-cli")
+        .status(Status::Success)
+        .claim_semantics(ClaimSemantics::AuthorizationGrant)
+        .claim_metadata(ClaimMetadata::PreferenceLlmPolicySet {
+            backend_url: backend.to_string(),
+            routing_strategy: strategy.to_string(),
+            model_allowlist: model_allowlist.clone(),
+            cost_cap_daily_usd,
+            schema_compat: schema_compat_vec.clone(),
+            circuit_breaker_threshold: circuit_breaker,
+        })
+        .finalize();
+    signer.sign(&mut receipt);
+    let receipt_id = receipt.id.clone();
+
+    // Append to audit chain
+    let db_path = audit_db
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| data_dir.join("audit.db"));
+
+    let genesis_secret = crate::commands::load_genesis_secret_composed()
+        .context("Failed to load Genesis secret for audit signer")?;
+    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+    let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+    let mut store =
+        AuditStore::open_signed(&db_path, audit_signer).context("Failed to open audit store")?;
+    let entry = UnsealedEntry::new(
+        ActorId::System("zp-policy".to_string()),
+        AuditAction::SystemEvent {
+            event: "preference:llm:policy:set".to_string(),
+        },
+        ConversationId::new(),
+        PolicyDecision::Allow { conditions: vec![] },
+        "zp-policy",
+    )
+    .with_receipt(receipt);
+    store.append(entry).context("Failed to append to chain")?;
+
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "receipt_id": receipt_id,
+                "backend_url": backend,
+                "routing_strategy": strategy,
+                "model_allowlist": model_allowlist,
+                "cost_cap_daily_usd": cost_cap_daily_usd,
+                "schema_compat": schema_compat_vec,
+                "circuit_breaker_threshold": circuit_breaker,
+            })
+        );
+    } else {
+        println!("\x1b[32m✓\x1b[0m  Inference policy set");
+        println!("  Receipt:  {}", receipt_id);
+        println!("  Backend:  {}", backend);
+        println!("  Strategy: {}", strategy);
+        if model_allowlist.is_empty() {
+            println!("  Allowlist: (unrestricted)");
+        } else {
+            println!("  Allowlist: {}", model_allowlist.join(", "));
+        }
+        if let Some(cap) = cost_cap_daily_usd {
+            println!("  Cost cap: ${:.2}/day", cap);
+        }
+        if !schema_compat_vec.is_empty() {
+            println!("  Schema compat: {}", schema_compat_vec.join(", "));
+        }
+        if let Some(threshold) = circuit_breaker {
+            println!("  Circuit breaker: {} consecutive failures", threshold);
+        }
+        println!();
+        println!("  Restart any governed tool reading this policy for it to take effect.");
+    }
+
+    Ok(())
+}
+
+async fn run_policy_show_inference(
+    audit_db: Option<&std::path::Path>,
+    json: bool,
+    data_dir: &std::path::Path,
+) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use zp_audit::AuditStore;
+    use zp_receipt::{ClaimMetadata, ReceiptType};
+
+    let db_path = audit_db
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| data_dir.join("audit.db"));
+
+    if !db_path.exists() {
+        if json {
+            println!("{{\"error\": \"no audit chain found\"}}");
+        } else {
+            eprintln!("No audit chain found. Run `zp policy set inference` first.");
+        }
+        return Ok(());
+    }
+
+    let store = AuditStore::open_readonly(&db_path).context("Failed to open audit store")?;
+    let entries = store.export_chain(10_000).context("Failed to read chain")?;
+
+    // Walk chain in reverse to find the most recent PreferenceLlmPolicySet
+    let policy = entries.iter().rev().find_map(|e| {
+        e.receipt.as_ref().and_then(|r| {
+            if r.receipt_type == ReceiptType::PreferenceLlmPolicySet {
+                r.claim_metadata.as_ref()
+            } else {
+                None
+            }
+        })
+    });
+
+    match policy {
+        None => {
+            if json {
+                println!("{{\"error\": \"no preference:llm:policy:set receipt on chain\"}}");
+            } else {
+                eprintln!(
+                    "No inference policy receipt on chain. Run `zp policy set inference` to set one."
+                );
+            }
+        }
+        Some(ClaimMetadata::PreferenceLlmPolicySet {
+            backend_url,
+            routing_strategy,
+            model_allowlist,
+            cost_cap_daily_usd,
+            schema_compat,
+            circuit_breaker_threshold,
+        }) => {
+            if json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "backend_url": backend_url,
+                        "routing_strategy": routing_strategy,
+                        "model_allowlist": model_allowlist,
+                        "cost_cap_daily_usd": cost_cap_daily_usd,
+                        "schema_compat": schema_compat,
+                        "circuit_breaker_threshold": circuit_breaker_threshold,
+                    })
+                );
+            } else {
+                println!("\x1b[1mCurrent inference policy\x1b[0m");
+                println!("  Backend:   {}", backend_url);
+                println!("  Strategy:  {}", routing_strategy);
+                if model_allowlist.is_empty() {
+                    println!("  Allowlist: (unrestricted)");
+                } else {
+                    println!("  Allowlist: {}", model_allowlist.join(", "));
+                }
+                if let Some(cap) = cost_cap_daily_usd {
+                    println!("  Cost cap:  ${:.2}/day", cap);
+                } else {
+                    println!("  Cost cap:  (none)");
+                }
+                if schema_compat.is_empty() {
+                    println!("  Schema compat: (none)");
+                } else {
+                    println!("  Schema compat: {}", schema_compat.join(", "));
+                }
+                if let Some(t) = circuit_breaker_threshold {
+                    println!("  Circuit breaker: {} failures", t);
+                }
+            }
+        }
+        Some(_) => unreachable!("receipt_type filter guarantees PreferenceLlmPolicySet"),
+    }
+
+    Ok(())
+}
+
+// ============================================================================
+// Model registry helpers
+// ============================================================================
+
+#[allow(clippy::too_many_arguments)]
+async fn run_model_register(
+    model_id: &str,
+    provider: &str,
+    provider_url: &str,
+    context_window: u32,
+    supports_tools: bool,
+    schema_format_str: &str,
+    input_cost_per_m: f64,
+    output_cost_per_m: f64,
+    max_output_tokens: u32,
+    audit_db: Option<&std::path::Path>,
+    json: bool,
+    data_dir: &std::path::Path,
+) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use zp_audit::chain::UnsealedEntry;
+    use zp_audit::AuditStore;
+    use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
+    use zp_receipt::{
+        ClaimMetadata, ClaimSemantics, ReceiptBuilder, ReceiptType, SchemaFormat, Signer, Status,
+    };
+
+    let schema_format = match schema_format_str.to_lowercase().as_str() {
+        "gemini" => SchemaFormat::Gemini,
+        "other" => SchemaFormat::Other,
+        _ => SchemaFormat::OpenAi,
+    };
+
+    let keyring = crate::commands::open_keyring().context("Failed to open keyring")?;
+    let secret = crate::commands::load_operator_composed(&keyring)
+        .context("No operator key available — run `zp init` first")?
+        .secret_key();
+    let signer = Signer::from_secret(&secret);
+
+    let mut receipt = ReceiptBuilder::new(ReceiptType::ModelRegistered, "zp-model")
+        .status(Status::Success)
+        .claim_semantics(ClaimSemantics::AuthorshipProof)
+        .claim_metadata(ClaimMetadata::ModelRegistered {
+            model_id: model_id.to_string(),
+            provider: provider.to_string(),
+            provider_url: provider_url.to_string(),
+            context_window,
+            supports_tools,
+            schema_format,
+            input_cost_per_m_usd: input_cost_per_m,
+            output_cost_per_m_usd: output_cost_per_m,
+            max_output_tokens,
+        })
+        .finalize();
+    signer.sign(&mut receipt);
+    let receipt_id = receipt.id.clone();
+
+    let db_path = audit_db
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| data_dir.join("audit.db"));
+    let genesis_secret = crate::commands::load_genesis_secret_composed()
+        .context("Failed to load Genesis secret for audit signer")?;
+    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+    let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+    let mut store =
+        AuditStore::open_signed(&db_path, audit_signer).context("Failed to open audit store")?;
+    let entry = UnsealedEntry::new(
+        ActorId::System("zp-model".to_string()),
+        AuditAction::SystemEvent {
+            event: "model:registered".to_string(),
+        },
+        ConversationId::new(),
+        PolicyDecision::Allow { conditions: vec![] },
+        "zp-model",
+    )
+    .with_receipt(receipt);
+    store.append(entry).context("Failed to append to chain")?;
+
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "receipt_id": receipt_id,
+                "model_id": model_id,
+                "provider": provider,
+                "schema_format": schema_format_str,
+            })
+        );
+    } else {
+        println!("\x1b[32m✓\x1b[0m Model registered: \x1b[1m{model_id}\x1b[0m");
+        println!("  Provider:       {provider}");
+        println!("  Endpoint:       {provider_url}");
+        println!("  Context window: {} tokens", context_window);
+        println!("  Tool support:   {supports_tools}");
+        println!("  Schema format:  {schema_format_str}");
+        println!("  Pricing:        ${input_cost_per_m}/M in · ${output_cost_per_m}/M out");
+        println!("  Max output:     {} tokens", max_output_tokens);
+        println!("  Receipt:        {receipt_id}");
+    }
+
+    Ok(())
+}
+
+async fn run_model_list(
+    audit_db: Option<&std::path::Path>,
+    json: bool,
+    data_dir: &std::path::Path,
+) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use std::collections::HashMap;
+    use zp_audit::AuditStore;
+    use zp_receipt::{ClaimMetadata, ReceiptType};
+
+    let db_path = audit_db
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| data_dir.join("audit.db"));
+
+    if !db_path.exists() {
+        if json {
+            println!("[]");
+        } else {
+            eprintln!("No audit chain found. Run `zp model register` to add models.");
+        }
+        return Ok(());
+    }
+
+    let store = AuditStore::open_readonly(&db_path).context("Failed to open audit store")?;
+    let entries = store
+        .export_chain(100_000)
+        .context("Failed to read chain")?;
+
+    // Collect the latest model:registered receipt per model_id
+    let mut models: HashMap<String, serde_json::Value> = HashMap::new();
+
+    for entry in &entries {
+        let Some(receipt) = entry.receipt.as_ref() else {
+            continue;
+        };
+        let Some(meta) = receipt.claim_metadata.as_ref() else {
+            continue;
+        };
+
+        match (receipt.receipt_type, meta) {
+            (
+                ReceiptType::ModelRegistered,
+                ClaimMetadata::ModelRegistered {
+                    model_id,
+                    provider,
+                    provider_url,
+                    context_window,
+                    supports_tools,
+                    schema_format,
+                    input_cost_per_m_usd,
+                    output_cost_per_m_usd,
+                    max_output_tokens,
+                },
+            ) => {
+                models.insert(
+                    model_id.clone(),
+                    serde_json::json!({
+                        "model_id": model_id,
+                        "provider": provider,
+                        "provider_url": provider_url,
+                        "context_window": context_window,
+                        "supports_tools": supports_tools,
+                        "schema_format": schema_format,
+                        "input_cost_per_m_usd": input_cost_per_m_usd,
+                        "output_cost_per_m_usd": output_cost_per_m_usd,
+                        "max_output_tokens": max_output_tokens,
+                        "receipt_id": receipt.id,
+                    }),
+                );
+            }
+            (
+                ReceiptType::ModelCapabilityUpdated,
+                ClaimMetadata::ModelCapabilityUpdated {
+                    model_id,
+                    field_updated,
+                    new_value,
+                    ..
+                },
+            ) => {
+                if let Some(entry) = models.get_mut(model_id) {
+                    // Patch the registered entry in-place so `list` always shows current state
+                    if let Some(obj) = entry.as_object_mut() {
+                        obj.insert(field_updated.clone(), new_value.clone());
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if json {
+        let list: Vec<_> = models.values().collect();
+        println!("{}", serde_json::to_string_pretty(&list)?);
+    } else if models.is_empty() {
+        println!("No models registered. Run `zp model register` to add one.");
+    } else {
+        println!("\x1b[1mRegistered models ({}):\x1b[0m\n", models.len());
+        let mut sorted: Vec<_> = models.values().collect();
+        sorted.sort_by(|a, b| {
+            a["model_id"]
+                .as_str()
+                .unwrap_or("")
+                .cmp(b["model_id"].as_str().unwrap_or(""))
+        });
+        for m in sorted {
+            println!("  \x1b[1m{}\x1b[0m", m["model_id"].as_str().unwrap_or("?"));
+            println!(
+                "    Provider:  {} · {}",
+                m["provider"].as_str().unwrap_or("?"),
+                m["provider_url"].as_str().unwrap_or("?")
+            );
+            println!(
+                "    Context:   {} tokens  max_out: {}",
+                m["context_window"], m["max_output_tokens"]
+            );
+            println!(
+                "    Tools:     {}  schema: {}",
+                m["supports_tools"], m["schema_format"]
+            );
+            println!(
+                "    Pricing:   ${}/M in · ${}/M out",
+                m["input_cost_per_m_usd"], m["output_cost_per_m_usd"]
+            );
+            println!();
+        }
+    }
+
+    Ok(())
+}
+
+async fn run_model_update(
+    model_id: &str,
+    field: &str,
+    value_str: &str,
+    reason: &str,
+    audit_db: Option<&std::path::Path>,
+    json: bool,
+    data_dir: &std::path::Path,
+) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use zp_audit::chain::UnsealedEntry;
+    use zp_audit::AuditStore;
+    use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
+    use zp_receipt::{ClaimMetadata, ClaimSemantics, ReceiptBuilder, ReceiptType, Signer, Status};
+
+    let new_value: serde_json::Value =
+        serde_json::from_str(value_str).context("--value must be valid JSON")?;
+
+    let keyring = crate::commands::open_keyring().context("Failed to open keyring")?;
+    let secret = crate::commands::load_operator_composed(&keyring)
+        .context("No operator key available — run `zp init` first")?
+        .secret_key();
+    let signer = Signer::from_secret(&secret);
+
+    let mut receipt = ReceiptBuilder::new(ReceiptType::ModelCapabilityUpdated, "zp-model")
+        .status(Status::Success)
+        .claim_semantics(ClaimSemantics::AuthorshipProof)
+        .claim_metadata(ClaimMetadata::ModelCapabilityUpdated {
+            model_id: model_id.to_string(),
+            field_updated: field.to_string(),
+            new_value: new_value.clone(),
+            reason: reason.to_string(),
+        })
+        .finalize();
+    signer.sign(&mut receipt);
+    let receipt_id = receipt.id.clone();
+
+    let db_path = audit_db
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| data_dir.join("audit.db"));
+    let genesis_secret = crate::commands::load_genesis_secret_composed()
+        .context("Failed to load Genesis secret for audit signer")?;
+    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
+    let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
+    let mut store =
+        AuditStore::open_signed(&db_path, audit_signer).context("Failed to open audit store")?;
+    let entry = UnsealedEntry::new(
+        ActorId::System("zp-model".to_string()),
+        AuditAction::SystemEvent {
+            event: "model:capability:updated".to_string(),
+        },
+        ConversationId::new(),
+        PolicyDecision::Allow { conditions: vec![] },
+        "zp-model",
+    )
+    .with_receipt(receipt);
+    store.append(entry).context("Failed to append to chain")?;
+
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "receipt_id": receipt_id,
+                "model_id": model_id,
+                "field_updated": field,
+                "new_value": new_value,
+                "reason": reason,
+            })
+        );
+    } else {
+        println!("\x1b[32m✓\x1b[0m Model updated: \x1b[1m{model_id}\x1b[0m");
+        println!("  Field:   {field}");
+        println!("  Value:   {new_value}");
+        println!("  Reason:  {reason}");
+        println!("  Receipt: {receipt_id}");
+    }
+
+    Ok(())
+}
 
 #[cfg(test)]
 mod tests {
@@ -9401,9 +11097,7 @@ mod tests {
 
     #[test]
     fn parse_capabilities_mixed() {
-        let caps = super::parse_capabilities(
-            r#"governance:propose{"mutations":["*"]},tool:exec"#,
-        );
+        let caps = super::parse_capabilities(r#"governance:propose{"mutations":["*"]},tool:exec"#);
         assert_eq!(caps.len(), 2);
         match &caps[0] {
             zp_core::GrantedCapability::Custom { name, parameters } => {
@@ -9426,496 +11120,4 @@ mod tests {
         let caps = super::parse_capabilities("");
         assert!(caps.is_empty());
     }
-}
-
-// ============================================================================
-// zp policy set inference / zp policy show inference
-// ============================================================================
-
-#[allow(clippy::too_many_arguments)]
-async fn run_policy_set_inference(
-    backend: &str,
-    strategy: &str,
-    allowlist: &str,
-    cost_cap_daily_usd: Option<f64>,
-    schema_compat: &str,
-    circuit_breaker_threshold: u32,
-    audit_db: Option<&std::path::Path>,
-    json: bool,
-    data_dir: &std::path::Path,
-) -> anyhow::Result<()> {
-    use anyhow::Context;
-    use zp_audit::chain::UnsealedEntry;
-    use zp_audit::AuditStore;
-    use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
-    use zp_receipt::{ClaimMetadata, ClaimSemantics, ReceiptBuilder, ReceiptType, Signer, Status};
-
-    // Parse comma-separated allowlist / schema_compat, stripping blanks
-    let model_allowlist: Vec<String> = allowlist
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-    let schema_compat_vec: Vec<String> = schema_compat
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-    let circuit_breaker = if circuit_breaker_threshold == 0 {
-        None
-    } else {
-        Some(circuit_breaker_threshold)
-    };
-
-    // Signing keys
-    let keyring = crate::commands::open_keyring().context("Failed to open keyring")?;
-    let secret = crate::commands::load_operator_composed(&keyring)
-        .context("No operator key available — run `zp init` first")?
-        .secret_key();
-    let signer = Signer::from_secret(&secret);
-
-    // Build and sign the receipt
-    let mut receipt = ReceiptBuilder::new(ReceiptType::PreferenceLlmPolicySet, "zp-cli")
-        .status(Status::Success)
-        .claim_semantics(ClaimSemantics::AuthorizationGrant)
-        .claim_metadata(ClaimMetadata::PreferenceLlmPolicySet {
-            backend_url: backend.to_string(),
-            routing_strategy: strategy.to_string(),
-            model_allowlist: model_allowlist.clone(),
-            cost_cap_daily_usd,
-            schema_compat: schema_compat_vec.clone(),
-            circuit_breaker_threshold: circuit_breaker,
-        })
-        .finalize();
-    signer.sign(&mut receipt);
-    let receipt_id = receipt.id.clone();
-
-    // Append to audit chain
-    let db_path = audit_db
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| data_dir.join("audit.db"));
-
-    let genesis_secret = crate::commands::load_genesis_secret_composed()
-        .context("Failed to load Genesis secret for audit signer")?;
-    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
-    let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
-    let mut store = AuditStore::open_signed(&db_path, audit_signer)
-        .context("Failed to open audit store")?;
-    let entry = UnsealedEntry::new(
-        ActorId::System("zp-policy".to_string()),
-        AuditAction::SystemEvent {
-            event: "preference:llm:policy:set".to_string(),
-        },
-        ConversationId::new(),
-        PolicyDecision::Allow { conditions: vec![] },
-        "zp-policy",
-    )
-    .with_receipt(receipt);
-    store.append(entry).context("Failed to append to chain")?;
-
-    if json {
-        println!(
-            "{}",
-            serde_json::json!({
-                "receipt_id": receipt_id,
-                "backend_url": backend,
-                "routing_strategy": strategy,
-                "model_allowlist": model_allowlist,
-                "cost_cap_daily_usd": cost_cap_daily_usd,
-                "schema_compat": schema_compat_vec,
-                "circuit_breaker_threshold": circuit_breaker,
-            })
-        );
-    } else {
-        println!("\x1b[32m✓\x1b[0m  Inference policy set");
-        println!("  Receipt:  {}", receipt_id);
-        println!("  Backend:  {}", backend);
-        println!("  Strategy: {}", strategy);
-        if model_allowlist.is_empty() {
-            println!("  Allowlist: (unrestricted)");
-        } else {
-            println!("  Allowlist: {}", model_allowlist.join(", "));
-        }
-        if let Some(cap) = cost_cap_daily_usd {
-            println!("  Cost cap: ${:.2}/day", cap);
-        }
-        if !schema_compat_vec.is_empty() {
-            println!("  Schema compat: {}", schema_compat_vec.join(", "));
-        }
-        if let Some(threshold) = circuit_breaker {
-            println!("  Circuit breaker: {} consecutive failures", threshold);
-        }
-        println!();
-        println!("  Restart IronClaw for the new policy to take effect.");
-    }
-
-    Ok(())
-}
-
-async fn run_policy_show_inference(
-    audit_db: Option<&std::path::Path>,
-    json: bool,
-    data_dir: &std::path::Path,
-) -> anyhow::Result<()> {
-    use anyhow::Context;
-    use zp_audit::AuditStore;
-    use zp_receipt::{ClaimMetadata, ReceiptType};
-
-    let db_path = audit_db
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| data_dir.join("audit.db"));
-
-    if !db_path.exists() {
-        if json {
-            println!("{{\"error\": \"no audit chain found\"}}");
-        } else {
-            eprintln!("No audit chain found. Run `zp policy set inference` first.");
-        }
-        return Ok(());
-    }
-
-    let store = AuditStore::open_readonly(&db_path).context("Failed to open audit store")?;
-    let entries = store.export_chain(10_000).context("Failed to read chain")?;
-
-    // Walk chain in reverse to find the most recent PreferenceLlmPolicySet
-    let policy = entries.iter().rev().find_map(|e| {
-        e.receipt.as_ref().and_then(|r| {
-            if r.receipt_type == ReceiptType::PreferenceLlmPolicySet {
-                r.claim_metadata.as_ref()
-            } else {
-                None
-            }
-        })
-    });
-
-    match policy {
-        None => {
-            if json {
-                println!("{{\"error\": \"no preference:llm:policy:set receipt on chain\"}}");
-            } else {
-                eprintln!(
-                    "No inference policy receipt on chain. Run `zp policy set inference` to set one."
-                );
-            }
-        }
-        Some(ClaimMetadata::PreferenceLlmPolicySet {
-            backend_url,
-            routing_strategy,
-            model_allowlist,
-            cost_cap_daily_usd,
-            schema_compat,
-            circuit_breaker_threshold,
-        }) => {
-            if json {
-                println!(
-                    "{}",
-                    serde_json::json!({
-                        "backend_url": backend_url,
-                        "routing_strategy": routing_strategy,
-                        "model_allowlist": model_allowlist,
-                        "cost_cap_daily_usd": cost_cap_daily_usd,
-                        "schema_compat": schema_compat,
-                        "circuit_breaker_threshold": circuit_breaker_threshold,
-                    })
-                );
-            } else {
-                println!("\x1b[1mCurrent inference policy\x1b[0m");
-                println!("  Backend:   {}", backend_url);
-                println!("  Strategy:  {}", routing_strategy);
-                if model_allowlist.is_empty() {
-                    println!("  Allowlist: (unrestricted)");
-                } else {
-                    println!("  Allowlist: {}", model_allowlist.join(", "));
-                }
-                if let Some(cap) = cost_cap_daily_usd {
-                    println!("  Cost cap:  ${:.2}/day", cap);
-                } else {
-                    println!("  Cost cap:  (none)");
-                }
-                if schema_compat.is_empty() {
-                    println!("  Schema compat: (none)");
-                } else {
-                    println!("  Schema compat: {}", schema_compat.join(", "));
-                }
-                if let Some(t) = circuit_breaker_threshold {
-                    println!("  Circuit breaker: {} failures", t);
-                }
-            }
-        }
-        Some(_) => unreachable!("receipt_type filter guarantees PreferenceLlmPolicySet"),
-    }
-
-    Ok(())
-}
-
-// ============================================================================
-// Model registry helpers
-// ============================================================================
-
-#[allow(clippy::too_many_arguments)]
-async fn run_model_register(
-    model_id: &str,
-    provider: &str,
-    provider_url: &str,
-    context_window: u32,
-    supports_tools: bool,
-    schema_format_str: &str,
-    input_cost_per_m: f64,
-    output_cost_per_m: f64,
-    max_output_tokens: u32,
-    audit_db: Option<&std::path::Path>,
-    json: bool,
-    data_dir: &std::path::Path,
-) -> anyhow::Result<()> {
-    use anyhow::Context;
-    use zp_audit::chain::UnsealedEntry;
-    use zp_audit::AuditStore;
-    use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
-    use zp_receipt::{ClaimMetadata, ClaimSemantics, ReceiptBuilder, ReceiptType, SchemaFormat, Signer, Status};
-
-    let schema_format = match schema_format_str.to_lowercase().as_str() {
-        "gemini" => SchemaFormat::Gemini,
-        "other" => SchemaFormat::Other,
-        _ => SchemaFormat::OpenAi,
-    };
-
-    let keyring = crate::commands::open_keyring().context("Failed to open keyring")?;
-    let secret = crate::commands::load_operator_composed(&keyring)
-        .context("No operator key available — run `zp init` first")?
-        .secret_key();
-    let signer = Signer::from_secret(&secret);
-
-    let mut receipt = ReceiptBuilder::new(ReceiptType::ModelRegistered, "zp-model")
-        .status(Status::Success)
-        .claim_semantics(ClaimSemantics::AuthorshipProof)
-        .claim_metadata(ClaimMetadata::ModelRegistered {
-            model_id: model_id.to_string(),
-            provider: provider.to_string(),
-            provider_url: provider_url.to_string(),
-            context_window,
-            supports_tools,
-            schema_format,
-            input_cost_per_m_usd: input_cost_per_m,
-            output_cost_per_m_usd: output_cost_per_m,
-            max_output_tokens,
-        })
-        .finalize();
-    signer.sign(&mut receipt);
-    let receipt_id = receipt.id.clone();
-
-    let db_path = audit_db
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| data_dir.join("audit.db"));
-    let genesis_secret = crate::commands::load_genesis_secret_composed()
-        .context("Failed to load Genesis secret for audit signer")?;
-    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
-    let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
-    let mut store = AuditStore::open_signed(&db_path, audit_signer)
-        .context("Failed to open audit store")?;
-    let entry = UnsealedEntry::new(
-        ActorId::System("zp-model".to_string()),
-        AuditAction::SystemEvent {
-            event: "model:registered".to_string(),
-        },
-        ConversationId::new(),
-        PolicyDecision::Allow { conditions: vec![] },
-        "zp-model",
-    )
-    .with_receipt(receipt);
-    store.append(entry).context("Failed to append to chain")?;
-
-    if json {
-        println!(
-            "{}",
-            serde_json::json!({
-                "receipt_id": receipt_id,
-                "model_id": model_id,
-                "provider": provider,
-                "schema_format": schema_format_str,
-            })
-        );
-    } else {
-        println!("\x1b[32m✓\x1b[0m Model registered: \x1b[1m{model_id}\x1b[0m");
-        println!("  Provider:       {provider}");
-        println!("  Endpoint:       {provider_url}");
-        println!("  Context window: {} tokens", context_window);
-        println!("  Tool support:   {supports_tools}");
-        println!("  Schema format:  {schema_format_str}");
-        println!("  Pricing:        ${input_cost_per_m}/M in · ${output_cost_per_m}/M out");
-        println!("  Max output:     {} tokens", max_output_tokens);
-        println!("  Receipt:        {receipt_id}");
-    }
-
-    Ok(())
-}
-
-async fn run_model_list(
-    audit_db: Option<&std::path::Path>,
-    json: bool,
-    data_dir: &std::path::Path,
-) -> anyhow::Result<()> {
-    use anyhow::Context;
-    use std::collections::HashMap;
-    use zp_audit::AuditStore;
-    use zp_receipt::{ClaimMetadata, ReceiptType};
-
-    let db_path = audit_db
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| data_dir.join("audit.db"));
-
-    if !db_path.exists() {
-        if json {
-            println!("[]");
-        } else {
-            eprintln!("No audit chain found. Run `zp model register` to add models.");
-        }
-        return Ok(());
-    }
-
-    let store = AuditStore::open_readonly(&db_path).context("Failed to open audit store")?;
-    let entries = store.export_chain(100_000).context("Failed to read chain")?;
-
-    // Collect the latest model:registered receipt per model_id
-    let mut models: HashMap<String, serde_json::Value> = HashMap::new();
-
-    for entry in &entries {
-        let Some(receipt) = entry.receipt.as_ref() else { continue };
-        let Some(meta) = receipt.claim_metadata.as_ref() else { continue };
-
-        match (receipt.receipt_type, meta) {
-            (ReceiptType::ModelRegistered, ClaimMetadata::ModelRegistered {
-                model_id, provider, provider_url, context_window,
-                supports_tools, schema_format, input_cost_per_m_usd,
-                output_cost_per_m_usd, max_output_tokens,
-            }) => {
-                models.insert(model_id.clone(), serde_json::json!({
-                    "model_id": model_id,
-                    "provider": provider,
-                    "provider_url": provider_url,
-                    "context_window": context_window,
-                    "supports_tools": supports_tools,
-                    "schema_format": schema_format,
-                    "input_cost_per_m_usd": input_cost_per_m_usd,
-                    "output_cost_per_m_usd": output_cost_per_m_usd,
-                    "max_output_tokens": max_output_tokens,
-                    "receipt_id": receipt.id,
-                }));
-            }
-            (ReceiptType::ModelCapabilityUpdated, ClaimMetadata::ModelCapabilityUpdated {
-                model_id, field_updated, new_value, ..
-            }) => {
-                if let Some(entry) = models.get_mut(model_id) {
-                    // Patch the registered entry in-place so `list` always shows current state
-                    if let Some(obj) = entry.as_object_mut() {
-                        obj.insert(field_updated.clone(), new_value.clone());
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    if json {
-        let list: Vec<_> = models.values().collect();
-        println!("{}", serde_json::to_string_pretty(&list)?);
-    } else if models.is_empty() {
-        println!("No models registered. Run `zp model register` to add one.");
-    } else {
-        println!("\x1b[1mRegistered models ({}):\x1b[0m\n", models.len());
-        let mut sorted: Vec<_> = models.values().collect();
-        sorted.sort_by(|a, b| {
-            a["model_id"].as_str().unwrap_or("").cmp(b["model_id"].as_str().unwrap_or(""))
-        });
-        for m in sorted {
-            println!("  \x1b[1m{}\x1b[0m", m["model_id"].as_str().unwrap_or("?"));
-            println!("    Provider:  {} · {}", m["provider"].as_str().unwrap_or("?"), m["provider_url"].as_str().unwrap_or("?"));
-            println!("    Context:   {} tokens  max_out: {}", m["context_window"], m["max_output_tokens"]);
-            println!("    Tools:     {}  schema: {}", m["supports_tools"], m["schema_format"]);
-            println!("    Pricing:   ${}/M in · ${}/M out",
-                m["input_cost_per_m_usd"], m["output_cost_per_m_usd"]);
-            println!();
-        }
-    }
-
-    Ok(())
-}
-
-async fn run_model_update(
-    model_id: &str,
-    field: &str,
-    value_str: &str,
-    reason: &str,
-    audit_db: Option<&std::path::Path>,
-    json: bool,
-    data_dir: &std::path::Path,
-) -> anyhow::Result<()> {
-    use anyhow::Context;
-    use zp_audit::chain::UnsealedEntry;
-    use zp_audit::AuditStore;
-    use zp_core::{ActorId, AuditAction, ConversationId, PolicyDecision};
-    use zp_receipt::{ClaimMetadata, ClaimSemantics, ReceiptBuilder, ReceiptType, Signer, Status};
-
-    let new_value: serde_json::Value =
-        serde_json::from_str(value_str).context("--value must be valid JSON")?;
-
-    let keyring = crate::commands::open_keyring().context("Failed to open keyring")?;
-    let secret = crate::commands::load_operator_composed(&keyring)
-        .context("No operator key available — run `zp init` first")?
-        .secret_key();
-    let signer = Signer::from_secret(&secret);
-
-    let mut receipt = ReceiptBuilder::new(ReceiptType::ModelCapabilityUpdated, "zp-model")
-        .status(Status::Success)
-        .claim_semantics(ClaimSemantics::AuthorshipProof)
-        .claim_metadata(ClaimMetadata::ModelCapabilityUpdated {
-            model_id: model_id.to_string(),
-            field_updated: field.to_string(),
-            new_value: new_value.clone(),
-            reason: reason.to_string(),
-        })
-        .finalize();
-    signer.sign(&mut receipt);
-    let receipt_id = receipt.id.clone();
-
-    let db_path = audit_db
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| data_dir.join("audit.db"));
-    let genesis_secret = crate::commands::load_genesis_secret_composed()
-        .context("Failed to load Genesis secret for audit signer")?;
-    let audit_seed = zp_keys::derive_audit_signer_seed(&genesis_secret);
-    let audit_signer = zp_audit::AuditSigner::from_seed(&audit_seed);
-    let mut store = AuditStore::open_signed(&db_path, audit_signer)
-        .context("Failed to open audit store")?;
-    let entry = UnsealedEntry::new(
-        ActorId::System("zp-model".to_string()),
-        AuditAction::SystemEvent {
-            event: "model:capability:updated".to_string(),
-        },
-        ConversationId::new(),
-        PolicyDecision::Allow { conditions: vec![] },
-        "zp-model",
-    )
-    .with_receipt(receipt);
-    store.append(entry).context("Failed to append to chain")?;
-
-    if json {
-        println!(
-            "{}",
-            serde_json::json!({
-                "receipt_id": receipt_id,
-                "model_id": model_id,
-                "field_updated": field,
-                "new_value": new_value,
-                "reason": reason,
-            })
-        );
-    } else {
-        println!("\x1b[32m✓\x1b[0m Model updated: \x1b[1m{model_id}\x1b[0m");
-        println!("  Field:   {field}");
-        println!("  Value:   {new_value}");
-        println!("  Reason:  {reason}");
-        println!("  Receipt: {receipt_id}");
-    }
-
-    Ok(())
 }

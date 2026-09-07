@@ -234,6 +234,8 @@ The diagnostic order is: (1) check prompt structure — is the instruction isola
 
 Before a model enters the validation gate, it must be characterized. A **model dossier** (`models/{family}/model_dossier.toml`) is the substrate's structured assessment of a model family — combining researched knowledge (published quirks, architecture notes, community findings) with empirical measurements (bench results, prompt compatibility testing).
 
+> **Canonical spec:** the dossier's schema, lifecycle, adversarial-profiling probes, think-suppression profiling, drafter sub-record, and receipt discipline are all specified in `docs/design/MODEL-DOSSIER-2026-07.md`. This section is a Phase-5 consumer view — how the empirical program reads and refreshes dossiers — not the dossier definition itself.
+
 The dossier serves three roles:
 
 1. **Characterization input.** The Regent reads the dossier to know *what to test for* during validation. A model with a known context-dump quirk gets tested for context dumps; a model with a known thinking-mode interaction gets tested with thinking on and off. The validation battery is dossier-informed, not generic. The think suppression profile — which of `think: false`, `think` omitted, or `/no_think` token actually suppresses chain-of-thought for a given variant — is itself a characterization dimension. Different variants of the same model family (e.g., qwen3:8b vs qwen3:1.7b) may respond to different suppression mechanisms. The evaluation battery probes all three and records which ones are effective, so the inference layer can use the right mechanism per variant rather than assuming one approach works for all.
@@ -244,7 +246,7 @@ The dossier serves three roles:
 
 The dossier is code — reviewed, versioned, checked into the repo alongside the model's prompt variants. The chain records which dossier version was active when validation passed. Together: dossier captures knowledge, bench captures measurement, chain captures operational truth.
 
-See `models/README.md` for the lifecycle and `models/qwen3/model_dossier.toml` for the canonical schema.
+See `docs/design/MODEL-DOSSIER-2026-07.md` for the canonical schema and lifecycle; see `models/README.md` for operational conventions and `models/qwen3/model_dossier.toml` for a live example.
 
 ##### Emission-coherence characterization (amended 2026-07-18)
 
@@ -334,7 +336,7 @@ Operator requests evaluate against the same limbs with different terminals:
 
 *Worked example, 2026-07-25.* The operator said "Please call me Kenrom." `CorrectionType::Preference` exists and is rendered into Tier 1 context every cycle; standing corrections are operator-issued, so the Regent holds no authority to write one. That is case 2. The correct output is a drafted `cognitive:correction:standing` of type Preference awaiting signature, honoured for the session and marked unsigned. The observed output was a byte-identical repeat of the previous turn's persona recitation — which this procedure's absence permitted.
 
-**Composition with §III.27.** A standing correction the Regent proposes about operator preference is Class 2 self-affecting material under `ZEP-self-referential-authorship-2026-07.md`: it enters her own cognitive context, so it decays unless adopted, and adoption retains her attribution and continues counting toward the self-authorship ratio. No separate mechanism is required — the proposal pattern is the same one that axiom already specifies.
+**Composition with §III.27.** A standing correction the Regent proposes about operator preference is Class 2 self-affecting material under `docs/handoffs/ZEP-self-referential-authorship-2026-07.md`: it enters her own cognitive context, so it decays unless adopted, and adoption retains her attribution and continues counting toward the self-authorship ratio. No separate mechanism is required — the proposal pattern is the same one that axiom already specifies.
 
 #### Remediation Receipt Schema
 

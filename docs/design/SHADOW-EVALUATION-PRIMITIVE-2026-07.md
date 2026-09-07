@@ -22,13 +22,16 @@ Each substrate policy surface where shadow evaluation applies naturally. Shadow-
 
 ### Context 1 — Inference paths (specialized in SHADOW-INFERENCE-COMPARISON)
 
-Candidate: novel model, drift-suspected model, alternate model in envelope, judge model.
-Control: operator's pinned model, dossiered high-confidence model, prior known-good snapshot.
+Candidate: novel model, drift-suspected model, alternate model in envelope, judge model, **or `(base, drafter)` pair** — per MODEL-DOSSIER-2026-07's characterization equivalence, a drafter is a serialization of the dossier, so shadow evaluation of inference paths extends naturally to shadow evaluation of `(base_model, drafter)` pairs.
+Control: operator's pinned model, dossiered high-confidence model, prior known-good snapshot, or the current-active `(base, drafter)` pair.
 Input: the operator's or Regent's actual query.
-Evidence: response comparison at graduated levels (structural / embedding / judge / operator).
-Consumer: INFERENCE-ROUTING-DISCIPLINE, EXECUTION-AUTHORITY-MODEL Phase 5 empirical program.
+Evidence: response comparison at graduated levels (structural / embedding / judge / operator). When the candidate is a `(base, drafter)` pair, additional evidence: acceptance-rate delta, byte-identical parity check (verify the accelerated path emits exactly what the un-accelerated path emits on the same seed), latency delta.
+Consumer: INFERENCE-ROUTING-DISCIPLINE, MODEL-DOSSIER-2026-07 (drafter adoption / deprecation ceremony), EXECUTION-AUTHORITY-MODEL Phase 5 empirical program.
 
-Fully specified in SHADOW-INFERENCE-COMPARISON.
+Fully specified in SHADOW-INFERENCE-COMPARISON. Two shadow scenarios newly enabled by the `(base, drafter)` unit extension:
+
+- **Drafter-only drift shadow**: same base, current drafter vs candidate replacement drafter. Isolates drafter fitness from base-model drift. Necessary when re-training a drafter after a base minor-version bump.
+- **Acceleration ablation shadow**: same base, drafter-active vs drafter-inactive. Establishes the byte-identical parity claim empirically on the substrate's actual workloads at drafter adoption time (required for drafter promotion to `active` state per MODEL-DOSSIER's bootstrap ceremony) and periodically thereafter.
 
 ### Context 2 — Officer thresholds and configurations
 

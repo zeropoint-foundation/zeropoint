@@ -18,8 +18,8 @@
 //! right now?" — not "how does this model compare across all dimensions?"
 //! Full model evaluation is `model_evaluate`'s job.
 
-use std::time::Instant;
 use serde::{Deserialize, Serialize};
+use std::time::Instant;
 use tracing::info;
 
 use crate::inference::{ChatMessage, InferenceBackend, InferenceRequest};
@@ -199,11 +199,21 @@ pub async fn run_battery(
             .all(|r| r.passed),
         EvaluationTier::Tier2 => results
             .iter()
-            .filter(|r| matches!(r.check.as_str(), "prompt_structural" | "json_intent" | "tool_dispatch"))
+            .filter(|r| {
+                matches!(
+                    r.check.as_str(),
+                    "prompt_structural" | "json_intent" | "tool_dispatch"
+                )
+            })
             .all(|r| r.passed),
         EvaluationTier::Tier3 => results
             .iter()
-            .filter(|r| matches!(r.check.as_str(), "prompt_structural" | "json_intent" | "tool_dispatch"))
+            .filter(|r| {
+                matches!(
+                    r.check.as_str(),
+                    "prompt_structural" | "json_intent" | "tool_dispatch"
+                )
+            })
             .all(|r| r.passed),
     };
 
@@ -255,10 +265,7 @@ pub async fn run_battery(
 /// - Does the model attempt to parse intent as JSON?
 /// - Does the response avoid context dumps?
 /// - Does the model reference tools available in the prompt?
-async fn check_prompt_structural(
-    backend: &InferenceBackend,
-    candidate: &str,
-) -> ShadowCheckResult {
+async fn check_prompt_structural(backend: &InferenceBackend, candidate: &str) -> ShadowCheckResult {
     let start = Instant::now();
 
     let request = InferenceRequest {
@@ -309,7 +316,7 @@ async fn check_prompt_structural(
             response.len()
         )
     } else {
-        let preview = &response[..response.len().min(120)];
+        let preview = crate::text::preview(&response, 120);
         format!("not valid JSON intent: {}...", preview)
     };
 
@@ -326,10 +333,7 @@ async fn check_prompt_structural(
 /// The critical check — can `parse_intent` actually handle this model's
 /// output? Sends a simple conversational prompt and verifies the response
 /// parses into a valid Intent (not just falls through to Respond).
-async fn check_json_intent(
-    backend: &InferenceBackend,
-    candidate: &str,
-) -> ShadowCheckResult {
+async fn check_json_intent(backend: &InferenceBackend, candidate: &str) -> ShadowCheckResult {
     let start = Instant::now();
 
     let request = InferenceRequest {
@@ -376,20 +380,25 @@ async fn check_json_intent(
             let trimmed = crate::regent::strip_markdown_fences(&response);
             let was_parsed = serde_json::from_str::<serde_json::Value>(trimmed).is_ok();
             if was_parsed {
-                (true, format!("valid JSON → Intent::Respond ({}B)", content.len()))
+                (
+                    true,
+                    format!("valid JSON → Intent::Respond ({}B)", content.len()),
+                )
             } else {
-                (false, format!("fallthrough to raw Respond — model did not produce JSON"))
+                (
+                    false,
+                    "fallthrough to raw Respond — model did not produce JSON".to_string(),
+                )
             }
         }
         Ok(Intent::Execute { tool, .. }) => {
             (true, format!("valid JSON → Intent::Execute({})", tool))
         }
-        Ok(other) => {
-            (true, format!("valid JSON → Intent::{:?}", std::mem::discriminant(other)))
-        }
-        Err(e) => {
-            (false, format!("parse_intent error: {}", e))
-        }
+        Ok(other) => (
+            true,
+            format!("valid JSON → Intent::{:?}", std::mem::discriminant(other)),
+        ),
+        Err(e) => (false, format!("parse_intent error: {}", e)),
     };
 
     ShadowCheckResult {
@@ -404,10 +413,7 @@ async fn check_json_intent(
 ///
 /// Sends a prompt that should trigger a tool call and verifies the model
 /// emits an Execute intent with a valid tool name.
-async fn check_tool_dispatch(
-    backend: &InferenceBackend,
-    candidate: &str,
-) -> ShadowCheckResult {
+async fn check_tool_dispatch(backend: &InferenceBackend, candidate: &str) -> ShadowCheckResult {
     let start = Instant::now();
 
     let request = InferenceRequest {
@@ -455,7 +461,13 @@ async fn check_tool_dispatch(
             } else {
                 // Unknown tool name — the model understood the shape but
                 // hallucinated the tool. Partial pass.
-                (true, format!("dispatched unknown tool '{}' — shape correct, name hallucinated", tool))
+                (
+                    true,
+                    format!(
+                        "dispatched unknown tool '{}' — shape correct, name hallucinated",
+                        tool
+                    ),
+                )
             }
         }
         Ok(Intent::Respond { content, .. }) => {
@@ -464,11 +476,14 @@ async fn check_tool_dispatch(
             let mentions_tool = content.contains("chain_query")
                 || content.contains("audit chain")
                 || content.contains("chain");
-            (false, format!(
-                "responded instead of dispatching (mentions_tool={}): {}...",
-                mentions_tool,
-                &content[..content.len().min(80)]
-            ))
+            (
+                false,
+                format!(
+                    "responded instead of dispatching (mentions_tool={}): {}...",
+                    mentions_tool,
+                    crate::text::preview(content, 80)
+                ),
+            )
         }
         Ok(_) => (false, "unexpected intent type".to_string()),
         Err(e) => (false, format!("parse_intent error: {}", e)),
@@ -487,10 +502,7 @@ async fn check_tool_dispatch(
 /// The specific check that GLM-5.2 failed — asks "what model are you
 /// running on?" and verifies the model dispatches self_configure rather
 /// than responding "I don't know."
-async fn check_self_configure(
-    backend: &InferenceBackend,
-    candidate: &str,
-) -> ShadowCheckResult {
+async fn check_self_configure(backend: &InferenceBackend, candidate: &str) -> ShadowCheckResult {
     let start = Instant::now();
 
     let request = InferenceRequest {
@@ -502,7 +514,8 @@ async fn check_self_configure(
             },
             ChatMessage {
                 role: "user".to_string(),
-                content: "What model are you running on? Report your inference configuration.".to_string(),
+                content: "What model are you running on? Report your inference configuration."
+                    .to_string(),
             },
         ],
         format: None,
@@ -527,23 +540,30 @@ async fn check_self_configure(
 
     let intent = parse_intent(&response);
     let (passed, detail) = match &intent {
-        Ok(Intent::Execute { tool, .. }) if tool == "self_configure" => {
-            (true, "dispatched self_configure — model knows how to introspect".to_string())
-        }
+        Ok(Intent::Execute { tool, .. }) if tool == "self_configure" => (
+            true,
+            "dispatched self_configure — model knows how to introspect".to_string(),
+        ),
         Ok(Intent::Execute { tool, .. }) => {
             // Dispatched a tool, just not self_configure. Partial credit.
-            (false, format!("dispatched '{}' instead of self_configure", tool))
+            (
+                false,
+                format!("dispatched '{}' instead of self_configure", tool),
+            )
         }
         Ok(Intent::Respond { content, .. }) => {
             // Check if the model at least tried to answer about its config.
             let knows_something = content.contains("model")
                 || content.contains("inference")
                 || content.contains("configuration");
-            (false, format!(
-                "responded instead of dispatching self_configure (knows_something={}): {}...",
-                knows_something,
-                &content[..content.len().min(80)]
-            ))
+            (
+                false,
+                format!(
+                    "responded instead of dispatching self_configure (knows_something={}): {}...",
+                    knows_something,
+                    crate::text::preview(content, 80)
+                ),
+            )
         }
         Ok(_) => (false, "unexpected intent type".to_string()),
         Err(e) => (false, format!("parse_intent error: {}", e)),
@@ -570,14 +590,19 @@ mod tests {
         );
         assert_eq!(
             EvaluationTier::Tier3.checks(),
-            &["prompt_structural", "json_intent", "tool_dispatch", "self_configure"]
+            &[
+                "prompt_structural",
+                "json_intent",
+                "tool_dispatch",
+                "self_configure"
+            ]
         );
     }
 
     #[test]
     fn tier3_pass_criteria_ignores_self_configure() {
         // Tier 3 requires checks 2, 3, 4 to pass. Check 5 is informational.
-        let results = vec![
+        let results = [
             ShadowCheckResult {
                 check: "prompt_structural".to_string(),
                 passed: true,
@@ -615,6 +640,9 @@ mod tests {
             })
             .all(|r| r.passed);
 
-        assert!(passed, "Tier 3 should pass when checks 2-4 pass, even if check 5 fails");
+        assert!(
+            passed,
+            "Tier 3 should pass when checks 2-4 pass, even if check 5 fails"
+        );
     }
 }

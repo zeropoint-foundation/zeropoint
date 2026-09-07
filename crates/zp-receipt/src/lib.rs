@@ -43,9 +43,9 @@ pub mod signable;
 mod types;
 mod validation;
 // Verify needs ed25519-dalek, gated behind the `signing` feature.
+mod verifier;
 #[cfg(feature = "signing")]
 pub mod verify;
-mod verifier;
 
 #[cfg(feature = "signing")]
 mod signer;
@@ -62,12 +62,14 @@ mod otel;
 // Re-export everything at crate root
 pub use builder::ReceiptBuilder;
 pub use chain::{ChainError, ReceiptChain, ReceiptChainEntry};
-pub use epoch::{compute_merkle_root, Direction, Epoch, EpochCompactor, EpochError, MerkleProof, ProofStep};
+pub use epoch::{
+    compute_merkle_root, Direction, Epoch, EpochCompactor, EpochError, MerkleProof, ProofStep,
+};
 pub use hasher::canonical_hash;
+pub use revocation::RevocationIndex;
 pub use signable::{signable_from_serialize, Signable};
 pub use types::*;
-pub use validation::{validate_receipt_type, ValidationError, TypeRules, rules_for};
-pub use revocation::RevocationIndex;
+pub use validation::{rules_for, validate_receipt_type, TypeRules, ValidationError};
 pub use verifier::{ReceiptVerifier, VerificationError, VerificationResult};
 #[cfg(feature = "signing")]
 pub use verify::{verify_signature, verify_signed, VerifyError};

@@ -57,7 +57,6 @@ pub enum LeaseFailureMode {
     ContinueWithFlag,
 }
 
-
 impl LeasePolicy {
     /// Construct a sensible default lease: 8h duration, 30min grace,
     /// 2h renewal interval, halt on expiry, 3 failures before grace.

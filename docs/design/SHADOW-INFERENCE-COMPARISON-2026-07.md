@@ -2,7 +2,7 @@
 
 **Tier 2 canonical elaboration.** Elaborates `KEEL-2026-07.md` §II.5 (Genesis-derived signing), §II.17 (cognitive discipline sandwich), §III.19 (detectability over invulnerability), §III.20 (forward-only recovery), §III.22 (verify before commit), Part VIII (bounded operator sovereignty). Specifies the substrate's shadow-inference comparison primitive — parallel inference against a control target with chain-anchored comparison of results. Generalized from novel-model backup into a substrate primitive consumed by multiple use cases. Canonical claims live in KEEL.
 
-Draft — 2026-07-11 — internal audience only. Composes with `INFERENCE-ROUTING-DISCIPLINE-2026-07.md` (novel-model triggers shadow evaluation), `EXECUTION-AUTHORITY-MODEL-2026-07.md` (model dossiers, empirical program sampling), `REPRODUCIBILITY-CEREMONY-2026-07.md` (comparative verification of same query across peers), `CIRCUIT-BREAKER-2026-07.md` (drift-triggered recovery verification), `COGNITIVE-SELF-OBSERVER-2026-07.md` (comparison as verification input), `QUARANTINE-PLANE-2026-07.md` (shadow comparison contributes to admission evidence).
+Draft — 2026-07-11 — internal audience only. Composes with `INFERENCE-ROUTING-DISCIPLINE-2026-07.md` (novel-model triggers shadow evaluation), `MODEL-DOSSIER-2026-07.md` (dossier evidence is the ground truth against which candidates are compared; shadow-eval outcomes feed dossier suitability fields; the shadow-evaluated unit extends to `(base, drafter)` pairs per that spec), `EXECUTION-AUTHORITY-MODEL-2026-07.md` (Phase 5 empirical program consumes shadow comparisons), `REPRODUCIBILITY-CEREMONY-2026-07.md` (comparative verification of same query across peers), `CIRCUIT-BREAKER-2026-07.md` (drift-triggered recovery verification), `COGNITIVE-SELF-OBSERVER-2026-07.md` (comparison as verification input), `QUARANTINE-PLANE-2026-07.md` (shadow comparison contributes to admission evidence).
 
 ## Framing
 
@@ -26,7 +26,7 @@ Under INFERENCE-ROUTING-DISCIPLINE Phase 1, response's served-model has no dossi
 
 ### Trigger 2 — Dossier drift suspected
 
-Cognitive Self-Observer flags a response's behavioral pattern as inconsistent with the served model's dossier (per EXECUTION-AUTHORITY-MODEL Phase 5). Shadow inference dispatches the same query to a snapshot-defined known-good target (either the same model at a prior version, or a family-adjacent model). Purpose: distinguish "provider drifted the model behind stable name" from "this specific query happens to be at the edge of the dossier."
+Cognitive Self-Observer flags a response's behavioral pattern as inconsistent with the served model's dossier (per MODEL-DOSSIER-2026-07). Shadow inference dispatches the same query to a snapshot-defined known-good target (either the same model at a prior version, or a family-adjacent model). Purpose: distinguish "provider drifted the model behind stable name" from "this specific query happens to be at the edge of the dossier."
 
 ### Trigger 3 — High-stakes operator flag
 
@@ -34,7 +34,7 @@ Operator flags a query as high-stakes at query time (via UI signal, verb modifie
 
 ### Trigger 4 — Empirical program sampling
 
-The substrate's empirical program (per EXECUTION-AUTHORITY-MODEL) samples a fraction of production queries for comparative evaluation. Shadow inference dispatches to peer models in the operator's dossier and records the comparison for systematic model-behavior calibration. Purpose: continuous empirical data collection informing model dossiers over time.
+The substrate's empirical program (per EXECUTION-AUTHORITY-MODEL Phase 5, consuming MODEL-DOSSIER evidence) samples a fraction of production queries for comparative evaluation. Shadow inference dispatches to peer models in the operator's dossier and records the comparison for systematic model-behavior calibration. Purpose: continuous empirical data collection informing model dossiers over time.
 
 ### Trigger 5 — Recovery-mode verification
 

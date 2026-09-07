@@ -257,7 +257,7 @@ fn tokenize_argv(segment: &str) -> Result<Vec<String>, ShellParseError> {
 
     while chars.peek().is_some() {
         // Skip whitespace
-        while chars.peek().map_or(false, |c| c.is_whitespace()) {
+        while chars.peek().is_some_and(|c| c.is_whitespace()) {
             chars.next();
         }
 
@@ -419,11 +419,11 @@ fn read_token(chars: &mut std::iter::Peekable<std::str::Chars>) -> Result<String
         }
 
         // If we have a complete token and didn't just read a quote, check for termination
-        if !token.is_empty() && !matches!(token.chars().next(), Some(ch) if ch == '\'' || ch == '"')
+        if !token.is_empty()
+            && !matches!(token.chars().next(), Some(ch) if ch == '\'' || ch == '"')
+            && chars.peek().is_some_and(|c| c.is_whitespace())
         {
-            if chars.peek().map_or(false, |c| c.is_whitespace()) {
-                break;
-            }
+            break;
         }
     }
 

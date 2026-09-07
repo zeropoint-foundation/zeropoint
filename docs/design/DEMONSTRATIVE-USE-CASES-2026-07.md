@@ -1,6 +1,6 @@
 # Demonstrative Use Cases — Proving Sovereign Usefulness on APOLLO + PI5 (2026-07)
 
-**Design input, not a canonical elaboration.** Defines the concrete jobs the reference implementation must be *useful at*, so the hardware benchmark and the PI5 build have a purpose instead of being infrastructure in search of one. Does not amend KEEL. Composes with `LOCAL-MODEL-SELECTION-2026-07`, `INFERENCE-ROUTING-DISCIPLINE-2026-07`, `AI-LANDSCAPE-SIGNAL-2026-07`, `MULTI-DEVICE-OPERATION-2026-07`, `SUBSTRATE-BLINDNESS-HEURISTICS-2026-07`, and `FIELD-TESTING-DISCIPLINE-2026-07`.
+**Document type:** Design input, not a canonical elaboration. Defines the concrete jobs the reference implementation must be *useful at*, so the hardware benchmark and the PI5 build have a purpose instead of being infrastructure in search of one. Does not amend KEEL. Composes with `LOCAL-MODEL-SELECTION-2026-07`, `INFERENCE-ROUTING-DISCIPLINE-2026-07`, `AI-LANDSCAPE-SIGNAL-2026-07`, `MULTI-DEVICE-OPERATION-2026-07`, `SUBSTRATE-BLINDNESS-HEURISTICS-2026-07`, and `FIELD-TESTING-DISCIPLINE-2026-07`.
 
 ## The point
 

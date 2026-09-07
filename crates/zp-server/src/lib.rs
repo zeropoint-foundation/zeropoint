@@ -6,34 +6,38 @@
 pub mod analysis;
 pub mod anchor_pipeline;
 pub mod artifact_library;
-pub mod canary;
-pub mod coherence;
-pub mod officers;
-pub mod substrate_validate;
 pub mod attestations;
 pub mod auth;
-pub mod envelope_state;
-pub mod foundation_relay;
-pub mod lease_heartbeat;
+pub mod bedrock;
+pub mod canary;
+pub mod cartographer;
 pub mod channels;
 pub mod codebase;
 pub mod cognition;
+pub mod coherence;
+pub mod envelope_state;
 pub mod events;
-pub mod fleet;
-pub mod wasm_policy;
 pub mod exec_ws;
-pub mod internal_auth;
+pub mod fleet;
+pub mod foundation_relay;
 pub mod genesis_verify;
+pub mod internal_auth;
 pub mod launch_inference;
+pub mod lease_heartbeat;
+pub mod officers;
 pub mod onboard;
 pub mod proxy;
+pub mod sensors;
+pub mod regent;
+pub mod regent_tools;
 pub mod security;
+pub mod substrate_validate;
 pub mod tool_chain;
 pub mod tool_launch;
 pub mod tool_ports;
 pub mod tool_proxy;
 pub mod tool_state;
-pub mod regent;
+pub mod wasm_policy;
 
 /// gRPC service handlers — Phase 2b foothold (NodeStatus pilot).
 ///
@@ -43,9 +47,7 @@ pub mod grpc;
 
 use axum::http::HeaderValue;
 use axum::{
-    extract::{
-        Path as AxumPath, Query, State,
-    },
+    extract::{Path as AxumPath, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
@@ -61,15 +63,13 @@ use tower_http::services::ServeDir;
 use tracing::{debug, error, info, warn};
 
 use zp_audit::AuditStore;
+use zp_core::governance::{ActionContext, GovernanceActor, GovernanceDecision, GovernanceEvent};
+use zp_core::paths as zp_paths;
 use zp_core::{
     ActionType as CoreActionType, ActorId, CapabilityGrant, Channel, ConversationId,
     DelegationChain, EventProvenance, GrantProvenance, GrantedCapability, OperatorIdentity,
     PolicyContext, PolicyDecision, TrustTier,
 };
-use zp_core::governance::{
-    ActionContext, GovernanceActor, GovernanceDecision, GovernanceEvent,
-};
-use zp_core::paths as zp_paths;
 use zp_observation::{
     candidate_to_observation, event_to_observation, CognitionPipeline, ObservationConfig,
     ObservationStore,
@@ -88,6 +88,14 @@ pub struct ServerConfig {
     pub home_dir: std::path::PathBuf,
     pub open_dashboard: bool,
     pub llm_enabled: bool,
+    /// Proxy provider segment the pipeline routes completions through.
+    pub llm_provider: String,
+    /// Default-tier model name.
+    pub llm_model: String,
+    /// Escalation-tier model name. Empty disables the tier.
+    pub llm_escalation_model: String,
+    /// Whether the configured models implement the OpenAI tool-call format.
+    pub llm_supports_tools: bool,
     pub operator_name: String,
     /// Optional path to the Bridge UI dist directory.
     /// When set, serves the Bridge at /bridge.
@@ -101,6 +109,10 @@ pub struct ServerConfig {
     pub officers_forge_enabled: bool,
     pub officers_cleo_enabled: bool,
     pub officers_aegis_enabled: bool,
+    /// Enable the Cartographer background task (materializes ontology from
+    /// receipt chain). Per CARTOGRAPHER-IMPLEMENTATION-DESIGN-2026-07.md P3.
+    /// Defaults to false — opt-in until empirical validation completes.
+    pub cartographer_enabled: bool,
     /// External processes the operator acknowledges as expected listeners.
     pub acknowledged_listeners: Vec<zp_config::AcknowledgedListener>,
     // ── Regent ──
@@ -120,8 +132,7 @@ impl Default for ServerConfig {
             .and_then(|p| p.parse().ok())
             .unwrap_or(3000);
         let bind = std::env::var("ZP_BIND").unwrap_or_else(|_| "127.0.0.1".to_string());
-        let home = zp_paths::home()
-            .unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let home = zp_paths::home().unwrap_or_else(|_| std::path::PathBuf::from("."));
 
         Self {
             bind_addr: bind,
@@ -131,6 +142,17 @@ impl Default for ServerConfig {
             home_dir: home,
             open_dashboard: true,
             llm_enabled: std::env::var("ZP_LLM_ENABLED").unwrap_or_default() == "true",
+            // Defaults mirror zp_config::ZpConfig so this env-only path and the
+            // resolved-config path agree. See officer-inference.toml for why
+            // these two tags.
+            llm_provider: std::env::var("ZP_LLM_PROVIDER").unwrap_or_else(|_| "ollama".to_string()),
+            llm_model: std::env::var("ZP_LLM_MODEL")
+                .unwrap_or_else(|_| "gemma4:26b-mlx".to_string()),
+            llm_escalation_model: std::env::var("ZP_LLM_ESCALATION_MODEL")
+                .unwrap_or_else(|_| "qwen3.6:35b-a3b".to_string()),
+            llm_supports_tools: std::env::var("ZP_LLM_SUPPORTS_TOOLS")
+                .map(|v| v == "true" || v == "1")
+                .unwrap_or(true),
             operator_name: std::env::var("ZP_OPERATOR_NAME")
                 .unwrap_or_else(|_| "ZeroPoint".to_string()),
             bridge_dir: std::env::var("ZP_BRIDGE_DIR")
@@ -143,12 +165,15 @@ impl Default for ServerConfig {
             officers_forge_enabled: true,
             officers_cleo_enabled: true,
             officers_aegis_enabled: true,
+            cartographer_enabled: false,
             acknowledged_listeners: Vec::new(),
             regent_enabled: false,
-            regent_inference_endpoint: "http://127.0.0.1:11434".to_string(),
+            regent_inference_endpoint: zp_config::REGENT_INFERENCE_ENDPOINT_SENTINEL.to_string(),
             regent_inference_api_key: None,
-            regent_reasoning_model: "qwen3:8b".to_string(),
-            regent_routing_model: "qwen3:1.7b".to_string(),
+            regent_reasoning_model: std::env::var("ZP_REGENT_REASONING_MODEL")
+                .unwrap_or_else(|_| "qwen3:8b".to_string()),
+            regent_routing_model: std::env::var("ZP_REGENT_ROUTING_MODEL")
+                .unwrap_or_else(|_| "qwen3:1.7b".to_string()),
             regent_loop_interval_secs: 60,
             regent_display_name: "Regent".to_string(),
         }
@@ -165,6 +190,10 @@ impl ServerConfig {
             home_dir: cfg.home_dir.value.clone(),
             open_dashboard: cfg.open_dashboard.value,
             llm_enabled: cfg.llm_enabled.value,
+            llm_provider: cfg.llm_provider.value.clone(),
+            llm_model: cfg.llm_model.value.clone(),
+            llm_escalation_model: cfg.llm_escalation_model.value.clone(),
+            llm_supports_tools: cfg.llm_supports_tools.value,
             operator_name: cfg.operator_name.value.clone(),
             bridge_dir: std::env::var("ZP_BRIDGE_DIR")
                 .ok()
@@ -176,6 +205,13 @@ impl ServerConfig {
             officers_forge_enabled: cfg.officers_forge_enabled.value,
             officers_cleo_enabled: cfg.officers_cleo_enabled.value,
             officers_aegis_enabled: cfg.officers_aegis_enabled.value,
+            // P3.2 follow-up: add cartographer_enabled to ZpConfig proper.
+            // For now, default false — opt-in via env var or programmatic
+            // ServerConfig construction.
+            cartographer_enabled: std::env::var("ZP_CARTOGRAPHER_ENABLED")
+                .ok()
+                .map(|v| matches!(v.as_str(), "1" | "true" | "yes"))
+                .unwrap_or(false),
             acknowledged_listeners: cfg.acknowledged_listeners.value.clone(),
             regent_enabled: cfg.regent_enabled.value,
             regent_inference_endpoint: cfg.regent_inference_endpoint.value.clone(),
@@ -337,7 +373,7 @@ fn load_genesis_secret_from_provider(
     genesis_record_path: &std::path::Path,
 ) -> Result<[u8; 32], String> {
     zp_keys::load_sovereign_root(genesis_record_path)
-        .map(|s| *s)
+        .copied()
         .map_err(|e| format!("{}", e))
 }
 
@@ -516,7 +552,8 @@ pub struct AppStateInner {
     pub sensor_handle: zp_sensors::SensorLayerHandle,
     /// Sensor event receiver — taken once by `spawn_sensor_forge_task`.
     /// `None` after first take; wrapped in Mutex for interior mutability.
-    pub sensor_event_rx: std::sync::Mutex<Option<tokio::sync::mpsc::Receiver<zp_sensors::SensorEvent>>>,
+    pub sensor_event_rx:
+        std::sync::Mutex<Option<tokio::sync::mpsc::Receiver<zp_sensors::SensorEvent>>>,
     /// MLE STAR + Monte Carlo analysis engines fed by receipt chain data.
     pub analysis: analysis::AnalysisEngines,
     /// Server port — needed by proxy for subdomain URL generation.
@@ -531,6 +568,19 @@ pub struct AppStateInner {
     /// header to 401 when the verifier is absent — IronClaw should never
     /// reach the gate before Genesis exists.
     pub envelope_verifier: Option<Arc<envelope_state::EnvelopeVerifier>>,
+    /// Signer for outbound requests this server makes to its own gate
+    /// (`Authorization: ZP-Sig …`).
+    ///
+    /// Derived in `init` from the same `derive_gate_signer_seed` call as
+    /// `envelope_verifier`'s `expected_kid`, so the key this process signs
+    /// with and the key it verifies against cannot drift. Held on state
+    /// because subsystems spawned after `init` — the provider pool, and the
+    /// Regent as of W5 3b — each need it, and a second derivation would be a
+    /// second source of truth for one key.
+    ///
+    /// `Some` once Genesis is established; `None` during the pre-Genesis
+    /// onboarding window, where there is no sovereign root to sign with.
+    pub gate_signer: Option<Arc<dyn zp_core::provider::RequestSigner>>,
     /// Per-IP failed-auth rate limiter (AUTH-VULN-04 mitigation).
     pub rate_limiter: Arc<auth::FailedAuthLimiter>,
     /// Per-endpoint rate limiter (Phase 1.7: AUTH-VULN-04 hardening).
@@ -570,7 +620,8 @@ pub struct AppStateInner {
     pub promotion_engine: Arc<std::sync::Mutex<zp_memory::PromotionEngine>>,
     /// Memory entries (in-memory store for the memory lifecycle).
     /// Maps memory_id → MemoryEntry. Populated by the promotion engine.
-    pub memory_store: Arc<std::sync::Mutex<std::collections::HashMap<String, zp_memory::MemoryEntry>>>,
+    pub memory_store:
+        Arc<std::sync::Mutex<std::collections::HashMap<String, zp_memory::MemoryEntry>>>,
     /// Downgrade resistance guard (R6-4: monotonic policy version enforcement).
     /// Prevents rollback to a prior, less restrictive policy version.
     /// Checked on every policy load and during reconstitution chain walk.
@@ -586,8 +637,10 @@ pub struct AppStateInner {
     pub policy_distributor: zp_mesh::PolicyDistributor,
     /// Event-driven Merkle anchor pipeline (#176).
     /// Detects significant governance events as they land on the audit chain
-    /// and seals epochs against the configured `TruthAnchor` backend
-    /// (NoOpAnchor by default, HCS when `zp-hedera` is wired in).
+    /// and seals epochs against the configured `TruthAnchor` backend, selected
+    /// by `ZP_ANCHOR`: OpenTimestamps by default, `off` for no anchoring.
+    /// Hedera HCS remains supported but is never the default — it needs a
+    /// funded balance someone must consciously provision.
     pub anchor_pipeline: Arc<anchor_pipeline::AnchorPipeline>,
 
     /// P4 (#197): standing-delegation lease heartbeat state. `Some` only on
@@ -658,10 +711,18 @@ impl AppState {
         // expected_kid (for envelope authentication). Derived once from a
         // single sovereign-root load so the operator sees at most one
         // ceremony (#152: singular sovereign root).
-        let (mut audit_store_inner, envelope_verifier) = if is_genesis {
+        // The gate signer is carried out of this block alongside the verifier
+        // deliberately: both come from one `derive_gate_signer_seed` call on
+        // one sovereign-root load, so the key this server signs with and the
+        // `expected_kid` it verifies against cannot drift. Deriving the signer
+        // anywhere else would be a second source of truth for the same key.
+        // `None` during the Genesis ceremony — there is no secret yet, so
+        // there is no identity to sign with.
+        let (mut audit_store_inner, envelope_verifier, gate_signer) = if is_genesis {
             (
                 AuditStore::open_readonly(&audit_path)
                     .expect("Failed to open audit store (readonly)"),
+                None,
                 None,
             )
         } else {
@@ -693,7 +754,22 @@ impl AppState {
             );
             debug!("ZP-Sig envelope verifier kid (full): {}", kid_hex);
 
-            (store, Some(Arc::new(verifier)))
+            // Same seed, signer side. This server calls its own proxy on
+            // loopback, so it is both signer and verifier of these envelopes;
+            // sharing the derivation makes the match structural rather than
+            // something to keep in sync.
+            let signer = zp_gate_envelope::GateRequestSigner::from_seed(&gate_seed);
+            debug_assert_eq!(
+                signer.kid(),
+                expected_kid,
+                "gate signer and verifier must derive the same key"
+            );
+
+            (
+                store,
+                Some(Arc::new(verifier)),
+                Some(Arc::new(signer) as Arc<dyn zp_core::provider::RequestSigner>),
+            )
         };
 
         // Claim 1: startup chain integrity verification (zp-verify catalog rules).
@@ -761,7 +837,17 @@ impl AppState {
         {
             const AUTO_COMPACT_THRESHOLD: usize = 50_000;
             const AUTO_COMPACT_RETAIN: usize = 10_000;
-            let count = audit_store_inner.entry_count().unwrap_or(0);
+            // `live_entry_count`, not `entry_count`. The latter returns
+            // live + archived, while `compact_chain` computes its cutoff from
+            // the live table alone — so gating on the combined total compares
+            // two different populations. Once anything has been archived the
+            // total can never fall back below the threshold, and compaction
+            // re-fires on every single start, churning the live window down to
+            // the retain target each time. Observed 2026-08-08: 275,675
+            // combined (24,272 live) against a 50,000 threshold, archiving
+            // ~14,000 rows per boot. That churn is what stranded the
+            // Cartographer's cursor below the retained floor.
+            let count = audit_store_inner.live_entry_count().unwrap_or(0);
             if count > AUTO_COMPACT_THRESHOLD {
                 info!(
                     entries = count,
@@ -793,7 +879,10 @@ impl AppState {
                         GovernanceGate::with_policy_engine(&identity.destination_hash, engine)
                     }
                     Err(e) => {
-                        tracing::warn!("WASM policy runtime unavailable: {} — falling back to native-only", e);
+                        tracing::warn!(
+                            "WASM policy runtime unavailable: {} — falling back to native-only",
+                            e
+                        );
                         GovernanceGate::new(&identity.destination_hash)
                     }
                 }
@@ -816,7 +905,249 @@ impl AppState {
                 data_dir: std::path::PathBuf::from(&config.data_dir),
                 mesh: None,
             };
-            Pipeline::new(pipeline_config, audit_store.clone()).ok()
+            let p = Pipeline::new(pipeline_config, audit_store.clone()).ok();
+            // Populate the provider pool. Without this the pipeline exists but
+            // every request fails with NoProvider — the pool is constructed
+            // empty and nothing else fills it.
+            //
+            // Providers route through this server's own proxy on `config.port`,
+            // so completions pick up receipt signing, cost tracking and policy
+            // gating.
+            //
+            // HARNESS-SEAM-2026-08 §4 / S3: this crossing is boot-failing. An
+            // earlier revision logged the error and continued, which let the
+            // server report healthy while holding an empty pool — precisely the
+            // half-state the seam declaration forbids. `llm.enabled = true` is
+            // an operator assertion that inference is configured; if the
+            // crossing fails, that assertion is false and the correct response
+            // is to refuse to start rather than to serve a substrate that
+            // silently cannot think.
+            // Pre-Genesis there is no identity to sign with, so no provider can
+            // be constructed. That is a precondition, not a fault: the ceremony
+            // has not produced a sovereign root yet, so inference is legitimately
+            // unavailable. Health reports `degraded` (pipeline present, zero
+            // providers) and boot continues. Post-Genesis the signer is always
+            // present, so a missing one there would be a broken assertion.
+            let signer = match gate_signer.clone() {
+                Some(s) => Some(s),
+                None => {
+                    tracing::warn!(
+                        "llm.enabled = true during the Genesis ceremony — provider pool \
+                         deferred until a sovereign root exists. Inference is unavailable \
+                         until onboarding completes."
+                    );
+                    None
+                }
+            };
+
+            match (p.as_ref(), signer) {
+                (Some(pipe), Some(signer)) => {
+                    // ── S1 / S2 — model-election sensors ────────────────
+                    //
+                    // HARNESS-SEAM-2026-08 §4, landed under W7. `init_providers`
+                    // below trusts `config.llm_provider` / `config.llm_model`
+                    // verbatim and will happily build a provider for an id or
+                    // model name that does not exist anywhere — these two
+                    // checks catch that before construction, at the same
+                    // boundary S3 (just below) already guards. Boot-failing
+                    // per the §6 ratification ("no warn-only tier"), same as S3.
+
+                    // S1 — provider resolves: `llm.provider` must be the local
+                    // sentinel ("ollama", handled outside the pricing catalog —
+                    // see `proxy::provider_known`) or a known entry in the
+                    // proxy's provider catalog.
+                    if !crate::proxy::provider_known(&config.llm_provider) {
+                        tool_chain::emit_tool_receipt(
+                            &audit_store,
+                            "invariant:s1_provider_resolves:violated",
+                            Some(&format!("llm.provider={}", config.llm_provider)),
+                        );
+                        eprintln!(
+                            "\nZeroPoint refused to start.\n"
+                        );
+                        eprintln!(
+                            "llm.provider = \"{}\" is not a recognized provider (HARNESS-SEAM-2026-08 S4 S1 -- provider resolves).\n",
+                            config.llm_provider
+                        );
+                        eprintln!(
+                            "It is neither the local sentinel \"ollama\" nor an entry in the proxy's provider catalog (crates/zp-server/assets/providers-default.toml, or ~/ZeroPoint/config/providers.toml).\n"
+                        );
+                        eprintln!(
+                            "Fix it (`zp config set llm.provider <id>`), or set llm.enabled = false to run without inference."
+                        );
+                        std::process::exit(1);
+                    }
+                    tool_chain::emit_tool_receipt(
+                        &audit_store,
+                        "invariant:s1_provider_resolves:verified",
+                        Some(&format!("llm.provider={}", config.llm_provider)),
+                    );
+
+                    // S2 — model installed: `llm.model` / `llm.escalation_model`
+                    // must appear in the backend's own model list. Verified
+                    // here only for the local ("ollama") provider, where an
+                    // unauthenticated listing is possible before any cloud key
+                    // is relevant — reusing `InferenceBackend::model_available`
+                    // (the W5-3c-extended probe) constructed with the local
+                    // sentinel endpoint and no API key, which falls through to
+                    // the ollama arm the same way `zp-server::regent`'s real
+                    // construction does.
+                    //
+                    // Scoped gap, disclosed rather than silently skipped: a
+                    // cloud `llm.provider` (openai, anthropic, ...) is not
+                    // verified by this check. Reusing this probe for arbitrary
+                    // cloud providers would mean synthesizing a provider-specific
+                    // inference_endpoint and trusting `ProviderProfile::detect`'s
+                    // heuristics to land on the right one outside the shape this
+                    // probe was built and tested for — a real design task, not a
+                    // boot-time sensor extension. See W7 report.
+                    if config.llm_provider == "ollama" {
+                        // reasoning_model/routing_model are unused by this probe
+                        // (InferenceBackend::new reads only inference_endpoint and
+                        // api_key_source) -- left empty rather than reusing a real
+                        // model name, so this throwaway config is never mistaken
+                        // for a model-election declarant.
+                        let probe_config = zp_regent::config::RegentConfig {
+                            enabled: false,
+                            inference_endpoint: zp_config::REGENT_INFERENCE_ENDPOINT_SENTINEL
+                                .to_string(),
+                            api_key_source: zp_regent::config::ApiKeySource::None,
+                            reasoning_model: String::new(),
+                            routing_model: String::new(),
+                            max_context_tokens: 0,
+                            loop_interval_secs: 0,
+                            cloud_mandate: None,
+                            display_name: String::new(),
+                        };
+                        let probe = zp_regent::inference::InferenceBackend::new(
+                            &probe_config,
+                            Some(signer.clone()),
+                            format!("http://127.0.0.1:{}", config.port),
+                        );
+                        for (label, model) in [
+                            ("llm.model", config.llm_model.as_str()),
+                            ("llm.escalation_model", config.llm_escalation_model.as_str()),
+                        ] {
+                            if model.trim().is_empty() {
+                                continue;
+                            }
+                            let probe_result =
+                                probe.model_available(model).await.map_err(|e| e.to_string());
+                            match sensors::classify_model_probe(&probe_result) {
+                                sensors::S2Outcome::Verified => {
+                                    tool_chain::emit_tool_receipt(
+                                        &audit_store,
+                                        "invariant:s2_model_installed:verified",
+                                        Some(&format!("{}={}", label, model)),
+                                    );
+                                }
+                                sensors::S2Outcome::Violated => {
+                                    tool_chain::emit_tool_receipt(
+                                        &audit_store,
+                                        "invariant:s2_model_installed:violated",
+                                        Some(&format!("{}={}", label, model)),
+                                    );
+                                    eprintln!(
+                                        "\nZeroPoint refused to start.\n"
+                                    );
+                                    eprintln!(
+                                        "{} = \"{}\" is not installed on the configured backend (HARNESS-SEAM-2026-08 S4 S2 -- model installed).\n",
+                                        label, model
+                                    );
+                                    eprintln!(
+                                        "Pull it (`ollama pull {}`), or point {} at a model that is actually available.",
+                                        model, label
+                                    );
+                                    std::process::exit(1);
+                                }
+                                sensors::S2Outcome::Skipped => {
+                                    let e = probe_result.err().unwrap_or_default();
+                                    // Could not even ask — a reachability problem,
+                                    // not a "model does not exist" finding. Distinct
+                                    // failure mode; not boot-fatal on its own, and
+                                    // not reported as if the model were confirmed
+                                    // absent.
+                                    tracing::warn!(
+                                        error = %e,
+                                        model,
+                                        label,
+                                        "S2 model-installed check could not reach the backend to verify this model -- not boot-blocking on a network probe failure"
+                                    );
+                                    tool_chain::emit_tool_receipt(
+                                        &audit_store,
+                                        "invariant:s2_model_installed:skipped",
+                                        Some(&format!("{}={} reason=probe_unreachable: {}", label, model, e)),
+                                    );
+                                }
+                            }
+                        }
+                    }
+
+                    match pipe
+                        .init_providers(
+                            config.port,
+                            &config.llm_provider,
+                            &config.llm_model,
+                            &config.llm_escalation_model,
+                            config.llm_supports_tools,
+                            signer,
+                        )
+                        .await
+                    {
+                        Ok(n) => tracing::info!(
+                            providers = n,
+                            provider = %config.llm_provider,
+                            model = %config.llm_model,
+                            "LLM provider pool ready"
+                        ),
+                        Err(e) => {
+                            tracing::error!(
+                                error = %e,
+                                provider = %config.llm_provider,
+                                model = %config.llm_model,
+                                "FATAL: provider pool initialization failed while llm.enabled = true"
+                            );
+                            eprintln!(
+                                "\nZeroPoint refused to start.\n\n\
+                             llm.enabled is true, but the provider pool could not be \
+                             populated:\n  {}\n\n\
+                             Provider: {}\n  Model: {}\n  Escalation: {}\n\n\
+                             Fix the configuration, or set llm.enabled = false to run \
+                             without inference.\n\
+                             (HARNESS-SEAM-2026-08 S3 — a configured substrate that \
+                             cannot serve is a half-state, not a degraded mode.)\n",
+                                e,
+                                config.llm_provider,
+                                config.llm_model,
+                                if config.llm_escalation_model.trim().is_empty() {
+                                    "(none)"
+                                } else {
+                                    &config.llm_escalation_model
+                                },
+                            );
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                // Pre-Genesis: pipeline exists, no sovereign root to sign with.
+                // Already warned above. Not fatal — the ceremony has not run,
+                // so there is nothing broken to report. Health shows
+                // `degraded` until onboarding completes.
+                (Some(_), None) => {}
+                // Pipeline construction failed while llm.enabled is true.
+                // A broken assertion, same response as a failed crossing.
+                (None, _) => {
+                    tracing::error!("FATAL: llm.enabled = true but pipeline construction failed");
+                    eprintln!(
+                        "\nZeroPoint refused to start.\n\n\
+                         llm.enabled is true, but the request pipeline could not be \
+                         constructed.\nCheck that the data directory is writable: {}\n",
+                        config.data_dir
+                    );
+                    std::process::exit(1);
+                }
+            }
+            p
         } else {
             None
         };
@@ -826,7 +1157,9 @@ impl AppState {
             tracing::warn!(
                 "Attestation database unavailable ({}): {} — attestation features disabled. \
                  Check that the data directory exists and is writable: {}",
-                config.data_dir, e, config.data_dir
+                config.data_dir,
+                e,
+                config.data_dir
             );
         }
 
@@ -865,9 +1198,9 @@ impl AppState {
 
         // Internal zero-trust authority (P2-3: SSRF-VULN-01/02).
         // Derives an internal HMAC key from the operator key via BLAKE3.
-        let internal_auth = Arc::new(
-            internal_auth::InternalAuthority::new(&identity.signing_key.to_bytes()),
-        );
+        let internal_auth = Arc::new(internal_auth::InternalAuthority::new(
+            &identity.signing_key.to_bytes(),
+        ));
 
         // Observation store (M4-2: governance→memory bridge).
         // Stores observations derived from governance events so they can
@@ -891,7 +1224,10 @@ impl AppState {
         // Cognition pipeline (G5-1: observation→promotion).
         let cognition_pipeline = if observation_store.is_some() {
             let obs_config = ObservationConfig::default();
-            Some(CognitionPipeline::new(obs_config, &identity.destination_hash))
+            Some(CognitionPipeline::new(
+                obs_config,
+                &identity.destination_hash,
+            ))
         } else {
             None
         };
@@ -906,34 +1242,30 @@ impl AppState {
         // Blast radius tracker (R6-1: key compromise scoping).
         // In-memory indices populated as receipts are signed and delegations
         // created. Future: rebuild from audit chain on startup.
-        let blast_radius_tracker = Arc::new(std::sync::Mutex::new(
-            zp_keys::BlastRadiusTracker::new(),
-        ));
+        let blast_radius_tracker =
+            Arc::new(std::sync::Mutex::new(zp_keys::BlastRadiusTracker::new()));
 
         // Quarantine store + memory store (R6-2: compromise → quarantine).
-        let quarantine_store = Arc::new(std::sync::Mutex::new(
-            zp_memory::QuarantineStore::new(&identity.destination_hash),
-        ));
-        let memory_store = Arc::new(std::sync::Mutex::new(
-            std::collections::HashMap::<String, zp_memory::MemoryEntry>::new(),
-        ));
+        let quarantine_store = Arc::new(std::sync::Mutex::new(zp_memory::QuarantineStore::new(
+            &identity.destination_hash,
+        )));
+        let memory_store = Arc::new(std::sync::Mutex::new(std::collections::HashMap::<
+            String,
+            zp_memory::MemoryEntry,
+        >::new()));
 
         // Promotion engine (Phase 4.3: memory truth transition lifecycle).
         // Enforces the doctrine: "Nothing becomes durable truth merely because
         // a model inferred it." Every stage transition requires a receipt-backed gate.
-        let promotion_engine = Arc::new(std::sync::Mutex::new(
-            zp_memory::PromotionEngine::new(
-                &identity.destination_hash,
-                zp_memory::PromotionThresholds::default(),
-            ),
-        ));
+        let promotion_engine = Arc::new(std::sync::Mutex::new(zp_memory::PromotionEngine::new(
+            &identity.destination_hash,
+            zp_memory::PromotionThresholds::default(),
+        )));
 
         // Downgrade resistance guard (R6-4: monotonic policy version).
         // Starts at 0.0.0 — the first policy load sets the baseline.
         // Future: restore from persisted state on restart.
-        let downgrade_guard = Arc::new(std::sync::Mutex::new(
-            zp_policy::DowngradeGuard::new(),
-        ));
+        let downgrade_guard = Arc::new(std::sync::Mutex::new(zp_policy::DowngradeGuard::new()));
 
         // One-time onboard setup token (AUTH-VULN-06).
         // Only generated when:
@@ -999,11 +1331,64 @@ impl AppState {
         };
 
         // Anchor pipeline (#176): event-driven Merkle epoch sealing.
-        // Default backend is NoOpAnchor — the architecture is testable without
-        // an external ledger, and HCS becomes a drop-in replacement when the
-        // `zp-hedera` client is wired into onboarding.
+        //
+        // Backend selection, per `docs/design/ANCHOR-BACKEND-SELECTION-2026-08.md`
+        // §6.1 (operator ruling 2026-08-14): **OpenTimestamps is the default
+        // floor.** It is the default because enabling it asks nothing of the
+        // operator — no account, no funded balance — so an air-gapped or
+        // unbanked deployment anchors too. Hedera remains supported and is
+        // never default, because it requires a balance someone must
+        // consciously provision.
+        //
+        // `ZP_ANCHOR=off` disables anchoring entirely and is the escape hatch
+        // for a deployment that does not want outbound calls from a governance
+        // path. Note what enabling costs: `anchor()` fans out to three public
+        // calendars with a ten-second worst case, and anchoring is
+        // event-driven, so that await lands inside a gate denial or a dispute
+        // rather than in a background job. See `zp-anchor-ots`'s crate docs on
+        // why the concurrency fix improved that number without changing its
+        // shape.
+        //
+        // An unrecognised value is a startup failure rather than a silent
+        // fallback: `ZP_ANCHOR=OTS` quietly turning anchoring off would be the
+        // configuration mistake hardest to notice, since nothing downstream
+        // errors — the chain simply stops being witnessed.
+        let anchor_backend = std::env::var("ZP_ANCHOR")
+            .unwrap_or_else(|_| "ots".to_string())
+            .to_ascii_lowercase();
+
+        let anchor: Arc<dyn zp_anchor::TruthAnchor> = match anchor_backend.as_str() {
+            "off" | "none" => {
+                tracing::info!("anchor: disabled by ZP_ANCHOR — chain is not externally witnessed");
+                Arc::new(zp_anchor::NoOpAnchor)
+            }
+            "ots" => match zp_core::paths::data_dir() {
+                Ok(dir) => {
+                    let store = zp_anchor_ots::default_store_dir(&dir);
+                    tracing::info!(store = %store.display(), "anchor: OpenTimestamps floor");
+                    Arc::new(zp_anchor_ots::OtsAnchor::new(store))
+                }
+                Err(e) => {
+                    // Cannot resolve where proofs would live. Anchoring
+                    // silently into nowhere is worse than not anchoring, so
+                    // this degrades loudly rather than pretending.
+                    tracing::error!(
+                        "anchor: cannot resolve the data dir ({e}) — anchoring DISABLED; \
+                         set ZP_ANCHOR=off to make this deliberate"
+                    );
+                    Arc::new(zp_anchor::NoOpAnchor)
+                }
+            },
+            other => panic!(
+                "ZP_ANCHOR={other:?} is not a recognised anchor backend. \
+                 Valid values: 'ots' (default, OpenTimestamps floor) or 'off'. \
+                 Refusing to start rather than silently leaving the chain \
+                 unwitnessed."
+            ),
+        };
+
         let anchor_pipeline = Arc::new(anchor_pipeline::AnchorPipeline::new(
-            Arc::new(zp_anchor::NoOpAnchor),
+            anchor,
             audit_store.clone(),
             identity.destination_hash.clone(),
         ));
@@ -1018,7 +1403,7 @@ impl AppState {
         // trigger events spawn an async seal task.
         {
             let mut s = audit_store.lock().expect("audit store mutex");
-            s.set_notifier(Arc::new(anchor_pipeline::AnchorNotifier::new(
+            s.add_notifier(Arc::new(anchor_pipeline::AnchorNotifier::new(
                 anchor_pipeline.clone(),
             )));
         }
@@ -1037,9 +1422,10 @@ impl AppState {
         // Phase 1 — Commitment A: host-function boundary.
         // SystemHostContext takes Arc refs to the same gate and audit_store
         // that live in AppStateInner, so they share the same live state.
-        let host: Arc<dyn zp_host::HostContext> = Arc::new(
-            zp_host::SystemHostContext::new(gate.clone(), audit_store.clone()),
-        );
+        let host: Arc<dyn zp_host::HostContext> = Arc::new(zp_host::SystemHostContext::new(
+            gate.clone(),
+            audit_store.clone(),
+        ));
 
         let state = AppState(Arc::new(AppStateInner {
             gate,
@@ -1057,6 +1443,7 @@ impl AppState {
             config_port: config.port,
             session_auth,
             envelope_verifier,
+            gate_signer,
             rate_limiter,
             endpoint_limiter,
             onboard_token,
@@ -1081,39 +1468,159 @@ impl AppState {
             regent_handle: std::sync::OnceLock::new(),
         }));
 
-        // Spawn background vault key resolution — the Keychain access can take
-        // 4–5 seconds on macOS but the server is already serving requests.
-        let inner = state.0.clone();
-        let audit_store_vk = state.0.audit_store.clone();
-        std::thread::spawn(move || {
-            let _home = zp_paths::home().unwrap_or_default();
-            match zp_keys::Keyring::open(zp_paths::keys_dir().unwrap_or_default())
-                .and_then(|kr| zp_keys::resolve_vault_key(&kr))
-            {
-                Ok(resolved) => {
-                    info!(
-                        "Vault key resolved (source: {:?}) — cached for session",
-                        resolved.source
-                    );
-                    tool_chain::emit_tool_receipt(
-                        &audit_store_vk,
-                        "system:keychain:accessed",
-                        Some(&format!("source={:?}", resolved.source)),
-                    );
-                    let _ = inner.vault_key.set(Some(resolved));
+        // Resolve the vault master key synchronously, before `init` returns.
+        //
+        // ── Why this is not a background thread, 2026-08-06 ───────────────
+        //
+        // It was one until this date, on the stated rationale that "the
+        // Keychain access can take 4–5 seconds on macOS but the server is
+        // already serving requests." That rationale was obsolete at the point
+        // it ran.
+        //
+        // `resolve_vault_key` reaches the credential store only through
+        // `load_sovereign_root`, which is a process-scoped `OnceLock`, and
+        // `main.rs` warms that lock *before* the server starts — its comment
+        // says so explicitly: "all subsequent Keychain accesses in
+        // AppState::init are cache hits. Consistent with singular-sovereign-root
+        // (#152): one ceremony here, everything else derived from the in-process
+        // cache." What remains here is a cache read and a KDF. Microseconds.
+        //
+        // The thread bought nothing and cost the substrate its vault. Every
+        // consumer of `vault_key` had to cope with "not resolved yet", and
+        // `spawn_regent` — which runs immediately after `init` — lost that race
+        // on every single boot. Its migration of the operator's cloud-inference
+        // credential from `config.toml` into the vault therefore never ran once:
+        // `~/ZeroPoint/vault.json` did not exist, the key stayed in plaintext on
+        // disk, and `ApiKeySource::RawLegacy` — documented as a transition path —
+        // became permanent. The vault itself was complete and correct the whole
+        // time.
+        //
+        // Resolving here removes the race rather than widening the window on it.
+        // A polled wait with a timeout would have left the same failure mode
+        // behind a magic number; there is no race to lose once the value exists
+        // before any consumer does. `init` returns fully-formed state, and every
+        // `vault_key.get()` downstream is populated by construction.
+        //
+        // The `Option` inside remains meaningful — a substrate with no Genesis
+        // yet (pre-onboarding) legitimately has no vault key. The `OnceLock`
+        // wrapper is now vestigial and could be flattened to a plain
+        // `Option<ResolvedVaultKey>`; that touches four call sites and is left
+        // as a separate change.
+        match zp_keys::Keyring::open(zp_paths::keys_dir().unwrap_or_default())
+            .and_then(|kr| zp_keys::resolve_vault_key(&kr))
+        {
+            Ok(resolved) => {
+                info!(
+                    "Vault key resolved (source: {:?}) — cached for session",
+                    resolved.source
+                );
+                tool_chain::emit_tool_receipt(
+                    &state.0.audit_store,
+                    "system:keychain:accessed",
+                    Some(&format!("source={:?}", resolved.source)),
+                );
+                let _ = state.0.vault_key.set(Some(resolved));
+            }
+            Err(e) => {
+                warn!(
+                    "⚠ Vault key not available: {} — operator rotation, \
+                     credential decryption, and vault operations are disabled. \
+                     Run `zp recover` with your 24-word mnemonic or `zp doctor` \
+                     to diagnose.",
+                    e
+                );
+                let _ = state.0.vault_key.set(None);
+            }
+        }
+
+        // ── Bedrock invariants ────────────────────────────────────────────
+        //
+        // Runs last in `init`, once every premise it checks has been
+        // established or definitively failed. Asks whether the substrate is
+        // what it claims to be — not whether it is healthy, which is a
+        // question `substrate_validate` already answers and whose answer has
+        // read `degraded` for long enough to carry no information.
+        //
+        // A missing vault hid inside that for months. See `bedrock.rs`.
+        {
+            let vault_path = zp_paths::vault_path()
+                .unwrap_or_else(|_| std::path::PathBuf::from(&state.0.data_dir).join("vault.json"));
+            let resolved = state.0.vault_key.get().and_then(|k| k.as_ref());
+
+            // `None` here means "could not open", which is a different fault
+            // from "opened and holds nothing". Collapsing the two is precisely
+            // what made the original failure unreadable.
+            let vault_keys = resolved.and_then(|r| {
+                zp_trust::CredentialVault::load_or_create(&r.key, &vault_path)
+                    .ok()
+                    .map(|v| v.list().len())
+            });
+
+            // Read one entry past the threshold — enough to answer "mature or
+            // not" without pulling an unbounded history into memory to count.
+            // The count itself is deliberately not passed on; see
+            // `BedrockInputs::substrate_is_mature`.
+            let substrate_is_mature = state
+                .0
+                .audit_store
+                .lock()
+                .ok()
+                .and_then(|s| s.recent_entries(bedrock::YOUNG_SUBSTRATE_ENTRIES + 1).ok())
+                .map(|e| e.len() > bedrock::YOUNG_SUBSTRATE_ENTRIES)
+                .unwrap_or(false);
+
+            let mut findings = bedrock::check(&bedrock::BedrockInputs {
+                genesis_present: zp_core::paths::genesis_record_path()
+                    .map(|p| p.exists())
+                    .unwrap_or(false),
+                vault_key_resolved: resolved.is_some(),
+                vault_path,
+                vault_file_exists: zp_paths::vault_path().map(|p| p.exists()).unwrap_or(false),
+                vault_keys,
+                substrate_is_mature,
+            });
+
+            // ── S5 -- no shadowed writes at load time ───────────────────
+            //
+            // HARNESS-SEAM-2026-08 §4 S5, W7. Boot-time complement to W6's
+            // write-time refusal in `config_set`. Deliberately a Warning,
+            // not Critical: an env var legitimately shadowing a file value
+            // is common and often intentional (see
+            // `ConfigResolver::boot_shadow_findings`'s own doc comment for
+            // the full reasoning) -- this is the one bedrock finding in this
+            // block that is disclosure, not an existential alarm, and it
+            // joins the same loud-at-the-boundary, chain-anchored reporting
+            // pipeline as every other bedrock check rather than a separate
+            // one.
+            match zp_config::ConfigResolver::boot_shadow_findings() {
+                Ok(shadowed) => {
+                    for s in shadowed {
+                        findings.push(bedrock::Finding {
+                            invariant: "s5_no_shadowed_writes",
+                            severity: bedrock::Severity::Warning,
+                            detail: format!(
+                                "{} = {} (from {}) is shadowed by {} (from {})",
+                                s.key,
+                                s.file_value,
+                                s.file_source,
+                                s.effective_value,
+                                s.effective_source
+                            ),
+                            remedy: Some(format!(
+                                "Either intentional (leave it) or not -- check `zp config get {}` and the higher-priority source named above.",
+                                s.key
+                            )),
+                        });
+                    }
                 }
                 Err(e) => {
-                    warn!(
-                        "⚠ Vault key not available: {} — operator rotation, \
-                         credential decryption, and vault operations are disabled. \
-                         Run `zp recover` with your 24-word mnemonic or `zp doctor` \
-                         to diagnose.",
-                        e
-                    );
-                    let _ = inner.vault_key.set(None);
+                    tracing::warn!(error = %e, "S5 shadow check could not resolve config -- skipped");
                 }
             }
-        });
+
+            bedrock::report(&findings);
+            bedrock::anchor(&state.0.audit_store, &findings);
+        }
 
         state
     }
@@ -1148,10 +1655,7 @@ pub(crate) fn client_ip_from_headers(headers: &axum::http::HeaderMap) -> std::ne
 
 /// Extract the `zp_onboard` cookie value from request headers.
 pub(crate) fn extract_onboard_cookie(headers: &axum::http::HeaderMap) -> Option<String> {
-    let cookie_header = headers
-        .get(axum::http::header::COOKIE)?
-        .to_str()
-        .ok()?;
+    let cookie_header = headers.get(axum::http::header::COOKIE)?.to_str().ok()?;
     for pair in cookie_header.split(';') {
         let pair = pair.trim();
         if let Some(val) = pair.strip_prefix("zp_onboard=") {
@@ -1338,14 +1842,37 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/vault/test/:provider", post(vault_test_handler))
         // Substrate validation — deterministic structural audit primitive
         // per SUBSTRATE-SELF-CONSTRUCTION discipline (task #20/#21).
-        .route("/api/v1/substrate/validate", get(substrate_validate_handler))
+        .route(
+            "/api/v1/substrate/validate",
+            get(substrate_validate_handler),
+        )
         // Standing corrections — chain-anchored operator claims about Regent's
         // cognitive layer. Composes with COGNITIVE-INPUT-PLANE-2026-07 Tier 1.
+        // Vault operator surface. Names-only listing, value-carrying verbs in
+        // the request body rather than the URL. See the handler module note.
+        .route("/api/v1/vault/list", get(vault_list_handler))
+        .route("/api/v1/vault/put", post(vault_put_handler))
+        .route("/api/v1/vault/remove", post(vault_remove_handler))
+        .route("/api/v1/vault/reveal", post(vault_reveal_handler))
         .route("/api/v1/correction/issue", post(correction_issue_handler))
         .route("/api/v1/correction/list", get(correction_list_handler))
         .route(
             "/api/v1/correction/revoke/:correction_id",
             post(correction_revoke_handler),
+        )
+        // Approval resolution — the operator's answer to
+        // Intent::RequestApproval. The request half was already
+        // chain-anchored; this is the half that records the answer, so a
+        // proposal stops being fire-and-forget and can become precedent.
+        .route("/api/v1/regent/approvals", get(regent_approvals_handler))
+        .route("/api/v1/regent/precedents", get(regent_precedents_handler))
+        .route(
+            "/api/v1/regent/precedents/:signature/revoke",
+            post(regent_precedent_revoke_handler),
+        )
+        .route(
+            "/api/v1/regent/approvals/:request_hash/resolve",
+            post(regent_approval_resolve_handler),
         )
         // Security posture + topology
         .route("/api/v1/security/posture", get(security_posture_handler))
@@ -1388,22 +1915,55 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         .route("/api/v1/tools/:name/remove", post(tool_remove_handler))
         .route("/api/v1/tools/:name/probe", get(tool_probe_handler))
         .route("/api/v1/tools/:name/posture", get(tool_posture_handler))
-        .route("/api/v1/tools/:name/register-agent", post(register_agent_handler))
+        .route(
+            "/api/v1/tools/:name/register-agent",
+            post(register_agent_handler),
+        )
         .route("/api/v1/tools/receipt", post(tools_receipt_handler))
         // Model governance — operator preference + routing observation
         .route("/api/v1/preference/model", post(model_preference_handler))
         .route("/api/v1/cognition/model-routed", post(model_routed_handler))
         // Cognition module — observation, reflection, memory lifecycle, reviews
-        .route("/api/v1/cognition/observe", post(cognition::observe_handler))
-        .route("/api/v1/cognition/reflect", post(cognition::reflect_handler))
-        .route("/api/v1/cognition/status", get(cognition::cognition_status_handler))
-        .route("/api/v1/cognition/observations", get(cognition::list_observations_handler))
-        .route("/api/v1/cognition/reviews", get(cognition::list_reviews_handler))
-        .route("/api/v1/cognition/reviews/submit", post(cognition::submit_review_handler))
-        .route("/api/v1/cognition/reviews/decide", post(cognition::decide_review_handler))
-        .route("/api/v1/cognition/reviews/sweep", post(cognition::sweep_reviews_handler))
-        .route("/api/v1/cognition/memories", get(cognition::list_memories_handler))
-        .route("/api/v1/cognition/memories/sweep", post(cognition::sweep_memories_handler))
+        .route(
+            "/api/v1/cognition/observe",
+            post(cognition::observe_handler),
+        )
+        .route(
+            "/api/v1/cognition/reflect",
+            post(cognition::reflect_handler),
+        )
+        .route(
+            "/api/v1/cognition/status",
+            get(cognition::cognition_status_handler),
+        )
+        .route(
+            "/api/v1/cognition/observations",
+            get(cognition::list_observations_handler),
+        )
+        .route(
+            "/api/v1/cognition/reviews",
+            get(cognition::list_reviews_handler),
+        )
+        .route(
+            "/api/v1/cognition/reviews/submit",
+            post(cognition::submit_review_handler),
+        )
+        .route(
+            "/api/v1/cognition/reviews/decide",
+            post(cognition::decide_review_handler),
+        )
+        .route(
+            "/api/v1/cognition/reviews/sweep",
+            post(cognition::sweep_reviews_handler),
+        )
+        .route(
+            "/api/v1/cognition/memories",
+            get(cognition::list_memories_handler),
+        )
+        .route(
+            "/api/v1/cognition/memories/sweep",
+            post(cognition::sweep_memories_handler),
+        )
         // Governed exec WebSocket — cockpit terminal output streaming
         .route("/ws/exec", get(exec_ws::exec_ws_handler))
         // Regent cockpit — operator input to the cognitive loop
@@ -1411,17 +1971,35 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
         // Real-time event stream — SSE for dashboard and channel adapters (P4-1)
         .route("/api/v1/events/stream", get(events::event_stream_handler))
         // Channel adapters — Slack/Discord integration (P4-2)
-        .route("/api/v1/channels/slack/webhook", post(channels::slack_webhook_handler))
+        .route(
+            "/api/v1/channels/slack/webhook",
+            post(channels::slack_webhook_handler),
+        )
         // Fleet node registry — heartbeat, status, and management (P5-2)
-        .route("/api/v1/fleet/heartbeat", post(fleet::fleet_heartbeat_handler))
+        .route(
+            "/api/v1/fleet/heartbeat",
+            post(fleet::fleet_heartbeat_handler),
+        )
         .route("/api/v1/fleet/nodes", get(fleet::fleet_nodes_handler))
-        .route("/api/v1/fleet/nodes/:id", get(fleet::fleet_node_detail_handler).delete(fleet::fleet_deregister_handler))
+        .route(
+            "/api/v1/fleet/nodes/:id",
+            get(fleet::fleet_node_detail_handler).delete(fleet::fleet_deregister_handler),
+        )
         .route("/api/v1/fleet/summary", get(fleet::fleet_summary_handler))
         // P6-4: WASM policy runtime management (feature-gated, fallback on non-WASM builds)
-        .route("/api/v1/policy/wasm/load", post(wasm_policy::wasm_load_handler))
+        .route(
+            "/api/v1/policy/wasm/load",
+            post(wasm_policy::wasm_load_handler),
+        )
         .route("/api/v1/policy/wasm", get(wasm_policy::wasm_list_handler))
-        .route("/api/v1/policy/wasm/:hash/disable", post(wasm_policy::wasm_disable_handler))
-        .route("/api/v1/policy/wasm/:hash/enable", post(wasm_policy::wasm_enable_handler))
+        .route(
+            "/api/v1/policy/wasm/:hash/disable",
+            post(wasm_policy::wasm_disable_handler),
+        )
+        .route(
+            "/api/v1/policy/wasm/:hash/enable",
+            post(wasm_policy::wasm_enable_handler),
+        )
         // System state — derived from receipt chain (the big one)
         .route(
             "/api/v1/system/state",
@@ -1445,17 +2023,44 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
             get(attestations::list_attestations_handler),
         )
         // API Proxy — governance-aware LLM provider proxy
-        .route("/api/v1/proxy/*proxy_path", post(proxy::proxy_handler))
+        .route(
+            "/api/v1/proxy/*proxy_path",
+            get(proxy::proxy_handler).post(proxy::proxy_handler),
+        )
         // Pricing freshness — live refresh of provider pricing data
-        .route("/api/v1/pricing/refresh", post(proxy::pricing_refresh_handler))
+        .route(
+            "/api/v1/pricing/refresh",
+            post(proxy::pricing_refresh_handler),
+        )
         // Artifact library
-        .route("/api/operator/me/library/chain-narration/compose", post(artifact_library::compose_handler))
-        .route("/api/operator/me/library/chain-narration/submit", post(artifact_library::submit_handler))
-        .route("/api/operator/me/library", get(artifact_library::list_handler))
-        .route("/api/operator/me/library/:id", get(artifact_library::get_handler))
-        .route("/api/operator/me/library/:id/sign", post(artifact_library::sign_handler))
-        .route("/api/operator/me/library/:id/reject", post(artifact_library::reject_handler))
-        .route("/api/operator/me/library/by-kind/:kind/canonical", get(artifact_library::canonical_handler))
+        .route(
+            "/api/operator/me/library/chain-narration/compose",
+            post(artifact_library::compose_handler),
+        )
+        .route(
+            "/api/operator/me/library/chain-narration/submit",
+            post(artifact_library::submit_handler),
+        )
+        .route(
+            "/api/operator/me/library",
+            get(artifact_library::list_handler),
+        )
+        .route(
+            "/api/operator/me/library/:id",
+            get(artifact_library::get_handler),
+        )
+        .route(
+            "/api/operator/me/library/:id/sign",
+            post(artifact_library::sign_handler),
+        )
+        .route(
+            "/api/operator/me/library/:id/reject",
+            post(artifact_library::reject_handler),
+        )
+        .route(
+            "/api/operator/me/library/by-kind/:kind/canonical",
+            get(artifact_library::canonical_handler),
+        )
         .layer(cors)
         // ── Request body size limit (Phase 1.1: strict input validation) ──
         // Cap request bodies at 1 MB to prevent denial-of-service via
@@ -1577,10 +2182,16 @@ pub fn build_app(state: AppState, config: &ServerConfig) -> Router {
     if let Ok(override_dir) = std::env::var("ZP_ASSETS_DIR") {
         let dir = std::path::PathBuf::from(&override_dir);
         if dir.exists() {
-            info!("Assets:     http://localhost:{}/assets/  (override: {})", config.port, override_dir);
+            info!(
+                "Assets:     http://localhost:{}/assets/  (override: {})",
+                config.port, override_dir
+            );
             router = router.nest_service("/assets", ServeDir::new(&dir));
         } else {
-            tracing::warn!("ZP_ASSETS_DIR={} does not exist, using compiled-in assets", override_dir);
+            tracing::warn!(
+                "ZP_ASSETS_DIR={} does not exist, using compiled-in assets",
+                override_dir
+            );
             router = router.nest("/assets", embedded_assets_router());
         }
     } else {
@@ -1681,7 +2292,13 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     // immediately (immune-system model). The periodic sweep still runs
     // all officers on its timer.
     if config.officers_enabled && config.officers_forge_enabled {
-        if let Some(rx) = state.0.sensor_event_rx.lock().ok().and_then(|mut g| g.take()) {
+        if let Some(rx) = state
+            .0
+            .sensor_event_rx
+            .lock()
+            .ok()
+            .and_then(|mut g| g.take())
+        {
             officers::spawn_sensor_forge_task(rx, state.0.clone());
         }
     }
@@ -1689,6 +2306,34 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     // Feed current PortRegistry state to the sensor layer so the
     // discovery scanner knows which listeners are registered tools.
     officers::sync_known_bindings(&state.0);
+
+    // ── Cartographer background task (P3 v1) ────────────────────────────
+    // Materializes the ontology from the receipt chain. Runs Pi-side
+    // (chain-adjacent) per SUBSTRATE-COMPUTE-BASELINE. Reads receipts,
+    // evaluates boundary via zp_ontology::evaluate_boundary, materializes
+    // Trajectory rows into ontology.db.
+    //
+    // Notifier is added via `add_notifier` alongside the anchor pipeline —
+    // both fire on each chain append, chained in insertion order.
+    //
+    // Cartographer's own receipt emission (ontology:cartographer:*,
+    // ontology:trajectory:*) deferred to P3.2 pending signing-key derivation.
+    if config.cartographer_enabled {
+        let cart_config = cartographer::CartographerConfig {
+            enabled: true,
+            ontology_db_path: cartographer::ontology_db_path(&config.data_dir),
+            boundary_config: zp_ontology::BoundaryConfig::default(),
+            channel_capacity: 1000,
+            catchup_batch_size: 500,
+        };
+        if let Some(notifier) =
+            cartographer::spawn_cartographer_task(cart_config, state.0.audit_store.clone())
+        {
+            let mut s = state.0.audit_store.lock().expect("audit store mutex");
+            s.add_notifier(notifier);
+            info!("Cartographer notifier installed");
+        }
+    }
 
     // ── Chain-read canary discipline (Tier 1) ────────────────────────────
     // Periodic canary marker writes + observer probes + statement cache flush
@@ -1717,6 +2362,14 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     // ── Regent cognitive loop ───────────────────────────────────────────
     // Spawned after officers so the Regent can receive officer findings.
     // Disabled by default; opt-in via `[regent] enabled = true` in config.
+    //
+    // W5 3c: the substrate's own proxy base, computed here from `config.port`
+    // — which by this point reflects whatever the operator's `--port`/env/
+    // config.toml actually resolved to, not a schema default that could
+    // drift from it. This is the one place that value is known alongside
+    // `ServerRegentConfig` being assembled, so it is resolved here rather
+    // than inside `InferenceBackend::new`, which has no way to learn it.
+    let proxy_base = format!("http://127.0.0.1:{}", config.port);
     let regent_config = regent::ServerRegentConfig {
         enabled: config.regent_enabled,
         inference_endpoint: config.regent_inference_endpoint.clone(),
@@ -1725,6 +2378,10 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
         routing_model: config.regent_routing_model.clone(),
         loop_interval_secs: config.regent_loop_interval_secs,
         display_name: config.regent_display_name.clone(),
+        // W5 3b: the Regent can now authenticate to the proxy.
+        gate_signer: state.0.gate_signer.clone(),
+        // W5 3c: the endpoint moves to the proxy — this is what it moves to.
+        proxy_base,
     };
     // Share the vault key reference with the Regent — she resolves lazily at
     // self_configure time, avoiding the startup race where spawn happens before
@@ -1736,10 +2393,13 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
         state.0.gate.clone(),
         state.0.event_tx.clone(),
         config.home_dir.to_str().unwrap_or(""),
+        cartographer::ontology_db_path(&config.data_dir),
         state.0.promotion_engine.clone(),
         state.0.review_queue.clone(),
         regent_vault_key,
-    ).await {
+    )
+    .await
+    {
         // OnceLock::set is safe from any thread and races cleanly.
         // We're in the single-threaded startup path so this always succeeds.
         let _ = state.0.regent_handle.set(handle);
@@ -1773,7 +2433,10 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
         info!("  {}", onboard_url);
         info!("═══════════════════════════════════════════════════════");
     } else {
-        info!("Onboard:   http://{}:{}/onboard", config.bind_addr, config.port);
+        info!(
+            "Onboard:   http://{}:{}/onboard",
+            config.bind_addr, config.port
+        );
     }
     info!("Trust is infrastructure.");
 
@@ -1824,6 +2487,19 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     // Write our own PID
     std::fs::write(&server_pid_path, std::process::id().to_string()).ok();
 
+    // Lifecycle: record that this session began, before any listener
+    // accepts. Version and pid make sessions distinguishable on the chain
+    // without needing content.
+    emit_lifecycle_receipt(
+        &state.0.audit_store,
+        format!(
+            "system:startup version={} pid={} port={}",
+            env!("CARGO_PKG_VERSION"),
+            std::process::id(),
+            config.port,
+        ),
+    );
+
     // ── Singular loopback binding: all listener binds + serve+shutdown ─
     // wiring routes through `zp_net`. One CancellationToken gates the
     // ctrl_c watcher (which performs tool-PID cleanup) and all four
@@ -1855,8 +2531,15 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     {
         let signal_shutdown = shutdown.clone();
         let server_pid_path = server_pid_path.clone();
+        let shutdown_audit = state.0.audit_store.clone();
         tokio::spawn(async move {
             tokio::signal::ctrl_c().await.ok();
+            // Emit before cleanup: cleanup can fail, and a session that
+            // ended is a fact independent of whether teardown succeeded.
+            emit_lifecycle_receipt(
+                &shutdown_audit,
+                format!("system:shutdown pid={} reason=signal", std::process::id()),
+            );
             cleanup_launched_tools(&pid_dir(), &server_pid_path);
             signal_shutdown.cancel();
         });
@@ -1868,8 +2551,7 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     {
         let registry_arc = state.0.clone();
         tokio::spawn(async move {
-            let mut ticker =
-                tokio::time::interval(std::time::Duration::from_secs(30));
+            let mut ticker = tokio::time::interval(std::time::Duration::from_secs(30));
             loop {
                 ticker.tick().await;
                 registry_arc.port_registry.sweep_dead_pids();
@@ -1891,18 +2573,14 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
     let grpc_state = state.clone();
     let grpc_factory = move || {
         let handler = grpc::NodeStatusHandler::new(grpc_state.clone());
-        tonic::transport::Server::builder().add_service(
-            zp_verbs::nodestatus::node_status_server::NodeStatusServer::new(handler),
-        )
+        tonic::transport::Server::builder()
+            .add_service(zp_verbs::nodestatus::node_status_server::NodeStatusServer::new(handler))
     };
 
     let _grpc_handles = if is_loopback {
-        let handles = zp_net::serve_loopback_grpc_with_shutdown(
-            grpc_factory,
-            grpc_port,
-            shutdown.clone(),
-        )
-        .await?;
+        let handles =
+            zp_net::serve_loopback_grpc_with_shutdown(grpc_factory, grpc_port, shutdown.clone())
+                .await?;
         info!(
             "gRPC server on 127.0.0.1:{} (NodeStatus pilot — Phase 2b, stacks: {:?})",
             grpc_port, handles.bound_stacks
@@ -1952,10 +2630,7 @@ pub async fn run_server(mut config: ServerConfig) -> anyhow::Result<()> {
 ///
 /// Idempotent: missing PIDs / already-dead processes are skipped
 /// silently. Safe to call from a single watcher task on shutdown.
-pub fn cleanup_launched_tools(
-    pid_dir_path: &std::path::Path,
-    server_pid_path: &std::path::Path,
-) {
+pub fn cleanup_launched_tools(pid_dir_path: &std::path::Path, server_pid_path: &std::path::Path) {
     info!("Shutdown signal received — stopping launched tools...");
     if let Ok(entries) = std::fs::read_dir(pid_dir_path) {
         for entry in entries.flatten() {
@@ -2002,13 +2677,25 @@ struct HealthResponse {
     status: String,
     version: String,
     pipeline_enabled: bool,
+    /// Number of providers in the pool. `pipeline_enabled: true` with
+    /// `llm_providers: 0` is the half-state HARNESS-SEAM-2026-08 S3 forbids:
+    /// a pipeline that looks configured and cannot serve. Boot refuses this
+    /// condition, so it should be unreachable — it is reported anyway, because
+    /// an invariant nobody can observe is an invariant nobody can trust.
+    llm_providers: usize,
 }
 
 async fn health_handler(State(state): State<AppState>) -> Json<HealthResponse> {
+    let llm_providers = match state.0.pipeline {
+        Some(ref p) => p.provider_pool.read().await.len(),
+        None => 0,
+    };
+    let degraded = state.0.pipeline.is_some() && llm_providers == 0;
     Json(HealthResponse {
-        status: "ok".to_string(),
+        status: if degraded { "degraded" } else { "ok" }.to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         pipeline_enabled: state.0.pipeline.is_some(),
+        llm_providers,
     })
 }
 
@@ -2045,10 +2732,7 @@ async fn regent_input_handler(
     }
 
     match handle
-        .send_input_and_wait(
-            content,
-            zp_regent::context::CockpitSource::Cli,
-        )
+        .send_input_and_wait(content, zp_regent::context::CockpitSource::Cli)
         .await
     {
         Ok(response) => (
@@ -2584,9 +3268,9 @@ async fn grant_handler(
             return Err((
                 StatusCode::BAD_REQUEST,
                 format!(
-                    "Unknown capability type: {}. Use read, write, execute, api, config, or tool_call.",
-                    other
-                ),
+                "Unknown capability type: {}. Use read, write, execute, api, config, or tool_call.",
+                other
+            ),
             ))
         }
     };
@@ -2720,7 +3404,16 @@ async fn delegate_handler(
         // Claim 4: inherit the parent's tool set when delegating a ToolCall grant.
         // The child may further restrict it via body.scope.
         GrantedCapability::ToolCall { tools } => tools.clone(),
-        _ => vec!["*".to_string()],
+        // Exhaustive on purpose — no `_` arm. The previous `_ => vec!["*"]`
+        // meant a child delegated from a CredentialAccess / MeshSend / Custom
+        // parent, with no explicit scope in the request, inherited a wildcard.
+        // Delegation must narrow; an unspecified scope inherits the parent's,
+        // and a parent whose capability carries no scope list inherits nothing.
+        GrantedCapability::CredentialAccess { credential_refs } => credential_refs.clone(),
+        GrantedCapability::MeshSend { destinations } => destinations.clone(),
+        // `Custom` has no scope list. Empty is the fail-closed reading: the
+        // child is granted nothing until the caller states a scope explicitly.
+        GrantedCapability::Custom { .. } => Vec::new(),
     });
 
     let capability = match body.capability.to_lowercase().as_str() {
@@ -2754,7 +3447,10 @@ async fn delegate_handler(
     };
 
     // M4-3: Tag delegated grant with API origin and validate issuance.
-    child = child.with_issued_via(EventProvenance::external_request("api-delegate-handler", None));
+    child = child.with_issued_via(EventProvenance::external_request(
+        "api-delegate-handler",
+        None,
+    ));
     state.0.gate.validate_grant(&child).map_err(|e| {
         tracing::warn!("Delegated grant rejected by M4-3 gate: {}", e);
         (
@@ -2987,7 +3683,6 @@ async fn audit_verify_handler(State(state): State<AppState>) -> Json<ChainVerify
     }
 }
 
-
 // ── Audit receipts (normalized, ZpClient-compatible schema) ─────────────────
 
 #[derive(Deserialize)]
@@ -3187,9 +3882,6 @@ async fn receipt_generate_handler(
     })
 }
 
-
-
-
 // ============================================================================
 // Stats Handler
 // ============================================================================
@@ -3240,9 +3932,7 @@ async fn officer_sweep_handler(
 /// Composes with SUBSTRATE-SELF-CONSTRUCTION discipline: separates
 /// deterministic structural validation (this endpoint's job) from narration
 /// judgment (Regent's job when she narrates the output).
-async fn substrate_validate_handler(
-    State(state): State<AppState>,
-) -> Json<serde_json::Value> {
+async fn substrate_validate_handler(State(state): State<AppState>) -> Json<serde_json::Value> {
     let report = crate::substrate_validate::run_substrate_validation(&state.0.audit_store);
     Json(report)
 }
@@ -3356,7 +4046,7 @@ async fn vault_test_handler(
     };
 
     let mut req = client.get(probe_url);
-    if provider.to_ascii_lowercase() == "anthropic" {
+    if provider.eq_ignore_ascii_case("anthropic") {
         // Anthropic uses x-api-key + anthropic-version headers
         req = req
             .header("x-api-key", &credential)
@@ -3407,6 +4097,235 @@ async fn vault_test_handler(
     )
 }
 
+// ── Vault operator surface ──────────────────────────────────────────────────
+//
+// Until 2026-08-06 `VaultCmd` had exactly one variant, `Test`, which exercises
+// a sovereignty provider rather than vault storage. There was no way to list
+// what the vault held, put anything into it, or take anything out. The only
+// code touching `vault.list()` was the officer sweep, onboarding, and one
+// branch of `zp configure`.
+//
+// The consequence showed up when the operator asked a simple question — "where
+// are our API keys?" — and the substrate could not answer it. The one surface
+// that reports on the vault is Steward's `vault_empty` finding, which says
+// "Vault contains no entries" for three different conditions (key unresolved,
+// vault unreadable, vault genuinely empty) at Info severity.
+//
+// These run server-side because the server already holds the vault master key,
+// derived once from the boot ceremony. Routing them through the CLI's own
+// sovereign-root unlock would mean a second ceremony per vault operation — a
+// second root in all but name, which `singular_sovereign_root` forbids. The
+// verbs are session-token-only for the same reason: seeing what the vault
+// holds should cost nothing, because a surface that costs a ceremony to read
+// is a surface that stops being read.
+
+/// Resolve the vault for a handler, or the error response explaining why not.
+///
+/// Distinguishes the three states Steward's finding conflates, so a caller can
+/// tell "no key" from "unreadable" from "empty" — see the note above.
+fn open_vault_for_handler(
+    state: &AppState,
+) -> Result<zp_trust::CredentialVault, (StatusCode, Json<serde_json::Value>)> {
+    let resolved = state
+        .0
+        .vault_key
+        .get()
+        .and_then(|k| k.as_ref())
+        .ok_or_else(|| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({
+                    "error": "vault_key_unavailable",
+                    "detail": "The vault master key has not resolved. This is not an \
+                               empty vault — it is an unreadable one. Check that Genesis \
+                               exists and the boot ceremony completed.",
+                })),
+            )
+        })?;
+    let vault_path = zp_paths::vault_path()
+        .unwrap_or_else(|_| std::path::PathBuf::from(&state.0.data_dir).join("vault.json"));
+    zp_trust::CredentialVault::load_or_create(&resolved.key, &vault_path).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": "vault_unreadable",
+                "detail": format!("{}", e),
+            })),
+        )
+    })
+}
+
+fn vault_file_path(state: &AppState) -> std::path::PathBuf {
+    zp_paths::vault_path()
+        .unwrap_or_else(|_| std::path::PathBuf::from(&state.0.data_dir).join("vault.json"))
+}
+
+/// `GET /api/v1/vault/list` — key names only, never values.
+///
+/// The R1 privilege invariant the officers already hold: names are metadata,
+/// values are not. `exists` distinguishes a vault that has never been written
+/// from one that is empty, which the filesystem alone cannot express because
+/// `load_or_create` synthesises an empty vault in memory without touching disk.
+async fn vault_list_handler(
+    State(state): State<AppState>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let vault = match open_vault_for_handler(&state) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let path = vault_file_path(&state);
+    let names = vault.list();
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "keys": names,
+            "count": names.len(),
+            "vault_path": path.display().to_string(),
+            "exists": path.exists(),
+        })),
+    )
+}
+
+#[derive(serde::Deserialize)]
+struct VaultPutRequest {
+    key: String,
+    value: String,
+}
+
+/// `POST /api/v1/vault/put` — store a secret.
+///
+/// The value arrives in a JSON body rather than a query parameter or path
+/// segment so it does not reach a URL, an access log, or shell history. The CLI
+/// side reads it from stdin for the same reason.
+async fn vault_put_handler(
+    State(state): State<AppState>,
+    Json(req): Json<VaultPutRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    if req.key.trim().is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "key must not be empty"})),
+        );
+    }
+    let mut vault = match open_vault_for_handler(&state) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    // Tier is inferred from the key path by `store`, matching how
+    // `spawn_regent`'s migration and the onboarding flow write.
+    if let Err(e) = vault.store(&req.key, req.value.as_bytes()) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("store failed: {}", e)})),
+        );
+    }
+    let path = vault_file_path(&state);
+    if let Err(e) = vault.save(&path) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("save failed: {}", e)})),
+        );
+    }
+    // Chain-anchor the *fact*, never the value. Key name is metadata; the
+    // secret does not enter the cognitive path or the chain.
+    tool_chain::emit_tool_receipt(
+        &state.0.audit_store,
+        "vault:secret:stored",
+        Some(&format!("key={}", req.key)),
+    );
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"stored": req.key, "vault_path": path.display().to_string()})),
+    )
+}
+
+#[derive(serde::Deserialize)]
+struct VaultKeyRequest {
+    key: String,
+}
+
+/// `POST /api/v1/vault/remove` — delete a secret by name.
+async fn vault_remove_handler(
+    State(state): State<AppState>,
+    Json(req): Json<VaultKeyRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let mut vault = match open_vault_for_handler(&state) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    if let Err(e) = vault.remove(&req.key) {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": format!("{}", e)})),
+        );
+    }
+    let path = vault_file_path(&state);
+    if let Err(e) = vault.save(&path) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("save failed: {}", e)})),
+        );
+    }
+    tool_chain::emit_tool_receipt(
+        &state.0.audit_store,
+        "vault:secret:removed",
+        Some(&format!("key={}", req.key)),
+    );
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({"removed": req.key})),
+    )
+}
+
+/// `POST /api/v1/vault/reveal` — return a secret's value.
+///
+/// Deliberately the only verb that emits secret material, and deliberately
+/// present rather than omitted. Per *delegable safety* (KEEL §III.18), a
+/// restriction with no sanctioned path gets bypassed: an operator who cannot
+/// recover a secret from the vault keeps their secrets somewhere else, and the
+/// vault discipline is defeated by the very rule meant to protect it.
+///
+/// The ceremony is that the caller must ask for this verb by name. The
+/// retrieval is chain-anchored — the value never reaches the chain, but the
+/// fact that it was read does, so the operator can audit their own access.
+async fn vault_reveal_handler(
+    State(state): State<AppState>,
+    Json(req): Json<VaultKeyRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let vault = match open_vault_for_handler(&state) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let bytes = match vault.retrieve(&req.key) {
+        Ok(b) => b,
+        Err(e) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({"error": format!("{}", e)})),
+            )
+        }
+    };
+    tool_chain::emit_tool_receipt(
+        &state.0.audit_store,
+        "vault:secret:revealed",
+        Some(&format!("key={}", req.key)),
+    );
+    match String::from_utf8(bytes) {
+        Ok(s) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"key": req.key, "value": s})),
+        ),
+        Err(e) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "key": req.key,
+                "error": "value is not valid UTF-8",
+                "bytes": e.as_bytes().len(),
+            })),
+        ),
+    }
+}
+
 // ── Standing correction handlers (P2.1) ─────────────────────────────────────
 
 /// `POST /api/v1/correction/issue` — issue a new standing correction receipt.
@@ -3436,7 +4355,10 @@ async fn correction_issue_handler(
             .ok()
             .and_then(|home| std::fs::read_to_string(home.join("genesis.json")).ok())
             .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .and_then(|v| v.get("genesis_public_key").and_then(|k| k.as_str().map(String::from)))
+            .and_then(|v| {
+                v.get("genesis_public_key")
+                    .and_then(|k| k.as_str().map(String::from))
+            })
             .unwrap_or_default();
         payload["issued_by"] = serde_json::json!(operator_pubkey);
     }
@@ -3572,6 +4494,346 @@ async fn correction_list_handler(
 /// Emits a `cognitive:correction:revoked` event referencing the given id.
 /// The revocation is chain-preserved (revocation itself is a receipt) but the
 /// correction stops appearing in the active index.
+/// Outstanding and recently resolved approval requests.
+///
+/// Reads both receipt families over one window and joins them, the same
+/// shape as `correction_list_handler`.
+async fn regent_approvals_handler(
+    State(state): State<AppState>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    use zp_regent::approvals::{
+        ApprovalIndex, EVENT_PREFIX_DENIED, EVENT_PREFIX_GRANTED, EVENT_PREFIX_REQUEST,
+    };
+
+    let store = match state.0.audit_store.lock() {
+        Ok(s) => s,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("Audit store lock poisoned: {}", e),
+                })),
+            );
+        }
+    };
+
+    let mut entries = store
+        .search_chain_by_action_keyword(EVENT_PREFIX_REQUEST, 1024)
+        .unwrap_or_default();
+    entries.append(
+        &mut store
+            .search_chain_by_action_keyword(EVENT_PREFIX_GRANTED, 1024)
+            .unwrap_or_default(),
+    );
+    entries.append(
+        &mut store
+            .search_chain_by_action_keyword(EVENT_PREFIX_DENIED, 1024)
+            .unwrap_or_default(),
+    );
+    drop(store);
+
+    let index = ApprovalIndex::build(&entries);
+    let pending = index.pending();
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "pending_count": pending.len(),
+            "pending": pending,
+            "all": index.all(),
+        })),
+    )
+}
+
+/// The Regent's current autonomous envelope, as the operator can see it.
+///
+/// Precedent is the one thing in the substrate that widens what may happen
+/// without asking. If the operator cannot enumerate it, they cannot consent
+/// to it — a scope you can only discover by watching it get exercised is not
+/// a scope anyone agreed to.
+async fn regent_precedents_handler(
+    State(state): State<AppState>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let entries = precedent_window(&state);
+    let index = zp_regent::precedent::PrecedentIndex::build(&entries);
+    let active = index.active();
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "count": active.len(),
+            "precedents": active,
+        })),
+    )
+}
+
+/// Narrow the envelope back.
+///
+/// Per KEEL §III.10: "Revoking a precedent narrows the autonomous scope back
+/// and is itself a chain event." Not a deletion — the grant stays on chain as
+/// the historical fact that it is, and this receipt records that it no longer
+/// authorises anything. A substrate that could quietly forget having been
+/// permitted could also quietly forget having been refused.
+///
+/// Actor is `ActorId::Operator`, as with approval resolution: withdrawing
+/// consent is the operator's act.
+async fn regent_precedent_revoke_handler(
+    State(state): State<AppState>,
+    AxumPath(signature): AxumPath<String>,
+    Json(payload): Json<serde_json::Value>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let reason = payload.get("reason").and_then(|v| v.as_str());
+
+    let entries = precedent_window(&state);
+    let index = zp_regent::precedent::PrecedentIndex::build(&entries);
+
+    // Prefix resolution, ambiguity is an error. Same discipline as
+    // `ApprovalIndex::resolve_prefix`: revoking the wrong precedent silently
+    // widens the envelope somewhere the operator was not looking.
+    let hits: Vec<_> = index
+        .active()
+        .into_iter()
+        .filter(|p| p.context_signature.starts_with(&signature))
+        .collect();
+
+    let target = match hits.len() {
+        0 => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({
+                    "error": format!("no active precedent matching {signature}"),
+                })),
+            )
+        }
+        1 => hits[0].clone(),
+        n => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": format!("{n} precedents match {signature} — use more characters"),
+                })),
+            )
+        }
+    };
+
+    let revoked_at = chrono::Utc::now();
+    let event = zp_regent::precedent::revocation_event_string(
+        &target.tool,
+        &target.context_signature,
+        reason,
+        revoked_at,
+    );
+
+    let entry = zp_audit::UnsealedEntry {
+        actor: zp_core::ActorId::Operator,
+        action: zp_core::AuditAction::SystemEvent { event },
+        conversation_id: zp_core::ConversationId(
+            uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap(),
+        ),
+        policy_decision: zp_core::PolicyDecision::Allow {
+            conditions: Vec::new(),
+        },
+        policy_module: "operator-precedent-revocation".to_string(),
+        receipt: None,
+    };
+
+    let anchored = {
+        let mut store = match state.0.audit_store.lock() {
+            Ok(s) => s,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": format!("Audit store lock poisoned: {e}"),
+                    })),
+                )
+            }
+        };
+        match store.append(entry) {
+            Ok(sealed) => sealed.entry_hash,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": format!("revocation receipt append failed: {e}"),
+                    })),
+                )
+            }
+        }
+    };
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "revoked": true,
+            "tool": target.tool,
+            "context_signature": target.context_signature,
+            "granted_request": target.granted_request,
+            "anchored": anchored,
+        })),
+    )
+}
+
+/// The chain slice precedent is read from.
+fn precedent_window(state: &AppState) -> Vec<zp_core::AuditEntry> {
+    use zp_regent::approvals::{
+        EVENT_PREFIX_DENIED, EVENT_PREFIX_ENACTED, EVENT_PREFIX_GRANTED, EVENT_PREFIX_REQUEST,
+    };
+    let store = match state.0.audit_store.lock() {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    let mut acc = Vec::new();
+    for prefix in [
+        EVENT_PREFIX_REQUEST,
+        EVENT_PREFIX_GRANTED,
+        EVENT_PREFIX_DENIED,
+        EVENT_PREFIX_ENACTED,
+        zp_regent::precedent::EVENT_PREFIX_REVOKED,
+    ] {
+        acc.extend(
+            store
+                .search_chain_by_action_keyword(prefix, 1024)
+                .unwrap_or_default(),
+        );
+    }
+    acc
+}
+
+/// Record the operator's answer to a request.
+///
+/// Actor is `ActorId::Operator`, not the Regent — per P9 the approval is
+/// the operator's act. The receipt cites the request's `entry_hash`,
+/// because an approval that does not name what it approved is not
+/// evidence of anything.
+async fn regent_approval_resolve_handler(
+    State(state): State<AppState>,
+    AxumPath(request_hash): AxumPath<String>,
+    Json(payload): Json<serde_json::Value>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    use zp_regent::approvals::{
+        resolution_event_string, ApprovalIndex, Resolution, EVENT_PREFIX_DENIED,
+        EVENT_PREFIX_GRANTED, EVENT_PREFIX_REQUEST,
+    };
+
+    let decision = match payload
+        .get("decision")
+        .and_then(|v| v.as_str())
+        .and_then(Resolution::parse)
+    {
+        Some(d) => d,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "decision must be \"granted\" or \"denied\"",
+                })),
+            );
+        }
+    };
+    let reason = payload.get("reason").and_then(|v| v.as_str());
+
+    // Resolve the operator's (possibly abbreviated) hash against real
+    // requests, and refuse to answer one that is already answered —
+    // silently double-resolving would make the record depend on read order.
+    let (full_hash, action) = {
+        let store = match state.0.audit_store.lock() {
+            Ok(s) => s,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": format!("Audit store lock poisoned: {}", e),
+                    })),
+                );
+            }
+        };
+        let mut entries = store
+            .search_chain_by_action_keyword(EVENT_PREFIX_REQUEST, 1024)
+            .unwrap_or_default();
+        entries.append(
+            &mut store
+                .search_chain_by_action_keyword(EVENT_PREFIX_GRANTED, 1024)
+                .unwrap_or_default(),
+        );
+        entries.append(
+            &mut store
+                .search_chain_by_action_keyword(EVENT_PREFIX_DENIED, 1024)
+                .unwrap_or_default(),
+        );
+        drop(store);
+
+        let index = ApprovalIndex::build(&entries);
+        let full = match index.resolve_prefix(&request_hash) {
+            Ok(h) => h,
+            Err(e) => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(serde_json::json!({ "error": e })),
+                );
+            }
+        };
+        let req = index.all().iter().find(|r| r.request_hash == full).cloned();
+        match req {
+            Some(r) if !r.is_pending() => {
+                return (
+                    StatusCode::CONFLICT,
+                    Json(serde_json::json!({
+                        "error": "request is already resolved",
+                        "request_hash": full,
+                        "resolution": r.resolution,
+                    })),
+                );
+            }
+            Some(r) => (full, r.action),
+            None => (full, String::new()),
+        }
+    };
+
+    let resolved_at = chrono::Utc::now();
+    let event = resolution_event_string(decision, &full_hash, reason, resolved_at);
+
+    let entry = zp_audit::UnsealedEntry {
+        actor: zp_core::ActorId::Operator,
+        action: zp_core::AuditAction::SystemEvent { event },
+        conversation_id: zp_core::ConversationId(
+            uuid::Uuid::parse_str("00000000-0002-7000-8001-000000000001").unwrap(),
+        ),
+        policy_decision: zp_core::PolicyDecision::Allow {
+            conditions: Vec::new(),
+        },
+        policy_module: "operator-approval".to_string(),
+        receipt: None,
+    };
+
+    match state.0.audit_store.lock() {
+        Ok(mut store) => match store.append(entry) {
+            Ok(sealed) => (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "status": "resolved",
+                    "decision": decision,
+                    "request_hash": full_hash,
+                    "action": action,
+                    "entry_hash": sealed.entry_hash,
+                    "resolved_at": resolved_at.to_rfc3339(),
+                })),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": format!("Failed to anchor resolution: {}", e),
+                })),
+            ),
+        },
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": format!("Audit store lock poisoned: {}", e),
+            })),
+        ),
+    }
+}
+
 async fn correction_revoke_handler(
     State(state): State<AppState>,
     AxumPath(correction_id): AxumPath<String>,
@@ -3806,11 +5068,7 @@ pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
             kind: o.launch.kind,
             url,
             port: o.launch.port,
-            cmd: Some(format!(
-                "cd '{}' && {}",
-                tool_path.display(),
-                o.launch.cmd
-            )),
+            cmd: Some(format!("cd '{}' && {}", tool_path.display(), o.launch.cmd)),
         };
     }
 
@@ -3856,12 +5114,7 @@ pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
         let has_pnpm_lock = tool_path.join("pnpm-lock.yaml").exists();
 
         let scripts = launch_inference::read_npm_scripts(tool_path);
-        let has_script = |name: &str| {
-            scripts
-                .as_ref()
-                .map(|s| s.contains(name))
-                .unwrap_or(false)
-        };
+        let has_script = |name: &str| scripts.as_ref().map(|s| s.contains(name)).unwrap_or(false);
 
         let (cmd, kind) = if has_runnable_node {
             let pkg_mgr = if has_pnpm_lock { "pnpm" } else { "npm" };
@@ -3870,8 +5123,7 @@ pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
             let has_build_dir = tool_path.join("build").exists();
             // Only emit `<pm> run build` when the project both lacks a built
             // output AND actually has a `build` script (Fix B).
-            let needs_build =
-                !has_next_build && !has_dist && !has_build_dir && has_script("build");
+            let needs_build = !has_next_build && !has_dist && !has_build_dir && has_script("build");
             let build_prefix = if needs_build {
                 format!("{} run build && ", pkg_mgr)
             } else {
@@ -3898,12 +5150,7 @@ pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
         } else if let Some(entry) = launch_inference::detect_python_entrypoint(tool_path) {
             let py = launch_inference::python_invocation(tool_path);
             (
-                Some(format!(
-                    "cd '{}' && {} {}",
-                    tool_path.display(),
-                    py,
-                    entry
-                )),
+                Some(format!("cd '{}' && {} {}", tool_path.display(), py, entry)),
                 "python",
             )
         } else if has_docker_compose {
@@ -3937,9 +5184,7 @@ pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
     } else {
         // Scripted or CLI — check for start.sh, runnable Node, Python, make.
         let start_scripts = ["start.sh", "run.sh", "launch.sh"];
-        let script = start_scripts
-            .iter()
-            .find(|s| tool_path.join(s).exists());
+        let script = start_scripts.iter().find(|s| tool_path.join(s).exists());
         let npm_scripts = launch_inference::read_npm_scripts(tool_path);
         let has_npm_script = |name: &str| {
             npm_scripts
@@ -3981,12 +5226,7 @@ pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
         } else if let Some(entry) = launch_inference::detect_python_entrypoint(tool_path) {
             let py = launch_inference::python_invocation(tool_path);
             (
-                Some(format!(
-                    "cd '{}' && {} {}",
-                    tool_path.display(),
-                    py,
-                    entry
-                )),
+                Some(format!("cd '{}' && {} {}", tool_path.display(), py, entry)),
                 "python",
             )
         } else if launch_inference::looks_like_python_project(tool_path) {
@@ -4015,9 +5255,7 @@ pub(crate) fn detect_launch(tool_path: &std::path::Path) -> ToolLaunch {
 
 /// PID file directory: ~/ZeroPoint/pids/
 fn pid_dir() -> std::path::PathBuf {
-    let dir = zp_paths::home()
-        .unwrap_or_default()
-        .join("pids");
+    let dir = zp_paths::home().unwrap_or_default().join("pids");
     std::fs::create_dir_all(&dir).ok();
     dir
 }
@@ -4053,9 +5291,7 @@ fn kill_tool_process(name: &str, pid: u32) -> bool {
     info!("Stopping {} (PID {})", name, pid);
 
     // For docker-compose tools, try `docker compose down` first
-    let tool_path = zp_core::paths::user_home_or("")
-        .join("projects")
-        .join(name);
+    let tool_path = zp_core::paths::user_home_or("").join("projects").join(name);
     let has_compose = tool_path.join("docker-compose.yml").exists()
         || tool_path.join("docker-compose.yaml").exists()
         || tool_path.join("compose.yml").exists()
@@ -4429,7 +5665,9 @@ async fn gate_tool_call_handler(
             .port_registry
             .get_agent_key(agent_id)
             .unwrap_or_else(|| agent_id.to_string());
-        if let Some(deny_reason) = lease_prereq_for_agent(&state, &resolved_agent_id, &req.tool_name) {
+        if let Some(deny_reason) =
+            lease_prereq_for_agent(&state, &resolved_agent_id, &req.tool_name)
+        {
             let receipt_id = format!("rcpt-{}", uuid::Uuid::now_v7());
             let chain_event = format!("gate:denied:{}", req.tool_name);
             let chain_detail = serde_json::json!({
@@ -4544,13 +5782,20 @@ async fn gate_tool_call_handler(
         &req.tool_name,
         allow,
         req.agent.as_deref(),
-        if reason.is_empty() { None } else { Some(&reason) },
+        if reason.is_empty() {
+            None
+        } else {
+            Some(&reason)
+        },
         Some(&state.0.identity.signing_key),
     );
 
     info!(
         "Gate decision: tool={} allow={} reason={} chain_entry={:?}",
-        req.tool_name, allow, reason, chain_entry_hash.as_deref()
+        req.tool_name,
+        allow,
+        reason,
+        chain_entry_hash.as_deref()
     );
 
     (
@@ -4813,7 +6058,11 @@ async fn lease_renew_handler(
 /// carry a `ToolCall` capability covering `tool_name` is not sufficient. The
 /// deny reason `"capability_scope_exceeded"` is returned when an alive grant
 /// exists but none of them cover the requested tool.
-fn lease_prereq_for_agent(state: &AppState, agent_id: &str, tool_name: &str) -> Option<&'static str> {
+fn lease_prereq_for_agent(
+    state: &AppState,
+    agent_id: &str,
+    tool_name: &str,
+) -> Option<&'static str> {
     let chain = state
         .0
         .audit_store
@@ -4822,7 +6071,8 @@ fn lease_prereq_for_agent(state: &AppState, agent_id: &str, tool_name: &str) -> 
         .export_chain(i32::MAX as usize)
         .ok()?;
 
-    let mut grants: std::collections::HashMap<String, zp_core::CapabilityGrant> = Default::default();
+    let mut grants: std::collections::HashMap<String, zp_core::CapabilityGrant> =
+        Default::default();
     let mut revoked: std::collections::HashSet<String> = Default::default();
     for entry in &chain {
         let zp_core::AuditAction::SystemEvent { event } = &entry.action else {
@@ -4855,7 +6105,9 @@ fn lease_prereq_for_agent(state: &AppState, agent_id: &str, tool_name: &str) -> 
 
     if !live.is_empty() {
         // Claim 4: at least one live grant must cover this specific tool.
-        let tool_action = CoreActionType::ToolCall { name: tool_name.to_string() };
+        let tool_action = CoreActionType::ToolCall {
+            name: tool_name.to_string(),
+        };
         let scope_ok = live.iter().any(|g| g.matches_action(&tool_action));
         if scope_ok {
             None
@@ -4890,13 +6142,6 @@ fn verify_ed25519_signature(pubkey_hex: &str, signature_hex: &str, payload: &[u8
     };
     zp_receipt::verify::verify_signature(&pk_arr, payload, &sig_arr).is_ok()
 }
-
-
-
-
-
-
-
 
 // ============================================================================
 // Tool configure / repair — ecosystem self-healing actions
@@ -5015,13 +6260,17 @@ async fn tools_list_handler(State(state): State<AppState>) -> Json<serde_json::V
                     // get a 600s wait with indeterminate progress bar; web/
                     // script tools get 30s. Must match tool_launch_handler's
                     // kind derivation exactly.
-                    kind: b.launch_command.as_ref().map_or("web", |lc| {
-                        if lc.command == "cargo" || lc.command.ends_with("/cargo") {
-                            "native"
-                        } else {
-                            "web"
-                        }
-                    }).to_string(),
+                    kind: b
+                        .launch_command
+                        .as_ref()
+                        .map_or("web", |lc| {
+                            if lc.command == "cargo" || lc.command.ends_with("/cargo") {
+                                "native"
+                            } else {
+                                "web"
+                            }
+                        })
+                        .to_string(),
                     url: None,
                     port: Some(ui_port),
                     cmd: None,
@@ -5283,7 +6532,10 @@ async fn tool_stop_handler(
                 }
             }
         }
-        state.0.port_registry.clear_binding(&lower, tool_ports::ReleaseReason::OperatorKill);
+        state
+            .0
+            .port_registry
+            .clear_binding(&lower, tool_ports::ReleaseReason::OperatorKill);
         state.0.port_registry.clear_proxy_port(&lower);
     }
 
@@ -5473,7 +6725,10 @@ async fn tool_launch_handler(
     let log_path = {
         let logs_dir = std::path::PathBuf::from(&state.0.data_dir).join("logs");
         let _ = std::fs::create_dir_all(&logs_dir);
-        logs_dir.join(format!("{}.log", body.name.to_lowercase().replace(' ', "-")))
+        logs_dir.join(format!(
+            "{}.log",
+            body.name.to_lowercase().replace(' ', "-")
+        ))
     };
 
     let auth_token = binding.auth_token.clone();
@@ -5484,7 +6739,9 @@ async fn tool_launch_handler(
     // causes "address already in use" and the web UI never starts.
     // extra_ports["GATEWAY_PORT"] is the port ZP allocated specifically for the
     // gateway process; the proxy will discover it via post-launch probing.
-    let gateway_port_for_launch = binding.extra_ports.get("GATEWAY_PORT")
+    let gateway_port_for_launch = binding
+        .extra_ports
+        .get("GATEWAY_PORT")
         .copied()
         .unwrap_or(proxy_port_for_launch);
     let mut cmd = tokio::process::Command::new(&lc.command);
@@ -5511,11 +6768,7 @@ async fn tool_launch_handler(
         // Signal that ZP owns process lifecycle for this tool — suppresses
         // IronClaw's own singleton enforcement (PID lock) and any other
         // self-management behaviors that belong to the governance layer.
-        .env("ZP_GOVERNED", "1")
-        // Enable ZP substrate integration so the tool can call back to
-        // this server for chain queries, gate calls, and cognition hooks.
-        // ZP_BASE_URL defaults to http://127.0.0.1:17010 in ZpConfig.
-        .env("IRONCLAW_ZP_ENABLED", "true");
+        .env("ZP_GOVERNED", "1");
 
     // Inject vault-managed tool env vars (e.g. OPENAI_API_KEY, OPENAI_BASE_URL).
     // Stored at tools/{tool}/* via `zp configure vault-set-tool-env`.
@@ -5545,13 +6798,15 @@ async fn tool_launch_handler(
                         let manifest_candidates = [
                             work_dir.join(".zp-configure.toml"),
                             std::path::PathBuf::from(
-                                std::env::var("ZP_SOURCE_DIR")
-                                    .unwrap_or_else(|_| {
-                                        zp_paths::user_home()
-                                            .map(|h| h.join("projects/zeropoint").display().to_string())
-                                            .unwrap_or_default()
-                                    })
-                            ).join("tools").join(&tool_lower).join(".zp-configure.toml"),
+                                std::env::var("ZP_SOURCE_DIR").unwrap_or_else(|_| {
+                                    zp_paths::user_home()
+                                        .map(|h| h.join("projects/zeropoint").display().to_string())
+                                        .unwrap_or_default()
+                                }),
+                            )
+                            .join("tools")
+                            .join(&tool_lower)
+                            .join(".zp-configure.toml"),
                         ];
 
                         let mut manifest_loaded = None;
@@ -5605,9 +6860,8 @@ async fn tool_launch_handler(
                                     }
                                 }
 
-                                let error_count = violations.iter()
-                                    .filter(|v| v.severity == "error")
-                                    .count();
+                                let error_count =
+                                    violations.iter().filter(|v| v.severity == "error").count();
 
                                 if error_count > 0 {
                                     error!(
@@ -5620,7 +6874,8 @@ async fn tool_launch_handler(
 
                                     // Emit preflight:failed receipt to audit chain.
                                     {
-                                        let violation_summary: Vec<String> = violations.iter()
+                                        let violation_summary: Vec<String> = violations
+                                            .iter()
                                             .filter(|v| v.severity == "error")
                                             .map(|v| format!("{}: {}", v.var, v.message))
                                             .collect();
@@ -5632,7 +6887,10 @@ async fn tool_launch_handler(
                                         );
                                         let _ = crate::tool_chain::emit_tool_receipt(
                                             &state.0.audit_store,
-                                            &format!("tool:preflight:vault_validation_failed:{}", tool_lower),
+                                            &format!(
+                                                "tool:preflight:vault_validation_failed:{}",
+                                                tool_lower
+                                            ),
                                             Some(&detail_str),
                                         );
                                     }
@@ -5655,16 +6913,15 @@ async fn tool_launch_handler(
 
                         // Run vault hygiene audit on key names (no decryption needed).
                         if manifest_loaded.is_some() {
-                            let all_keys: Vec<String> = vault.list()
+                            let all_keys: Vec<String> = vault
+                                .list()
                                 .into_iter()
                                 .filter(|k| k.contains(&tool_lower))
                                 .collect();
 
                             if !all_keys.is_empty() {
-                                let findings = zp_engine::capability::audit_vault_keys(
-                                    &tool_lower,
-                                    &all_keys,
-                                );
+                                let findings =
+                                    zp_engine::capability::audit_vault_keys(&tool_lower, &all_keys);
                                 for f in &findings {
                                     if f.severity == "error" {
                                         error!(
@@ -5691,7 +6948,7 @@ async fn tool_launch_handler(
                     // ZP-owned routing vars — port allocation belongs to the
                     // substrate, not the vault. Skip any vault-stored value so
                     // the port we assigned above is never silently overridden.
-                    // ZP_MANAGED, ZP_GOVERNED, IRONCLAW_ZP_ENABLED, and
+                    // ZP_MANAGED, ZP_GOVERNED, and
                     // GATEWAY_AUTH_TOKEN are substrate-controlled operational
                     // flags. The vault must not override them — the substrate
                     // is the authority on whether governance is active.
@@ -5712,7 +6969,6 @@ async fn tool_launch_handler(
                         "GATEWAY_AUTH_TOKEN",
                         "ZP_MANAGED",
                         "ZP_GOVERNED",
-                        "IRONCLAW_ZP_ENABLED",
                     ];
                     for (var, val_bytes) in &tool_env {
                         if ZP_OWNED_VARS.contains(&var.as_str()) {
@@ -5819,19 +7075,28 @@ async fn tool_launch_handler(
                 tokio::spawn(async move {
                     // Give the tool a few seconds to bind before probing.
                     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                    if let Some(binding) = state_for_probe.0.port_registry.get_assigned(&tool_name_for_probe) {
+                    if let Some(binding) = state_for_probe
+                        .0
+                        .port_registry
+                        .get_assigned(&tool_name_for_probe)
+                    {
                         match tool_ports::discover_proxy_port_with_retry(
                             &binding,
                             30,
                             std::time::Duration::from_secs(2),
-                        ).await {
+                        )
+                        .await
+                        {
                             Some(discovered) => {
                                 info!(
                                     tool = %tool_name_for_probe,
                                     port = discovered,
                                     "Post-launch probe: proxy_port discovered"
                                 );
-                                state_for_probe.0.port_registry.set_proxy_port(&tool_name_for_probe, discovered);
+                                state_for_probe
+                                    .0
+                                    .port_registry
+                                    .set_proxy_port(&tool_name_for_probe, discovered);
                             }
                             None => {
                                 warn!(
@@ -5851,23 +7116,49 @@ async fn tool_launch_handler(
             // Register PID with sensor layer — kqueue EVFILT_PROC will fire
             // immediately on exit/fork/exec, triggering a Forge sweep.
             if pid > 0 {
-                state.0.sensor_handle.watch_pid(pid, body.name.to_lowercase()).await;
+                state
+                    .0
+                    .sensor_handle
+                    .watch_pid(pid, body.name.to_lowercase())
+                    .await;
             }
 
-            // Re-issue delegation grant on every cockpit launch. This makes
-            // cockpit launch the renewal ceremony — expiry can never surface
-            // as an operator concern for tools that call register-agent at
-            // startup. CapabilityGrant::new defaults to expires_at: None
-            // (no hard expiry), so the standing grant is perennial; the
-            // chain entry is the durable record that the ceremony occurred.
+            // Re-issue delegation grant on every cockpit launch. Launch
+            // remains the renewal ceremony — a tool relaunched inside the
+            // lease window never sees an expiry — but the grant now carries
+            // one.
+            //
+            // Until 2026-08-16 this took CapabilityGrant::new's default of
+            // `expires_at: None` with no lease policy, on the argument that a
+            // chain entry is better evidence than a TTL clock nobody watches.
+            // That argument stands; what it cost did not. `is_past_grace()`
+            // falls through to `is_expired()` when no lease policy is
+            // attached, and `is_expired()` is false for a `None` expiry — so
+            // the grant was permanently alive and the gate's `delegation_expired`
+            // branch was unreachable. See docs/design/PERENNIAL-GRANT-2026-08.md;
+            // operator ruling 2026-08-16 took option B.
+            //
+            // The subject key is bound so the lease-renewal endpoint can
+            // authenticate a renewal from the agent itself. Tools do not
+            // heartbeat today (that path is delegate-nodes-only, gated on
+            // ~/ZeroPoint/lease.toml), so in practice relaunch is the renewal
+            // — but binding the key means the other path exists rather than
+            // being unreachable by construction.
             if let Some(ref agent_key) = agent_key_for_regrant {
                 let grantor = state.0.identity.destination_hash.clone();
                 let mut grant = CapabilityGrant::new(
                     grantor,
                     agent_key.clone(),
-                    GrantedCapability::ToolCall { tools: vec!["*".to_string()] },
+                    GrantedCapability::ToolCall {
+                        tools: vec!["*".to_string()],
+                    },
                     format!("rcpt-{}", uuid::Uuid::now_v7()),
-                );
+                )
+                .with_lease_policy(zp_core::LeasePolicy::standard_8h())
+                .with_renewal_authorities(vec![zp_core::AuthorityRef::genesis("lease_renewal")])
+                .with_revocable_by(vec![zp_core::AuthorityRef::genesis("revocation_authority")])
+                .with_subject_public_key(agent_key.clone())
+                .as_standing(state.0.identity.destination_hash.clone());
                 grant.sign(&state.0.identity.signing_key);
                 tool_chain::emit_delegation_receipt(
                     &state.0.audit_store,
@@ -5928,7 +7219,6 @@ async fn tools_receipt_handler(
     }
 }
 
-
 // ============================================================================
 // Agent Registration + Delegation Auto-Renewal
 // ============================================================================
@@ -5946,8 +7236,14 @@ struct RegisterAgentRequest {
 ///
 /// Called by tools at startup. Stores `agent_key` on the `ToolBinding` so
 /// subsequent cockpit launches can re-grant without waiting for the tool to
-/// re-register. The grant uses `ToolCall { tools: ["*"] }` with no expiry,
-/// making the chain entry the durable record rather than a TTL clock.
+/// re-register.
+///
+/// The grant carries `ToolCall { tools: ["*"] }` under an 8h lease with a
+/// 30m grace period. It previously carried no expiry at all; see
+/// `docs/design/PERENNIAL-GRANT-2026-08.md` for why that made the gate's
+/// `delegation_expired` branch unreachable, and the 2026-08-16 ruling that
+/// changed it. The scope is still maximal — narrowing it is a separate
+/// question the memo lists as option D and does not settle.
 async fn register_agent_handler(
     State(state): State<AppState>,
     axum::extract::Path(name): axum::extract::Path<String>,
@@ -5957,15 +7253,22 @@ async fn register_agent_handler(
     // re-grant on every cockpit launch without the tool needing to re-register.
     state.0.port_registry.set_agent_key(&name, &body.agent_key);
 
-    // Issue a fresh CapabilityGrant — no expiry, full tool-call scope.
+    // Issue a fresh CapabilityGrant — 8h lease, full tool-call scope.
     let grantor = state.0.identity.destination_hash.clone();
     let receipt_id = format!("rcpt-{}", uuid::Uuid::now_v7());
     let mut grant = CapabilityGrant::new(
         grantor,
         body.agent_key.clone(),
-        GrantedCapability::ToolCall { tools: vec!["*".to_string()] },
+        GrantedCapability::ToolCall {
+            tools: vec!["*".to_string()],
+        },
         receipt_id,
-    );
+    )
+    .with_lease_policy(zp_core::LeasePolicy::standard_8h())
+    .with_renewal_authorities(vec![zp_core::AuthorityRef::genesis("lease_renewal")])
+    .with_revocable_by(vec![zp_core::AuthorityRef::genesis("revocation_authority")])
+    .with_subject_public_key(body.agent_key.clone())
+    .as_standing(state.0.identity.destination_hash.clone());
     grant.sign(&state.0.identity.signing_key);
 
     let entry_hash = tool_chain::emit_delegation_receipt(
@@ -6121,6 +7424,12 @@ const ONBOARD_JS: &str = include_str!("../assets/onboard.js");
 const TTS_JS: &str = include_str!("../assets/tts.js");
 const DASHBOARD_JS: &str = include_str!("../assets/dashboard.js");
 const ECOSYSTEM_JS: &str = include_str!("../assets/ecosystem.js");
+/// Build-state overlay for the ecosystem graph. Generated by
+/// `tools/ecosystem-state/ecosystem_state.py`; baked rather than fetched
+/// because `/api/v1/system/state` and `/api/v1/tools` sit behind
+/// `require_auth` and the page carries no session, so a runtime fetch
+/// would fail the same way the LIVE STATE panel already does.
+const ECOSYSTEM_STATE_JS: &str = include_str!("../assets/ecosystem-state.js");
 const SPEAK_JS: &str = include_str!("../assets/speak.js");
 
 const VENDOR_XTERM_JS: &str = include_str!("../assets/vendor/xterm.min.js");
@@ -6146,21 +7455,70 @@ fn embedded_assets_router() -> axum::Router {
 
     axum::Router::new()
         // CSS
-        .route("/onboard.css", get(|| async { text_response(ONBOARD_CSS, "text/css; charset=utf-8") }))
-        .route("/vendor/xterm.min.css", get(|| async { text_response(VENDOR_XTERM_CSS, "text/css; charset=utf-8") }))
-        .route("/fonts/fonts.css", get(|| async { text_response(FONTS_CSS, "text/css; charset=utf-8") }))
+        .route(
+            "/onboard.css",
+            get(|| async { text_response(ONBOARD_CSS, "text/css; charset=utf-8") }),
+        )
+        .route(
+            "/vendor/xterm.min.css",
+            get(|| async { text_response(VENDOR_XTERM_CSS, "text/css; charset=utf-8") }),
+        )
+        .route(
+            "/fonts/fonts.css",
+            get(|| async { text_response(FONTS_CSS, "text/css; charset=utf-8") }),
+        )
         // JS
-        .route("/onboard.js", get(|| async { text_response(ONBOARD_JS, "application/javascript; charset=utf-8") }))
-        .route("/tts.js", get(|| async { text_response(TTS_JS, "application/javascript; charset=utf-8") }))
-        .route("/dashboard.js", get(|| async { text_response(DASHBOARD_JS, "application/javascript; charset=utf-8") }))
-        .route("/ecosystem.js", get(|| async { text_response(ECOSYSTEM_JS, "application/javascript; charset=utf-8") }))
-        .route("/speak.js", get(|| async { text_response(SPEAK_JS, "application/javascript; charset=utf-8") }))
-        .route("/vendor/xterm.min.js", get(|| async { text_response(VENDOR_XTERM_JS, "application/javascript; charset=utf-8") }))
-        .route("/vendor/xterm-addon-fit.min.js", get(|| async { text_response(VENDOR_XTERM_FIT_JS, "application/javascript; charset=utf-8") }))
-        .route("/vendor/d3.min.js", get(|| async { text_response(VENDOR_D3_JS, "application/javascript; charset=utf-8") }))
+        .route(
+            "/onboard.js",
+            get(|| async { text_response(ONBOARD_JS, "application/javascript; charset=utf-8") }),
+        )
+        .route(
+            "/tts.js",
+            get(|| async { text_response(TTS_JS, "application/javascript; charset=utf-8") }),
+        )
+        .route(
+            "/dashboard.js",
+            get(|| async { text_response(DASHBOARD_JS, "application/javascript; charset=utf-8") }),
+        )
+        .route(
+            "/ecosystem.js",
+            get(|| async { text_response(ECOSYSTEM_JS, "application/javascript; charset=utf-8") }),
+        )
+        .route(
+            "/ecosystem-state.js",
+            get(|| async {
+                text_response(ECOSYSTEM_STATE_JS, "application/javascript; charset=utf-8")
+            }),
+        )
+        .route(
+            "/speak.js",
+            get(|| async { text_response(SPEAK_JS, "application/javascript; charset=utf-8") }),
+        )
+        .route(
+            "/vendor/xterm.min.js",
+            get(|| async {
+                text_response(VENDOR_XTERM_JS, "application/javascript; charset=utf-8")
+            }),
+        )
+        .route(
+            "/vendor/xterm-addon-fit.min.js",
+            get(|| async {
+                text_response(VENDOR_XTERM_FIT_JS, "application/javascript; charset=utf-8")
+            }),
+        )
+        .route(
+            "/vendor/d3.min.js",
+            get(|| async { text_response(VENDOR_D3_JS, "application/javascript; charset=utf-8") }),
+        )
         // Fonts
-        .route("/fonts/inter-latin.woff2", get(|| async { binary_response(FONT_INTER, "font/woff2") }))
-        .route("/fonts/jetbrainsmono-latin.woff2", get(|| async { binary_response(FONT_JETBRAINS, "font/woff2") }))
+        .route(
+            "/fonts/inter-latin.woff2",
+            get(|| async { binary_response(FONT_INTER, "font/woff2") }),
+        )
+        .route(
+            "/fonts/jetbrainsmono-latin.woff2",
+            get(|| async { binary_response(FONT_JETBRAINS, "font/woff2") }),
+        )
 }
 
 /// Resolve an HTML asset: check $ZP_ASSETS_DIR first (hot-reload override),
@@ -6190,7 +7548,8 @@ async fn root_handler(State(state): State<AppState>) -> Response {
         Redirect::temporary("/onboard").into_response()
     };
     if let Ok(hv) = cookie.parse() {
-        resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+        resp.headers_mut()
+            .insert(axum::http::header::SET_COOKIE, hv);
     }
     resp
 }
@@ -6202,7 +7561,8 @@ async fn dashboard_handler(State(state): State<AppState>) -> Response {
     );
     let mut resp = Html(resolve_html_asset("dashboard.html", DASHBOARD_HTML)).into_response();
     if let Ok(hv) = cookie.parse() {
-        resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+        resp.headers_mut()
+            .insert(axum::http::header::SET_COOKIE, hv);
     }
     resp
 }
@@ -6242,13 +7602,11 @@ async fn onboard_page_handler(
             .unwrap_or(false);
 
         if from_query {
-            let cookie_val = format!(
-                "zp_onboard={}; HttpOnly; SameSite=Strict; Path=/",
-                expected
-            );
+            let cookie_val = format!("zp_onboard={}; HttpOnly; SameSite=Strict; Path=/", expected);
             let mut resp = Redirect::temporary("/onboard").into_response();
             if let Ok(hv) = cookie_val.parse() {
-                resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+                resp.headers_mut()
+                    .insert(axum::http::header::SET_COOKIE, hv);
             }
             return resp;
         } else if !from_cookie {
@@ -6267,7 +7625,8 @@ async fn onboard_page_handler(
     );
     let mut resp = Html(resolve_html_asset("onboard.html", ONBOARD_HTML)).into_response();
     if let Ok(hv) = cookie.parse() {
-        resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+        resp.headers_mut()
+            .insert(axum::http::header::SET_COOKIE, hv);
     }
     resp
 }
@@ -6279,7 +7638,8 @@ async fn speak_page_handler(State(state): State<AppState>) -> Response {
     );
     let mut resp = Html(resolve_html_asset("speak.html", SPEAK_HTML)).into_response();
     if let Ok(hv) = cookie.parse() {
-        resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+        resp.headers_mut()
+            .insert(axum::http::header::SET_COOKIE, hv);
     }
     resp
 }
@@ -6291,7 +7651,8 @@ async fn ecosystem_page_handler(State(state): State<AppState>) -> Response {
     );
     let mut resp = Html(resolve_html_asset("ecosystem.html", ECOSYSTEM_HTML)).into_response();
     if let Ok(hv) = cookie.parse() {
-        resp.headers_mut().insert(axum::http::header::SET_COOKIE, hv);
+        resp.headers_mut()
+            .insert(axum::http::header::SET_COOKIE, hv);
     }
     resp
 }
@@ -6339,6 +7700,45 @@ async fn genesis_handler(State(state): State<AppState>) -> Json<serde_json::Valu
 // endpoint and the gate prerequisite check, against an in-memory audit
 // store. The HTTP layer itself is covered transitively — the handler is
 // thin glue over the helpers tested here.
+
+/// Emit a substrate lifecycle receipt.
+///
+/// `system:startup` and `system:shutdown` were declared in the receipt
+/// registry, handled by `zp_officers::narration`, and fixtured in Aegis's
+/// tests — and emitted nowhere. Across 84,246 chain entries neither had
+/// ever appeared, so the substrate held no record of its own session
+/// boundaries. Found 2026-07-26 by the receipt-inventory sweep.
+///
+/// Consequences of the absence, beyond the missing record: the Regent's
+/// long observation window has nothing to anchor "across sessions" to,
+/// boot-to-ready time (Phase 6's own worked example) is uncomputable, and
+/// narration's lifecycle branch is unreachable code.
+///
+/// Actor is `System("server")` rather than the Regent namespace — this is
+/// the substrate's own lifecycle, not a cognitive act.
+fn emit_lifecycle_receipt(
+    audit_store: &std::sync::Arc<std::sync::Mutex<zp_audit::AuditStore>>,
+    event: String,
+) {
+    let entry = zp_audit::UnsealedEntry {
+        actor: zp_core::ActorId::System("server".to_string()),
+        action: zp_core::AuditAction::SystemEvent { event },
+        conversation_id: zp_core::ConversationId(uuid::Uuid::nil()),
+        policy_decision: zp_core::PolicyDecision::Allow {
+            conditions: Vec::new(),
+        },
+        policy_module: "server-lifecycle".to_string(),
+        receipt: None,
+    };
+    match audit_store.lock() {
+        Ok(mut store) => {
+            if let Err(e) = store.append(entry) {
+                warn!("lifecycle receipt emission failed: {}", e);
+            }
+        }
+        Err(e) => warn!("lifecycle receipt: audit store lock poisoned: {}", e),
+    }
+}
 
 #[cfg(test)]
 mod p4_phase2_tests {
@@ -6403,8 +7803,7 @@ mod p4_phase2_tests {
             let Some(body) = conditions.first() else {
                 continue;
             };
-            if event.starts_with("delegation:granted:")
-                || event.starts_with("delegation:renewed:")
+            if event.starts_with("delegation:granted:") || event.starts_with("delegation:renewed:")
             {
                 if let Ok(g) = serde_json::from_str::<CapabilityGrant>(body) {
                     if g.grantee == agent_id {
@@ -6423,9 +7822,15 @@ mod p4_phase2_tests {
             .collect();
         if !live.is_empty() {
             // Claim 4: scope check — at least one live grant must cover the tool.
-            let tool_action = CoreActionType::ToolCall { name: tool_name.to_string() };
+            let tool_action = CoreActionType::ToolCall {
+                name: tool_name.to_string(),
+            };
             let scope_ok = live.iter().any(|g| g.matches_action(&tool_action));
-            if scope_ok { None } else { Some("capability_scope_exceeded") }
+            if scope_ok {
+                None
+            } else {
+                Some("capability_scope_exceeded")
+            }
         } else if grants.is_empty() {
             Some("no_valid_delegation")
         } else if grants.values().all(|g| revoked.contains(&g.id)) {
@@ -6446,8 +7851,8 @@ mod p4_phase2_tests {
         // and re-emits — which is exactly what the HTTP handler does.
         let mut g = grant.clone();
         let new_expiry = g.renew().unwrap();
-        let h =
-            crate::tool_chain::emit_delegation_receipt(&store, "renewed", &g, None).expect("renewed");
+        let h = crate::tool_chain::emit_delegation_receipt(&store, "renewed", &g, None)
+            .expect("renewed");
         assert!(!h.is_empty());
         // Reconstruction picks up the new expiry / count.
         assert_eq!(g.renewal_count, 1);
@@ -6596,7 +8001,10 @@ mod p4_phase2_tests {
             None,
             Some(&key),
         );
-        assert!(hash.is_some(), "emit_gate_decision_receipt must return entry_hash");
+        assert!(
+            hash.is_some(),
+            "emit_gate_decision_receipt must return entry_hash"
+        );
 
         // Reload via export_chain and verify the receipt is non-null.
         let entries = store.lock().unwrap().export_chain(10).unwrap();
@@ -6630,13 +8038,12 @@ mod p4_phase2_tests {
         let key = SigningKey::from_bytes(&[0xBB_u8; 32]);
         let grant = standing_grant("artemis");
 
-        let hash = crate::tool_chain::emit_delegation_receipt(
-            &store,
-            "granted",
-            &grant,
-            Some(&key),
+        let hash =
+            crate::tool_chain::emit_delegation_receipt(&store, "granted", &grant, Some(&key));
+        assert!(
+            hash.is_some(),
+            "emit_delegation_receipt must return entry_hash"
         );
-        assert!(hash.is_some(), "emit_delegation_receipt must return entry_hash");
 
         let entries = store.lock().unwrap().export_chain(10).unwrap();
         let entry = entries

@@ -1,0 +1,20 @@
+[package]
+name = "zp-identity-hosting"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+description = "CIMD / identity-hosting-adapter scaffold — publishes a Genesis-fingerprint-derived HTTPS identity document. Design-stage scaffold: see docs/design/IDENTITY-HOSTING-ADAPTER-2026-09.md. NOT a workspace member yet — see that document's Scaffold section for why."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+blake3 = { workspace = true }
+zeroize = { workspace = true }
+ed25519-dalek = { workspace = true }
+
+[dev-dependencies]
